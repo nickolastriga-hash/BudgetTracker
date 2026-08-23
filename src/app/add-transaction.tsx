@@ -224,10 +224,10 @@ export default function AddTransactionScreen() {
                   onPress={() => setCategoryId(category.id)}
                   style={[
                     styles.categoryChip,
-                    { borderColor: isSelected ? category.color : theme.border },
-                    isSelected && { backgroundColor: category.color + '1A' },
+                    { borderColor: isSelected ? typeColor : theme.border },
+                    isSelected && { backgroundColor: typeColor + '1A' },
                   ]}>
-                  <CategoryBadge category={category} size={26} />
+                  <CategoryBadge category={category} size={26} color={typeColor} />
                   <ThemedText type="small">{category.name}</ThemedText>
                 </Pressable>
               );

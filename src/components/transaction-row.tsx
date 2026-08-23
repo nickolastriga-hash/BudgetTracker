@@ -29,7 +29,7 @@ export function TransactionRow({ transaction, onPress }: { transaction: Transact
         { backgroundColor: theme.card, borderColor: theme.border, opacity: pressed ? 0.7 : 1 },
       ]}>
       <View style={[styles.accentBar, { backgroundColor: typeColor }]} />
-      {category && <CategoryBadge category={category} />}
+      {category && <CategoryBadge category={category} color={typeColor} />}
       <View style={styles.middle}>
         <ThemedText type="default" numberOfLines={1}>
           {category?.name ?? 'Other'}

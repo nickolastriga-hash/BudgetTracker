@@ -94,7 +94,7 @@ export default function BudgetsScreen() {
               <Pressable
                 style={styles.rowHeader}
                 onPress={() => (isEditing ? setEditingCategoryId(null) : startEditing(category.id))}>
-                <CategoryBadge category={category} size={32} />
+                <CategoryBadge category={category} size={32} color={theme.destructive} />
                 <View style={styles.rowTextGroup}>
                   <ThemedText type="small">{category.name}</ThemedText>
                   {progress ? (

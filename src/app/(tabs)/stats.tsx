@@ -171,7 +171,7 @@ export default function StatsScreen() {
               if (!category) return null;
               return (
                 <View key={categoryId} style={styles.breakdownRow}>
-                  <CategoryBadge category={category} size={30} />
+                  <CategoryBadge category={category} size={30} color={theme.destructive} />
                   <View style={styles.breakdownMiddle}>
                     <View style={styles.breakdownHeader}>
                       <ThemedText type="small">{category.name}</ThemedText>
