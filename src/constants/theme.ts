@@ -77,3 +77,15 @@ export const Spacing = {
 
 export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
 export const MaxContentWidth = 800;
+
+// Modern elevated-card look, shared by every card/list-row across the app
+// (Home summary, transaction rows, budget rows, stats cards) rather than
+// each screen inventing its own shadow numbers.
+export const CardRadius = 18;
+export const CardShadow = {
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.08,
+  shadowRadius: 6,
+  elevation: 3,
+} as const;

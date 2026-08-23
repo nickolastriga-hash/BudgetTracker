@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { TransactionRow } from '@/components/transaction-row';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { BottomTabInset, CardRadius, CardShadow, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { getTransactions, transactionsForMonth, type Transaction } from '@/lib/transactions';
 
@@ -77,7 +77,8 @@ export default function TransactionsScreen() {
         </View>
 
         {groups.length === 0 ? (
-          <ThemedView type="card" style={[styles.card, styles.emptyCard, { borderColor: theme.border }]}>
+          <ThemedView type="card" style={[styles.card, CardShadow, styles.emptyCard, { borderColor: theme.border }]}>
+            <MaterialIcons name="receipt-long" size={28} color={theme.textTertiary} />
             <ThemedText type="small" themeColor="textSecondary">
               No transactions this month.
             </ThemedText>
@@ -88,7 +89,7 @@ export default function TransactionsScreen() {
               <ThemedText type="small" themeColor="textSecondary" style={styles.dateHeader}>
                 {dateHeaderLabel(date)}
               </ThemedText>
-              <ThemedView type="card" style={[styles.card, { borderColor: theme.border }]}>
+              <View style={styles.rowList}>
                 {items.map((t) => (
                   <TransactionRow
                     key={t.id}
@@ -96,7 +97,7 @@ export default function TransactionsScreen() {
                     onPress={() => router.push(`/add-transaction?id=${t.id}`)}
                   />
                 ))}
-              </ThemedView>
+              </View>
             </View>
           ))
         )}
@@ -134,14 +135,18 @@ const styles = StyleSheet.create({
   dateHeader: {
     paddingHorizontal: 2,
   },
+  rowList: {
+    gap: Spacing.two,
+  },
   card: {
-    borderRadius: Spacing.three,
+    borderRadius: CardRadius,
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: Spacing.three,
   },
   emptyCard: {
     paddingVertical: Spacing.four,
     alignItems: 'center',
+    gap: Spacing.two,
   },
   fab: {
     position: 'absolute',

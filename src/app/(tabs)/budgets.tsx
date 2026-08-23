@@ -8,7 +8,7 @@ import { CategoryBadge } from '@/components/category-badge';
 import { ProgressBar } from '@/components/progress-bar';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { BottomTabInset, CardRadius, CardShadow, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { getBudgetProgress, getBudgets, removeBudget, setBudget, type Budget } from '@/lib/budgets';
 import { EXPENSE_CATEGORIES } from '@/lib/categories';
@@ -81,13 +81,16 @@ export default function BudgetsScreen() {
         Monthly spending limits per category, tracked against {new Date().toLocaleDateString(undefined, { month: 'long' })}.
       </ThemedText>
 
-      <ThemedView type="card" style={[styles.card, { borderColor: theme.border }]}>
+      <View style={styles.rowList}>
         {EXPENSE_CATEGORIES.map((category) => {
           const progress = progressByCategory.get(category.id);
           const isEditing = editingCategoryId === category.id;
 
           return (
-            <View key={category.id} style={[styles.row, { borderColor: theme.border }]}>
+            <ThemedView
+              key={category.id}
+              type="card"
+              style={[styles.row, CardShadow, { borderColor: theme.border }]}>
               <Pressable
                 style={styles.rowHeader}
                 onPress={() => (isEditing ? setEditingCategoryId(null) : startEditing(category.id))}>
@@ -141,10 +144,10 @@ export default function BudgetsScreen() {
                   )}
                 </View>
               )}
-            </View>
+            </ThemedView>
           );
         })}
-      </ThemedView>
+      </View>
     </ScrollView>
   );
 }
@@ -160,15 +163,14 @@ const styles = StyleSheet.create({
   title: {
     marginBottom: -Spacing.one,
   },
-  card: {
-    borderRadius: Spacing.three,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: Spacing.three,
+  rowList: {
+    gap: Spacing.two,
     marginTop: Spacing.two,
   },
   row: {
-    paddingVertical: Spacing.two,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderRadius: CardRadius,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: Spacing.three,
     gap: Spacing.two,
   },
   rowHeader: {

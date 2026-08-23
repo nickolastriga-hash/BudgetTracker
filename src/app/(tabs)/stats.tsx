@@ -1,3 +1,4 @@
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useFocusEffect } from 'expo-router';
 import * as React from 'react';
 import { useCallback, useMemo, useState } from 'react';
@@ -9,7 +10,7 @@ import { CategoryBadge } from '@/components/category-badge';
 import { ProgressBar } from '@/components/progress-bar';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { BottomTabInset, CardRadius, CardShadow, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { getCategory } from '@/lib/categories';
 import { byCategoryTotals, getTransactions, monthTotals, type Transaction } from '@/lib/transactions';
@@ -126,7 +127,7 @@ export default function StatsScreen() {
         <ThemedText type="smallBold" style={styles.sectionTitle}>
           6-Month Trend
         </ThemedText>
-        <ThemedView type="card" style={[styles.card, styles.trendCard, { borderColor: theme.border }]}>
+        <ThemedView type="card" style={[styles.card, CardShadow, styles.trendCard, { borderColor: theme.border }]}>
           <TrendChart months={months} totals={monthlyTotals} />
           <View style={styles.trendLabels}>
             {months.map((m) => (
@@ -157,13 +158,14 @@ export default function StatsScreen() {
           Spending by Category — {new Date().toLocaleDateString(undefined, { month: 'long' })}
         </ThemedText>
         {breakdown.entries.length === 0 ? (
-          <ThemedView type="card" style={[styles.card, styles.emptyCard, { borderColor: theme.border }]}>
+          <ThemedView type="card" style={[styles.card, CardShadow, styles.emptyCard, { borderColor: theme.border }]}>
+            <MaterialIcons name="pie-chart-outline" size={28} color={theme.textTertiary} />
             <ThemedText type="small" themeColor="textSecondary">
               No expenses logged this month.
             </ThemedText>
           </ThemedView>
         ) : (
-          <ThemedView type="card" style={[styles.card, { borderColor: theme.border }]}>
+          <ThemedView type="card" style={[styles.card, CardShadow, { borderColor: theme.border }]}>
             {breakdown.entries.map(({ categoryId, amount }) => {
               const category = getCategory(categoryId);
               if (!category) return null;
@@ -207,7 +209,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   card: {
-    borderRadius: Spacing.three,
+    borderRadius: CardRadius,
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: Spacing.three,
   },
@@ -241,6 +243,7 @@ const styles = StyleSheet.create({
   emptyCard: {
     paddingVertical: Spacing.four,
     alignItems: 'center',
+    gap: Spacing.two,
   },
   breakdownRow: {
     flexDirection: 'row',

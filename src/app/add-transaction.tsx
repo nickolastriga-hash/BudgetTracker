@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CategoryBadge } from '@/components/category-badge';
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { CardRadius, CardShadow, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { categoriesForType, type CategoryType } from '@/lib/categories';
 import { addRecurring } from '@/lib/recurring';
@@ -39,7 +39,7 @@ function CalendarPicker({
   const cells: (number | null)[] = [...Array(firstWeekday).fill(null), ...Array.from({ length: total }, (_, i) => i + 1)];
 
   return (
-    <View style={[styles.calendar, { borderColor: theme.border }]}>
+    <View style={[styles.calendar, CardShadow, { borderColor: theme.border, backgroundColor: theme.card }]}>
       <View style={styles.calendarHeader}>
         <Pressable
           hitSlop={8}
@@ -127,6 +127,8 @@ export default function AddTransactionScreen() {
   const categories = categoriesForType(type);
   const parsedAmount = parseFloat(amount);
   const canSave = !Number.isNaN(parsedAmount) && parsedAmount > 0 && !!categoryId;
+  // Standardized across the app: expense = destructive (red), income = success (green).
+  const typeColor = type === 'expense' ? theme.destructive : theme.success;
 
   async function handleSave() {
     if (!canSave || !categoryId) return;
@@ -167,26 +169,35 @@ export default function AddTransactionScreen() {
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + Spacing.six }]}
         keyboardShouldPersistTaps="handled">
         <View style={[styles.segmented, { borderColor: theme.border }]}>
-          {(['expense', 'income'] as const).map((t) => (
-            <Pressable
-              key={t}
-              onPress={() => {
-                setType(t);
-                setCategoryId(null);
-              }}
-              style={[styles.segment, type === t && { backgroundColor: theme.accent }]}>
-              <ThemedText
-                type="smallBold"
-                themeColor={type === t ? 'text' : 'textSecondary'}
-                style={type === t && { color: '#ffffff' }}>
-                {t === 'expense' ? 'Expense' : 'Income'}
-              </ThemedText>
-            </Pressable>
-          ))}
+          {(['expense', 'income'] as const).map((t) => {
+            const segmentColor = t === 'expense' ? theme.destructive : theme.success;
+            const isSelected = type === t;
+            return (
+              <Pressable
+                key={t}
+                onPress={() => {
+                  setType(t);
+                  setCategoryId(null);
+                }}
+                style={[styles.segment, isSelected && { backgroundColor: segmentColor }]}>
+                <MaterialIcons
+                  name={t === 'expense' ? 'arrow-downward' : 'arrow-upward'}
+                  size={14}
+                  color={isSelected ? '#ffffff' : theme.textSecondary}
+                />
+                <ThemedText
+                  type="smallBold"
+                  themeColor={isSelected ? 'text' : 'textSecondary'}
+                  style={isSelected && { color: '#ffffff' }}>
+                  {t === 'expense' ? 'Expense' : 'Income'}
+                </ThemedText>
+              </Pressable>
+            );
+          })}
         </View>
 
         <View style={styles.amountRow}>
-          <ThemedText type="title" style={styles.currencySign}>
+          <ThemedText type="title" style={[styles.currencySign, { color: typeColor }]}>
             $
           </ThemedText>
           <TextInput
@@ -195,7 +206,7 @@ export default function AddTransactionScreen() {
             placeholder="0.00"
             placeholderTextColor={theme.textTertiary}
             keyboardType="decimal-pad"
-            style={[styles.amountInput, { color: theme.text }]}
+            style={[styles.amountInput, { color: typeColor }]}
             autoFocus={!isEditing}
           />
         </View>
@@ -280,7 +291,7 @@ export default function AddTransactionScreen() {
         <Pressable
           onPress={handleSave}
           disabled={!canSave}
-          style={[styles.saveButton, { backgroundColor: canSave ? theme.accent : theme.backgroundElement }]}>
+          style={[styles.saveButton, { backgroundColor: canSave ? typeColor : theme.backgroundElement }]}>
           <ThemedText type="smallBold" themeColor={canSave ? undefined : 'textTertiary'} style={canSave && styles.saveButtonText}>
             Save
           </ThemedText>
@@ -313,6 +324,9 @@ const styles = StyleSheet.create({
   },
   segment: {
     flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
     paddingVertical: Spacing.two,
     borderRadius: Spacing.two - 2,
     alignItems: 'center',
@@ -361,7 +375,7 @@ const styles = StyleSheet.create({
   },
   calendar: {
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: Spacing.two,
+    borderRadius: CardRadius,
     padding: Spacing.two,
     gap: Spacing.two,
   },
@@ -397,7 +411,7 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     paddingVertical: Spacing.three,
-    borderRadius: Spacing.three,
+    borderRadius: CardRadius,
     alignItems: 'center',
   },
   saveButtonText: {
