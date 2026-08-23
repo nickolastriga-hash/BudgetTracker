@@ -24,17 +24,36 @@ decision, not an oversight; see [TODO.md](TODO.md) for what's intentionally defe
 
 ## Tech Stack
 
-- **Expo SDK 57**, React Native 0.86, React 19, React Compiler enabled (`experiments.reactCompiler`
-  in `app.json`)
-- **expo-router 7**, file-based routing under `src/app` (the `@/` path alias maps to `src/`, set in
-  `tsconfig.json`). `NativeTabs` (`expo-router/unstable-native-tabs`) powers the tab bar, with a
-  separate `_layout.web.tsx` fallback (`expo-router/ui`'s `Tabs`/`TabList`/`TabTrigger`/`TabSlot`)
-  since `NativeTabs` doesn't render on web — same platform-file-override pattern used elsewhere
-  (e.g. `hooks/use-color-scheme.web.ts`).
-- **As of SDK 56, expo-router no longer works alongside `@react-navigation/native`** — importing
-  anything from that package (even just for `useFocusEffect`) throws a hard Metro build error at
-  bundle time. Use `useFocusEffect`/`useIsFocused` re-exported from `'expo-router'` itself instead;
-  don't add `@react-navigation/native` as a dependency.
+- **Expo SDK 54** (deliberately pinned below the current SDK 57 — see "Why SDK 54, not 57" below),
+  React Native 0.81, React 19, React Compiler enabled (`experiments.reactCompiler` in `app.json`)
+- **expo-router 6**, file-based routing under `src/app` (the `@/` path alias maps to `src/`, set in
+  `tsconfig.json`). `NativeTabs` (`expo-router/unstable-native-tabs`) powers the tab bar, using the
+  top-level `Icon`/`Label`/`VectorIcon` exports (`<NativeTabs.Trigger><Icon .../><Label>...</Label></NativeTabs.Trigger>`,
+  `androidSrc` prop for the Android/web icon) — this is SDK 54's shape; SDK 56+ moved to a
+  `NativeTabs.Trigger.Icon`/`.Label`/`.VectorIcon` dot-notation API instead, so don't copy examples
+  from current Expo docs without checking which SDK they're for. There's a separate
+  `_layout.web.tsx` fallback (`expo-router/ui`'s `Tabs`/`TabList`/`TabTrigger`/`TabSlot`) since
+  `NativeTabs` doesn't render on web — same platform-file-override pattern used elsewhere (e.g.
+  `hooks/use-color-scheme.web.ts`).
+- **`ThemeProvider`/`DarkTheme`/`DefaultTheme` come from `@react-navigation/native`**, imported
+  directly (`src/app/_layout.tsx`) — safe at SDK 54. **This becomes a hard Metro build error as of
+  SDK 56+**, where expo-router stopped supporting `@react-navigation/native` as a direct dependency
+  at all (even just for `useFocusEffect`) — if this project is ever upgraded past SDK 55, that
+  import needs to move to whatever expo-router re-exports instead (`useFocusEffect`/`useIsFocused`
+  already come from `'expo-router'` here, which works at both SDK 54 and 56+, so those don't need
+  to change).
+
+### Why SDK 54, not 57
+
+`create-expo-app` scaffolded this project on SDK 57 originally. It was downgraded the same day
+after discovering Apple's App Store build of Expo Go is frozen at SDK 54 — SDK 55+ has sat in
+Apple's review queue without approval for months (confirmed via
+[Expo's own changelog](https://expo.dev/changelog/expo-go-and-app-store-may-2026)), so a physical
+iPhone running the App Store Expo Go app can't load anything newer. Options at the time were:
+downgrade to SDK 54 (done — free, works immediately, matches HabitTracker's own pin), a self-signed
+build via `sign.expo.dev` (works with SDK 57 but the provisioning profile expires ~weekly), or
+`eas go` + TestFlight (needs a paid Apple Developer account). Revisit this pin once Apple approves
+a newer Expo Go build, or if a dev-client build ever becomes the workflow instead of Expo Go.
 - **TypeScript, strict**, project has zero `tsc --noEmit` errors — keep it that way.
 - **react-native-svg** for the Stats trend chart.
 - **AsyncStorage** (`@react-native-async-storage/async-storage`) as the only persistence layer.

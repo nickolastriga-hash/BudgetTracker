@@ -8,9 +8,6 @@ export function useColorScheme() {
   const [hasHydrated, setHasHydrated] = useState(false);
 
   useEffect(() => {
-    // Hydration flag: there's no way to know we're past the client hydration
-    // pass without an effect (same pattern as next-themes' isMounted check).
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setHasHydrated(true);
   }, []);
 

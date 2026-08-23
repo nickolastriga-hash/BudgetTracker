@@ -1,48 +1,34 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { NativeTabs } from 'expo-router/unstable-native-tabs';
-import { useColorScheme } from 'react-native';
+import { Icon, Label, NativeTabs, VectorIcon } from 'expo-router/unstable-native-tabs';
 
-import { Colors } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 
 export default function TabLayout() {
-  const scheme = useColorScheme();
-  const colors = Colors[scheme === 'dark' ? 'dark' : 'light'];
+  const theme = useTheme();
 
   return (
-    <NativeTabs
-      backgroundColor={colors.background}
-      indicatorColor={colors.backgroundElement}
-      labelStyle={{ selected: { color: colors.accent } }}>
+    <NativeTabs tintColor={theme.accent}>
       <NativeTabs.Trigger name="index">
-        <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon
-          sf={{ default: 'house', selected: 'house.fill' }}
-          src={<NativeTabs.Trigger.VectorIcon family={MaterialIcons} name="home" />}
-        />
+        <Icon sf="house.fill" androidSrc={<VectorIcon family={MaterialIcons} name="home" />} />
+        <Label>Home</Label>
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="transactions">
-        <NativeTabs.Trigger.Label>Transactions</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon
-          sf={{ default: 'list.bullet', selected: 'list.bullet.rectangle.fill' }}
-          src={<NativeTabs.Trigger.VectorIcon family={MaterialIcons} name="receipt-long" />}
+        <Icon
+          sf="list.bullet.rectangle.fill"
+          androidSrc={<VectorIcon family={MaterialIcons} name="receipt-long" />}
         />
+        <Label>Transactions</Label>
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="budgets">
-        <NativeTabs.Trigger.Label>Budgets</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon
-          sf={{ default: 'chart.pie', selected: 'chart.pie.fill' }}
-          src={<NativeTabs.Trigger.VectorIcon family={MaterialIcons} name="pie-chart" />}
-        />
+        <Icon sf="chart.pie.fill" androidSrc={<VectorIcon family={MaterialIcons} name="pie-chart" />} />
+        <Label>Budgets</Label>
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="stats">
-        <NativeTabs.Trigger.Label>Stats</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon
-          sf={{ default: 'chart.bar', selected: 'chart.bar.fill' }}
-          src={<NativeTabs.Trigger.VectorIcon family={MaterialIcons} name="bar-chart" />}
-        />
+        <Icon sf="chart.bar.fill" androidSrc={<VectorIcon family={MaterialIcons} name="bar-chart" />} />
+        <Label>Stats</Label>
       </NativeTabs.Trigger>
     </NativeTabs>
   );
