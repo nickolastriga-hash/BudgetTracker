@@ -1,5 +1,7 @@
 # TODO / Future Phases
 
+Current state: [PROJECT_STATE.md](PROJECT_STATE.md). History: [CHANGELOG.md](CHANGELOG.md).
+
 v1 scope was: expense/income logging, per-category monthly budgets, stats/charts, monthly recurring
 transactions, all local-only. Deliberately deferred:
 
