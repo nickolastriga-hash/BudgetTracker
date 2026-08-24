@@ -32,4 +32,4 @@ Snapshot of where the app stands. History: [CHANGELOG.md](CHANGELOG.md). Upcomin
 
 ## Repo
 
-No git remote as of this update — local commits only.
+https://github.com/nickolastriga-hash/BudgetTracker
