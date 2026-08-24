@@ -9,6 +9,7 @@ import { ThemedView } from '@/components/themed-view';
 import { TransactionRow } from '@/components/transaction-row';
 import { BottomTabInset, CardRadius, CardShadow, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { getCategories, getCategory, type Category } from '@/lib/categories';
 import { getTransactions, transactionsForMonth, type Transaction } from '@/lib/transactions';
 
 function toMonthStr(date: Date) {
@@ -29,12 +30,16 @@ export default function TransactionsScreen() {
   const insets = useSafeAreaInsets();
   const [month, setMonth] = useState(() => new Date());
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
 
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
-      getTransactions().then((t) => {
-        if (!cancelled) setTransactions(t);
+      Promise.all([getTransactions(), getCategories()]).then(([t, c]) => {
+        if (!cancelled) {
+          setTransactions(t);
+          setCategories(c);
+        }
       });
       return () => {
         cancelled = true;
@@ -94,6 +99,7 @@ export default function TransactionsScreen() {
                   <TransactionRow
                     key={t.id}
                     transaction={t}
+                    category={getCategory(categories, t.categoryId)}
                     onPress={() => router.push(`/add-transaction?id=${t.id}`)}
                   />
                 ))}

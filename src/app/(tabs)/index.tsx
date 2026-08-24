@@ -11,7 +11,7 @@ import { TransactionRow } from '@/components/transaction-row';
 import { BottomTabInset, CardRadius, CardShadow, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { getBudgetProgress, type Budget, getBudgets } from '@/lib/budgets';
-import { getCategory } from '@/lib/categories';
+import { getCategories, getCategory, type Category } from '@/lib/categories';
 import { getTransactions, monthTotals, transactionsForMonth, type Transaction } from '@/lib/transactions';
 
 function toMonthStr(date: Date) {
@@ -32,14 +32,16 @@ export default function HomeScreen() {
   const [month, setMonth] = useState(() => new Date());
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
 
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
-      Promise.all([getTransactions(), getBudgets()]).then(([t, b]) => {
+      Promise.all([getTransactions(), getBudgets(), getCategories()]).then(([t, b, c]) => {
         if (!cancelled) {
           setTransactions(t);
           setBudgets(b);
+          setCategories(c);
         }
       });
       return () => {
@@ -119,7 +121,7 @@ export default function HomeScreen() {
             </ThemedText>
             <ThemedView type="card" style={[styles.card, CardShadow, { borderColor: theme.border }]}>
               {budgetProgress.map((bp) => {
-                const category = getCategory(bp.categoryId);
+                const category = getCategory(categories, bp.categoryId);
                 if (!category) return null;
                 return (
                   <View key={bp.categoryId} style={styles.budgetRow}>
@@ -151,7 +153,12 @@ export default function HomeScreen() {
           ) : (
             <View style={styles.rowList}>
               {recent.map((t) => (
-                <TransactionRow key={t.id} transaction={t} onPress={() => router.push(`/add-transaction?id=${t.id}`)} />
+                <TransactionRow
+                  key={t.id}
+                  transaction={t}
+                  category={getCategory(categories, t.categoryId)}
+                  onPress={() => router.push(`/add-transaction?id=${t.id}`)}
+                />
               ))}
             </View>
           )}

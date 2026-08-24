@@ -1,5 +1,5 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,7 +11,7 @@ import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, CardRadius, CardShadow, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { getBudgetProgress, getBudgets, removeBudget, setBudget, type Budget } from '@/lib/budgets';
-import { EXPENSE_CATEGORIES } from '@/lib/categories';
+import { categoriesForType, getCategories, type Category } from '@/lib/categories';
 import { getTransactions, type Transaction } from '@/lib/transactions';
 
 function toMonthStr(date: Date) {
@@ -27,13 +27,15 @@ export default function BudgetsScreen() {
   const insets = useSafeAreaInsets();
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [draftLimit, setDraftLimit] = useState('');
 
   const load = useCallback(() => {
-    Promise.all([getBudgets(), getTransactions()]).then(([b, t]) => {
+    Promise.all([getBudgets(), getTransactions(), getCategories()]).then(([b, t, c]) => {
       setBudgets(b);
       setTransactions(t);
+      setCategories(c);
     });
   }, []);
 
@@ -45,6 +47,7 @@ export default function BudgetsScreen() {
 
   const monthStr = toMonthStr(new Date());
   const progressByCategory = new Map(getBudgetProgress(budgets, transactions, monthStr).map((p) => [p.categoryId, p]));
+  const expenseCategories = categoriesForType(categories, 'expense');
 
   function startEditing(categoryId: string) {
     const existing = budgets.find((b) => b.categoryId === categoryId);
@@ -74,15 +77,26 @@ export default function BudgetsScreen() {
         styles.content,
         { paddingTop: insets.top + Spacing.three, paddingBottom: insets.bottom + BottomTabInset + Spacing.six },
       ]}>
-      <ThemedText type="subtitle" style={styles.title}>
-        Budgets
-      </ThemedText>
-      <ThemedText type="small" themeColor="textSecondary">
-        Monthly spending limits per category, tracked against {new Date().toLocaleDateString(undefined, { month: 'long' })}.
-      </ThemedText>
+      <View style={styles.titleRow}>
+        <View style={styles.titleTextGroup}>
+          <ThemedText type="subtitle" style={styles.title}>
+            Budgets
+          </ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            Tap a category for its limit, hold to edit its icon. Tracked against{' '}
+            {new Date().toLocaleDateString(undefined, { month: 'long' })}.
+          </ThemedText>
+        </View>
+        <Pressable
+          onPress={() => router.push('/category-editor')}
+          hitSlop={8}
+          style={[styles.addButton, { backgroundColor: theme.accent }]}>
+          <MaterialIcons name="add" size={22} color="#ffffff" />
+        </Pressable>
+      </View>
 
       <View style={styles.rowList}>
-        {EXPENSE_CATEGORIES.map((category) => {
+        {expenseCategories.map((category) => {
           const progress = progressByCategory.get(category.id);
           const isEditing = editingCategoryId === category.id;
 
@@ -93,7 +107,8 @@ export default function BudgetsScreen() {
               style={[styles.row, CardShadow, { borderColor: theme.border }]}>
               <Pressable
                 style={styles.rowHeader}
-                onPress={() => (isEditing ? setEditingCategoryId(null) : startEditing(category.id))}>
+                onPress={() => (isEditing ? setEditingCategoryId(null) : startEditing(category.id))}
+                onLongPress={() => router.push(`/category-editor?id=${category.id}`)}>
                 <CategoryBadge category={category} size={32} color={theme.destructive} />
                 <View style={styles.rowTextGroup}>
                   <ThemedText type="small">{category.name}</ThemedText>
@@ -160,8 +175,24 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: MaxContentWidth,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.three,
+  },
+  titleTextGroup: {
+    flex: 1,
+    gap: 2,
+  },
   title: {
     marginBottom: -Spacing.one,
+  },
+  addButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   rowList: {
     gap: Spacing.two,

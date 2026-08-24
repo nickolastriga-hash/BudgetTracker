@@ -31,6 +31,10 @@ export default function RootLayout() {
           name="add-transaction"
           options={{ headerShown: true, presentation: 'modal', title: 'Add Transaction' }}
         />
+        <Stack.Screen
+          name="category-editor"
+          options={{ headerShown: true, presentation: 'modal', title: 'New Category' }}
+        />
       </Stack>
     </ThemeProvider>
   );

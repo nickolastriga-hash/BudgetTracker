@@ -97,6 +97,15 @@ src/
                           RecurringTransaction. Edit mode adds a Delete button
                           that requires two taps (no Alert.alert dependency —
                           it doesn't behave consistently across web/native).
+    category-editor.tsx   Add/edit-category modal, reached from Budgets (`+`
+                          button to add, long-press a row to edit that
+                          category's name/icon/color) — same AI-suggested-icon
+                          + manual-grid-picker pattern as HabitTracker's
+                          add-habit screen (see lib/category-icons.ts).
+                          `type` is fixed per screen, not user-editable: adding
+                          always creates an expense category (Budgets is
+                          expense-only), editing keeps the category's existing
+                          type. No delete yet, see TODO.md.
 
   lib/
     transactions.ts       Transaction CRUD (AsyncStorage), month/category totals.
@@ -104,11 +113,28 @@ src/
                           rapid saves can't race on read-modify-write.
     budgets.ts             Budget (categoryId -> monthlyLimit) CRUD + progress calc.
                           Same write-queue pattern as transactions.ts.
-    categories.ts           Fixed, offline category list (14 expense + 5 income) —
-                          no custom categories in v1, see TODO.md. Category.icon is
-                          typed against MaterialIcons' own glyph names
-                          (`ComponentProps<typeof MaterialIcons>['name']`), not a
-                          bare string, so a typo fails tsc instead of failing silently.
+    categories.ts           AsyncStorage-backed category CRUD (seeded from 19
+                          built-in defaults — 14 expense + 5 income — on first
+                          read; the seeded rows are ordinary editable data
+                          afterward, not special-cased). getCategory/
+                          categoriesForType now take the loaded `Category[]`
+                          as their first argument instead of reading a module-
+                          level constant — every screen that renders a category
+                          loads the list itself (useFocusEffect, same pattern as
+                          transactions/budgets) rather than importing a fixed
+                          array. Category.icon is typed against MaterialIcons'
+                          own glyph names (`ComponentProps<typeof
+                          MaterialIcons>['name']`), not a bare string, so a typo
+                          fails tsc instead of failing silently. Also exports
+                          CATEGORY_COLORS, the 12-swatch palette offered in
+                          category-editor.tsx.
+    category-icons.ts       Curated MaterialIcons set + offline keyword-based
+                          suggestCategoryIcon(name), same shape as
+                          HabitTracker's lib/habit-icons.ts (word-boundary
+                          keyword matching, first-match-wins rule list, a
+                          DEFAULT_CATEGORY_ICON fallback). No network call —
+                          "AI" in the picker UI means this offline heuristic,
+                          not a live model.
     recurring.ts            RecurringTransaction CRUD + generateDueTransactions(),
                           called once from the root layout. Monthly-only in v1
                           (dayOfMonth, clamped to each month's real length).
@@ -122,7 +148,11 @@ src/
                           past 100%.
     transaction-row.tsx      One transaction list row (icon, category, note,
                           signed amount) — shared by Home's recent list and the
-                          Transactions tab.
+                          Transactions tab. Takes a resolved `category` prop
+                          (the caller looks it up via lib/categories.ts'
+                          getCategory) rather than looking it up itself, since
+                          categories are no longer a synchronously-importable
+                          constant.
     themed-text.tsx, themed-view.tsx, ...   From the Expo default template.
 
   constants/theme.ts      Colors.light / Colors.dark. Extends the template's
@@ -145,10 +175,18 @@ src/
   clamped to each month's real last day (so a "31st" recurs on the 28th/29th/30th in shorter
   months). Weekly/biweekly would need a new discriminated union member — don't bolt it onto
   `dayOfMonth`.
-- **Categories are fixed** (`lib/categories.ts`) — there's no add/edit/delete-category UI. If you
-  add custom categories later, `Category.id` is used as a foreign key from both `Transaction` and
-  `Budget`, so a delete needs to decide what happens to existing references (reassign to "Other" is
-  the obvious default — mirrors how HabitTracker never actually deletes a habit's history either).
+- **Categories are AsyncStorage-backed and user-editable** (`lib/categories.ts`) — name/icon/color
+  can be changed for any category, including the seeded defaults, via `category-editor.tsx` (Budgets'
+  `+` button to add, long-press a row to edit). `type` is deliberately not editable through that
+  screen — see its own entry above. There's still no delete: `Category.id` is a foreign key from
+  both `Transaction` and `Budget`, so removing one needs to decide what happens to existing
+  references (reassign to "Other" is the obvious default — mirrors how HabitTracker never actually
+  deletes a habit's history either). See TODO.md.
+- **Every screen that displays a category loads `Category[]` itself and passes it into
+  `getCategory`/`categoriesForType`** rather than importing a fixed array — these two helpers take
+  the loaded list as their first argument now. If you add a new screen that shows a category, load
+  it the same way (`getCategories()` inside the screen's existing `useFocusEffect`/`Promise.all`
+  fetch), don't reach for a module-level constant that no longer exists.
 - **A `Budget` is a flat monthly limit, not tied to a specific month** — there's no history of past
   limits. Budgets/Home always compute progress against the *current* month regardless of what month
   is selected elsewhere in the app.

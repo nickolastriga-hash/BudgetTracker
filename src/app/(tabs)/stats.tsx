@@ -12,7 +12,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, CardRadius, CardShadow, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { getCategory } from '@/lib/categories';
+import { getCategories, getCategory, type Category } from '@/lib/categories';
 import { byCategoryTotals, getTransactions, monthTotals, type Transaction } from '@/lib/transactions';
 
 function toMonthStr(date: Date) {
@@ -79,12 +79,16 @@ export default function StatsScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
 
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
-      getTransactions().then((t) => {
-        if (!cancelled) setTransactions(t);
+      Promise.all([getTransactions(), getCategories()]).then(([t, c]) => {
+        if (!cancelled) {
+          setTransactions(t);
+          setCategories(c);
+        }
       });
       return () => {
         cancelled = true;
@@ -167,7 +171,7 @@ export default function StatsScreen() {
         ) : (
           <ThemedView type="card" style={[styles.card, CardShadow, { borderColor: theme.border }]}>
             {breakdown.entries.map(({ categoryId, amount }) => {
-              const category = getCategory(categoryId);
+              const category = getCategory(categories, categoryId);
               if (!category) return null;
               return (
                 <View key={categoryId} style={styles.breakdownRow}>

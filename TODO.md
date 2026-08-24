@@ -4,9 +4,10 @@ v1 scope was: expense/income logging, per-category monthly budgets, stats/charts
 transactions, all local-only. Deliberately deferred:
 
 - **Accounts / cloud backup** — no sign-in, no sync. Everything lives in AsyncStorage on-device only.
-- **Custom categories** — the 19 built-in categories (14 expense, 5 income) in `lib/categories.ts`
-  are fixed. Adding custom categories means deciding what happens to a category's existing
-  transactions/budget on delete (reassign to "Other" is the obvious default).
+- **Category delete/reassignment** — categories are now editable (name/icon/color, via long-press
+  in Budgets or `+` to add new) and AsyncStorage-backed (`lib/categories.ts`), but there's still no
+  delete. Deleting needs a decision about what happens to a deleted category's existing
+  transactions/budget (reassign to "Other" is the obvious default) — not built yet.
 - **Weekly/biweekly recurring transactions** — `lib/recurring.ts` only supports monthly. The
   `RecurringTransaction` shape would need a discriminated union on frequency.
 - **Per-month budget history** — a `Budget` is currently a single flat limit, not tracked per month.

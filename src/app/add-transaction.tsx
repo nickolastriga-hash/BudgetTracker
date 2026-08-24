@@ -8,7 +8,7 @@ import { CategoryBadge } from '@/components/category-badge';
 import { ThemedText } from '@/components/themed-text';
 import { CardRadius, CardShadow, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { categoriesForType, type CategoryType } from '@/lib/categories';
+import { categoriesForType, getCategories, type Category, type CategoryType } from '@/lib/categories';
 import { addRecurring } from '@/lib/recurring';
 import { addTransaction, deleteTransaction, getTransactions, updateTransaction } from '@/lib/transactions';
 
@@ -108,6 +108,11 @@ export default function AddTransactionScreen() {
   const [showCalendar, setShowCalendar] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [loaded, setLoaded] = useState(!isEditing);
+  const [allCategories, setAllCategories] = useState<Category[]>([]);
+
+  useEffect(() => {
+    getCategories().then(setAllCategories);
+  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -124,7 +129,7 @@ export default function AddTransactionScreen() {
     });
   }, [id]);
 
-  const categories = categoriesForType(type);
+  const categories = categoriesForType(allCategories, type);
   const parsedAmount = parseFloat(amount);
   const canSave = !Number.isNaN(parsedAmount) && parsedAmount > 0 && !!categoryId;
   // Standardized across the app: expense = destructive (red), income = success (green).

@@ -5,16 +5,23 @@ import { CategoryBadge } from '@/components/category-badge';
 import { ThemedText } from '@/components/themed-text';
 import { CardRadius, CardShadow, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { getCategory } from '@/lib/categories';
+import type { Category } from '@/lib/categories';
 import type { Transaction } from '@/lib/transactions';
 
 function formatAmount(amount: number) {
   return amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-export function TransactionRow({ transaction, onPress }: { transaction: Transaction; onPress?: () => void }) {
+export function TransactionRow({
+  transaction,
+  category,
+  onPress,
+}: {
+  transaction: Transaction;
+  category: Category | undefined;
+  onPress?: () => void;
+}) {
   const theme = useTheme();
-  const category = getCategory(transaction.categoryId);
   const isExpense = transaction.type === 'expense';
   // Standardized across the app: expenses are always destructive (red),
   // income is always success (green) — never just per-category color.
