@@ -6,9 +6,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ProgressBar } from '@/components/progress-bar';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { TransactionRow } from '@/components/transaction-row';
-import { BottomTabInset, CardRadius, CardShadow, MaxContentWidth, Spacing } from '@/constants/theme';
+import { BottomTabInset, CardRadius, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { getBudgetProgress, type Budget, getBudgets } from '@/lib/budgets';
 import { getCategories, getCategory, type Category } from '@/lib/categories';
@@ -58,7 +57,7 @@ export default function HomeScreen() {
   const netPositive = totals.net >= 0;
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.background }}>
+    <View style={{ flex: 1, backgroundColor: theme.backgroundElement }}>
       <ScrollView
         contentContainerStyle={[
           styles.content,
@@ -78,7 +77,7 @@ export default function HomeScreen() {
           </Pressable>
         </View>
 
-        <ThemedView type="card" style={[styles.summaryCard, CardShadow, { borderColor: theme.border }]}>
+        <View style={[styles.summaryCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
           <View style={styles.summaryColumn}>
             <View style={styles.summaryLabelRow}>
               <MaterialIcons name="arrow-upward" size={13} color={theme.success} />
@@ -112,53 +111,62 @@ export default function HomeScreen() {
               ${formatAmount(totals.net)}
             </ThemedText>
           </View>
-        </ThemedView>
+        </View>
 
         {budgetProgress.length > 0 && (
           <View style={styles.section}>
-            <ThemedText type="smallBold" style={styles.sectionTitle}>
-              Budgets
+            <ThemedText type="small" themeColor="textSecondary" style={styles.sectionTitle}>
+              BUDGETS
             </ThemedText>
-            <ThemedView type="card" style={[styles.card, CardShadow, { borderColor: theme.border }]}>
-              {budgetProgress.map((bp) => {
+            <View style={[styles.group, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              {budgetProgress.map((bp, i) => {
                 const category = getCategory(categories, bp.categoryId);
                 if (!category) return null;
                 return (
-                  <View key={bp.categoryId} style={styles.budgetRow}>
-                    <View style={styles.budgetHeader}>
-                      <ThemedText type="small">{category.name}</ThemedText>
-                      <ThemedText type="small" themeColor="textSecondary">
-                        ${formatAmount(bp.spent)} / ${formatAmount(bp.limit)}
-                      </ThemedText>
+                  <View key={bp.categoryId}>
+                    <View style={styles.budgetRow}>
+                      <View style={styles.budgetHeader}>
+                        <ThemedText type="small">{category.name}</ThemedText>
+                        <ThemedText type="small" themeColor="textSecondary">
+                          ${formatAmount(bp.spent)} / ${formatAmount(bp.limit)}
+                        </ThemedText>
+                      </View>
+                      <ProgressBar percent={bp.percent} color={category.color} />
                     </View>
-                    <ProgressBar percent={bp.percent} color={category.color} />
+                    {i < budgetProgress.length - 1 && (
+                      <View style={[styles.divider, { backgroundColor: theme.border }]} />
+                    )}
                   </View>
                 );
               })}
-            </ThemedView>
+            </View>
           </View>
         )}
 
         <View style={styles.section}>
-          <ThemedText type="smallBold" style={styles.sectionTitle}>
-            Recent Transactions
+          <ThemedText type="small" themeColor="textSecondary" style={styles.sectionTitle}>
+            RECENT TRANSACTIONS
           </ThemedText>
           {recent.length === 0 ? (
-            <ThemedView type="card" style={[styles.card, CardShadow, styles.emptyCard, { borderColor: theme.border }]}>
+            <View style={[styles.group, styles.emptyGroup, { backgroundColor: theme.card, borderColor: theme.border }]}>
               <MaterialIcons name="receipt-long" size={28} color={theme.textTertiary} />
               <ThemedText type="small" themeColor="textSecondary">
                 No transactions yet this month.
               </ThemedText>
-            </ThemedView>
+            </View>
           ) : (
-            <View style={styles.rowList}>
-              {recent.map((t) => (
-                <TransactionRow
-                  key={t.id}
-                  transaction={t}
-                  category={getCategory(categories, t.categoryId)}
-                  onPress={() => router.push(`/add-transaction?id=${t.id}`)}
-                />
+            <View style={[styles.group, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              {recent.map((t, i) => (
+                <View key={t.id}>
+                  <TransactionRow
+                    transaction={t}
+                    category={getCategory(categories, t.categoryId)}
+                    onPress={() => router.push(`/add-transaction?id=${t.id}`)}
+                  />
+                  {i < recent.length - 1 && (
+                    <View style={[styles.divider, styles.rowDividerInset, { backgroundColor: theme.border }]} />
+                  )}
+                </View>
               ))}
             </View>
           )}
@@ -217,23 +225,32 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
   },
   sectionTitle: {
-    paddingHorizontal: 2,
+    paddingHorizontal: Spacing.two,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    fontSize: 12,
   },
-  rowList: {
-    gap: Spacing.two,
-  },
-  card: {
+  group: {
     borderRadius: CardRadius,
     borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: Spacing.three,
+    overflow: 'hidden',
   },
-  emptyCard: {
+  emptyGroup: {
     paddingVertical: Spacing.four,
     alignItems: 'center',
     gap: Spacing.two,
   },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    marginHorizontal: Spacing.three,
+  },
+  rowDividerInset: {
+    marginLeft: 32 + Spacing.three * 2,
+    marginHorizontal: 0,
+  },
   budgetRow: {
-    paddingVertical: Spacing.two,
+    paddingVertical: Spacing.two + 2,
+    paddingHorizontal: Spacing.three,
     gap: 6,
   },
   budgetHeader: {

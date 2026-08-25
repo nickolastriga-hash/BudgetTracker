@@ -5,9 +5,8 @@ import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { TransactionRow } from '@/components/transaction-row';
-import { BottomTabInset, CardRadius, CardShadow, MaxContentWidth, Spacing } from '@/constants/theme';
+import { BottomTabInset, CardRadius, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { getCategories, getCategory, type Category } from '@/lib/categories';
 import { getTransactions, transactionsForMonth, type Transaction } from '@/lib/transactions';
@@ -61,7 +60,7 @@ export default function TransactionsScreen() {
   }, [transactions, monthStr]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.background }}>
+    <View style={{ flex: 1, backgroundColor: theme.backgroundElement }}>
       <ScrollView
         contentContainerStyle={[
           styles.content,
@@ -82,26 +81,30 @@ export default function TransactionsScreen() {
         </View>
 
         {groups.length === 0 ? (
-          <ThemedView type="card" style={[styles.card, CardShadow, styles.emptyCard, { borderColor: theme.border }]}>
+          <View style={[styles.group, styles.emptyGroup, { backgroundColor: theme.card, borderColor: theme.border }]}>
             <MaterialIcons name="receipt-long" size={28} color={theme.textTertiary} />
             <ThemedText type="small" themeColor="textSecondary">
               No transactions this month.
             </ThemedText>
-          </ThemedView>
+          </View>
         ) : (
           groups.map(([date, items]) => (
-            <View key={date} style={styles.group}>
+            <View key={date} style={styles.dateGroup}>
               <ThemedText type="small" themeColor="textSecondary" style={styles.dateHeader}>
-                {dateHeaderLabel(date)}
+                {dateHeaderLabel(date).toUpperCase()}
               </ThemedText>
-              <View style={styles.rowList}>
-                {items.map((t) => (
-                  <TransactionRow
-                    key={t.id}
-                    transaction={t}
-                    category={getCategory(categories, t.categoryId)}
-                    onPress={() => router.push(`/add-transaction?id=${t.id}`)}
-                  />
+              <View style={[styles.group, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                {items.map((t, i) => (
+                  <View key={t.id}>
+                    <TransactionRow
+                      transaction={t}
+                      category={getCategory(categories, t.categoryId)}
+                      onPress={() => router.push(`/add-transaction?id=${t.id}`)}
+                    />
+                    {i < items.length - 1 && (
+                      <View style={[styles.divider, styles.rowDividerInset, { backgroundColor: theme.border }]} />
+                    )}
+                  </View>
                 ))}
               </View>
             </View>
@@ -135,24 +138,32 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: Spacing.four,
   },
-  group: {
+  dateGroup: {
     gap: Spacing.two,
   },
   dateHeader: {
-    paddingHorizontal: 2,
+    paddingHorizontal: Spacing.two,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    fontSize: 12,
   },
-  rowList: {
-    gap: Spacing.two,
-  },
-  card: {
+  group: {
     borderRadius: CardRadius,
     borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: Spacing.three,
+    overflow: 'hidden',
   },
-  emptyCard: {
+  emptyGroup: {
     paddingVertical: Spacing.four,
     alignItems: 'center',
     gap: Spacing.two,
+  },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    marginHorizontal: Spacing.three,
+  },
+  rowDividerInset: {
+    marginLeft: 32 + Spacing.three * 2,
+    marginHorizontal: 0,
   },
   fab: {
     position: 'absolute',

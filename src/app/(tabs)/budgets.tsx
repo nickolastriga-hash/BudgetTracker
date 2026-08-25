@@ -1,21 +1,25 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CategoryBadge } from '@/components/category-badge';
 import { ProgressBar } from '@/components/progress-bar';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, CardRadius, CardShadow, MaxContentWidth, Spacing } from '@/constants/theme';
+import { BottomTabInset, CardRadius, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { getBudgetProgress, getBudgets, removeBudget, setBudget, type Budget } from '@/lib/budgets';
+import { getBudgetProgress, getBudgets, type Budget } from '@/lib/budgets';
 import { categoriesForType, getCategories, type Category } from '@/lib/categories';
 import { getTransactions, type Transaction } from '@/lib/transactions';
 
 function toMonthStr(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function monthLabel(monthStr: string) {
+  const [y, m] = monthStr.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 }
 
 function formatAmount(amount: number) {
@@ -28,8 +32,6 @@ export default function BudgetsScreen() {
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
-  const [draftLimit, setDraftLimit] = useState('');
 
   const load = useCallback(() => {
     Promise.all([getBudgets(), getTransactions(), getCategories()]).then(([b, t, c]) => {
@@ -45,132 +47,94 @@ export default function BudgetsScreen() {
     }, [load])
   );
 
-  const monthStr = toMonthStr(new Date());
-  const progressByCategory = new Map(getBudgetProgress(budgets, transactions, monthStr).map((p) => [p.categoryId, p]));
+  const thisMonth = toMonthStr(new Date());
+  const progressByCategory = new Map(getBudgetProgress(budgets, transactions, thisMonth).map((p) => [p.categoryId, p]));
   const expenseCategories = categoriesForType(categories, 'expense');
 
-  function startEditing(categoryId: string) {
-    const existing = budgets.find((b) => b.categoryId === categoryId);
-    setDraftLimit(existing ? String(existing.monthlyLimit) : '');
-    setEditingCategoryId(categoryId);
-  }
-
-  async function saveDraft(categoryId: string) {
-    const amount = parseFloat(draftLimit);
-    if (!Number.isNaN(amount) && amount > 0) {
-      await setBudget(categoryId, amount);
-      load();
-    }
-    setEditingCategoryId(null);
-  }
-
-  async function clearBudget(categoryId: string) {
-    await removeBudget(categoryId);
-    setEditingCategoryId(null);
-    load();
-  }
-
   return (
-    <ScrollView
-      style={{ backgroundColor: theme.background }}
-      contentContainerStyle={[
-        styles.content,
-        { paddingTop: insets.top + Spacing.three, paddingBottom: insets.bottom + BottomTabInset + Spacing.six },
-      ]}>
-      <View style={styles.titleRow}>
-        <View style={styles.titleTextGroup}>
-          <ThemedText type="subtitle" style={styles.title}>
-            Budgets
-          </ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            Tap a category for its limit, hold to edit its icon. Tracked against{' '}
-            {new Date().toLocaleDateString(undefined, { month: 'long' })}.
-          </ThemedText>
+    <View style={{ flex: 1, backgroundColor: theme.backgroundElement }}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: insets.top + Spacing.three, paddingBottom: insets.bottom + BottomTabInset + Spacing.six },
+        ]}>
+        <View style={styles.titleRow}>
+          <View style={styles.titleTextGroup}>
+            <ThemedText type="subtitle" style={styles.title}>
+              Budgets
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              Tracked against {monthLabel(thisMonth)}. Tap a category to set its limit, hold to
+              edit its icon.
+            </ThemedText>
+          </View>
+          <Pressable
+            onPress={() => router.push('/category-editor')}
+            hitSlop={8}
+            style={[styles.addButton, { backgroundColor: theme.accent }]}>
+            <MaterialIcons name="add" size={22} color="#ffffff" />
+          </Pressable>
         </View>
-        <Pressable
-          onPress={() => router.push('/category-editor')}
-          hitSlop={8}
-          style={[styles.addButton, { backgroundColor: theme.accent }]}>
-          <MaterialIcons name="add" size={22} color="#ffffff" />
-        </Pressable>
-      </View>
 
-      <View style={styles.rowList}>
-        {expenseCategories.map((category) => {
-          const progress = progressByCategory.get(category.id);
-          const isEditing = editingCategoryId === category.id;
+        <View style={[styles.group, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          {expenseCategories.map((category, i) => {
+            const progress = progressByCategory.get(category.id);
+            const scheduled = budgets.find((b) => b.categoryId === category.id)?.scheduledChange;
+            const upcoming = scheduled && scheduled.startMonth > thisMonth ? scheduled : null;
 
-          return (
-            <ThemedView
-              key={category.id}
-              type="card"
-              style={[styles.row, CardShadow, { borderColor: theme.border }]}>
-              <Pressable
-                style={styles.rowHeader}
-                onPress={() => (isEditing ? setEditingCategoryId(null) : startEditing(category.id))}
-                onLongPress={() => router.push(`/category-editor?id=${category.id}`)}>
-                <CategoryBadge category={category} size={32} color={theme.destructive} />
-                <View style={styles.rowTextGroup}>
-                  <ThemedText type="small">{category.name}</ThemedText>
-                  {progress ? (
-                    <ThemedText type="small" themeColor="textSecondary">
-                      ${formatAmount(progress.spent)} / ${formatAmount(progress.limit)}
-                    </ThemedText>
-                  ) : (
-                    <ThemedText type="small" themeColor="accent">
-                      Set budget
-                    </ThemedText>
-                  )}
-                </View>
-                <MaterialIcons
-                  name={isEditing ? 'expand-less' : 'expand-more'}
-                  size={22}
-                  color={theme.textTertiary}
-                />
-              </Pressable>
+            return (
+              <View key={category.id}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.row,
+                    { backgroundColor: pressed ? theme.backgroundElement : 'transparent' },
+                  ]}
+                  onPress={() => router.push(`/budget-editor?id=${category.id}`)}
+                  onLongPress={() => router.push(`/category-editor?id=${category.id}`)}>
+                  <View style={styles.rowHeader}>
+                    <CategoryBadge category={category} size={32} color={theme.destructive} />
+                    <View style={styles.rowTextGroup}>
+                      <ThemedText type="small">{category.name}</ThemedText>
+                      {progress ? (
+                        <ThemedText type="small" themeColor="textSecondary">
+                          ${formatAmount(progress.spent)} / ${formatAmount(progress.limit)}
+                        </ThemedText>
+                      ) : (
+                        <ThemedText type="small" themeColor="accent">
+                          Set budget
+                        </ThemedText>
+                      )}
+                      {upcoming && (
+                        <ThemedText type="small" themeColor="accent">
+                          Changing to ${formatAmount(upcoming.limit)} in {monthLabel(upcoming.startMonth)}
+                        </ThemedText>
+                      )}
+                    </View>
+                    <MaterialIcons name="chevron-right" size={22} color={theme.textTertiary} />
+                  </View>
 
-              {progress && !isEditing && (
-                <View style={styles.progressWrap}>
-                  <ProgressBar percent={progress.percent} color={category.color} />
-                </View>
-              )}
-
-              {isEditing && (
-                <View style={styles.editRow}>
-                  <TextInput
-                    value={draftLimit}
-                    onChangeText={setDraftLimit}
-                    placeholder="Monthly limit"
-                    placeholderTextColor={theme.textTertiary}
-                    keyboardType="decimal-pad"
-                    style={[styles.input, { borderColor: theme.border, color: theme.text }]}
-                  />
-                  <Pressable
-                    onPress={() => saveDraft(category.id)}
-                    style={[styles.saveButton, { backgroundColor: theme.accent }]}>
-                    <ThemedText type="smallBold" style={styles.saveButtonText}>
-                      Save
-                    </ThemedText>
-                  </Pressable>
                   {progress && (
-                    <Pressable onPress={() => clearBudget(category.id)} hitSlop={8}>
-                      <MaterialIcons name="delete-outline" size={22} color={theme.destructive} />
-                    </Pressable>
+                    <View style={styles.progressWrap}>
+                      <ProgressBar percent={progress.percent} color={category.color} />
+                    </View>
                   )}
-                </View>
-              )}
-            </ThemedView>
-          );
-        })}
-      </View>
-    </ScrollView>
+                </Pressable>
+                {i < expenseCategories.length - 1 && (
+                  <View style={[styles.divider, { backgroundColor: theme.border }]} />
+                )}
+              </View>
+            );
+          })}
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   content: {
     paddingHorizontal: Spacing.three,
-    gap: Spacing.two,
+    gap: Spacing.three,
     alignSelf: 'center',
     width: '100%',
     maxWidth: MaxContentWidth,
@@ -194,13 +158,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  rowList: {
-    gap: Spacing.two,
-    marginTop: Spacing.two,
-  },
-  row: {
+  group: {
     borderRadius: CardRadius,
     borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+  },
+  row: {
     padding: Spacing.three,
     gap: Spacing.two,
   },
@@ -216,25 +179,8 @@ const styles = StyleSheet.create({
   progressWrap: {
     paddingLeft: 32 + Spacing.three,
   },
-  editRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.two,
-    paddingLeft: 32 + Spacing.three,
-  },
-  input: {
-    flex: 1,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: Spacing.two,
-    paddingHorizontal: Spacing.two,
-    paddingVertical: 6,
-  },
-  saveButton: {
-    paddingHorizontal: Spacing.three,
-    paddingVertical: 8,
-    borderRadius: Spacing.two,
-  },
-  saveButtonText: {
-    color: '#ffffff',
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    marginLeft: 32 + Spacing.three * 2,
   },
 });

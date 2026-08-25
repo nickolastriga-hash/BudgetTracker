@@ -106,6 +106,16 @@ src/
                           always creates an expense category (Budgets is
                           expense-only), editing keeps the category's existing
                           type. No delete yet, see TODO.md.
+    budget-editor.tsx     Per-category budget modal, reached by tapping a row on
+                          Budgets (`headerShown: false` in _layout.tsx — builds
+                          its own header: category name left, a circular "X"
+                          button right that calls router.back()). Body is a
+                          plain ScrollView, not the tab's outer one, sized to
+                          the full screen (not the old dropdown's clipped
+                          panel). Holds the amount field, delete, a paged
+                          12-month calendar grid (tap a square to set the
+                          "starting on" month for the buttons below — see the
+                          `applyLimit` convention bullet), and Reset-to-default.
 
   lib/
     transactions.ts       Transaction CRUD (AsyncStorage), month/category totals.
@@ -187,9 +197,21 @@ src/
   the loaded list as their first argument now. If you add a new screen that shows a category, load
   it the same way (`getCategories()` inside the screen's existing `useFocusEffect`/`Promise.all`
   fetch), don't reach for a module-level constant that no longer exists.
-- **A `Budget` is a flat monthly limit, not tied to a specific month** — there's no history of past
-  limits. Budgets/Home always compute progress against the *current* month regardless of what month
-  is selected elsewhere in the app.
+- **A `Budget`'s recurring `monthlyLimit` applies every month by default; the Budgets screen itself
+  has no month nav** — progress there and on Home always computes against the *real current* month
+  (`toMonthStr(new Date())`), regardless of what month is selected elsewhere in the app (e.g.
+  Transactions). Two ways to deviate from the recurring default, both set from `budget-editor.tsx`'s
+  modal via `lib/budgets.ts`'s `applyLimit(categoryId, startMonth, limit, scope)`: `scope:
+  'once'` writes to `Budget.overrides["YYYY-MM"]`, a single month's limit with no effect on any
+  other month; `scope: 'onward'` writes `Budget.scheduledChange: { startMonth, limit }`, a change to
+  the recurring amount effective from `startMonth` on (past/current `startMonth` takes effect
+  immediately, a future one shows as "Changing to $X in <month>" on the row until reached). Only one
+  `scheduledChange` is kept at a time — a new `onward` change replaces it outright, there's no
+  stacked history of future changes. `effectiveLimit(budget, monthStr)` resolves the three in
+  priority order (exact-month override, then an in-effect scheduled change, then the plain
+  default) and is the only place that should read a budget's limit — `getBudgetProgress` already
+  calls it. `resetToDefault(categoryId, monthStr)` clears whichever of the two is currently
+  governing that month.
 - **Mutations to `transactions.ts`/`budgets.ts`/`recurring.ts` all go through the same
   promise-chain write-queue pattern** (`let writeQueue = Promise.resolve(); enqueue(fn)`) — copied
   across all three files rather than shared, per the no-premature-abstraction rule above, but keep

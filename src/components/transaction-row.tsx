@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { CategoryBadge } from '@/components/category-badge';
 import { ThemedText } from '@/components/themed-text';
-import { CardRadius, CardShadow, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { Category } from '@/lib/categories';
 import type { Transaction } from '@/lib/transactions';
@@ -12,6 +12,9 @@ function formatAmount(amount: number) {
   return amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// A plain row, not its own card — meant to sit inside a screen's grouped-list
+// container (see the `group`/`divider` styles in index.tsx/transactions.tsx),
+// iOS Settings-style, rather than being individually shadowed.
 export function TransactionRow({
   transaction,
   category,
@@ -30,11 +33,7 @@ export function TransactionRow({
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.row,
-        CardShadow,
-        { backgroundColor: theme.card, borderColor: theme.border, opacity: pressed ? 0.7 : 1 },
-      ]}>
+      style={({ pressed }) => [styles.row, { backgroundColor: pressed ? theme.backgroundElement : 'transparent' }]}>
       <View style={[styles.accentBar, { backgroundColor: typeColor }]} />
       {category && <CategoryBadge category={category} color={typeColor} />}
       <View style={styles.middle}>
@@ -62,9 +61,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.three,
-    padding: Spacing.three,
-    borderRadius: CardRadius,
-    borderWidth: StyleSheet.hairlineWidth,
+    paddingVertical: Spacing.three,
+    paddingHorizontal: Spacing.three,
     overflow: 'hidden',
   },
   accentBar: {
