@@ -12,8 +12,6 @@ const TABS = [
   { name: 'index', href: '/', label: 'Home', icon: 'home' },
   { name: 'transactions', href: '/transactions', label: 'Transactions', icon: 'receipt-long' },
   { name: 'budgets', href: '/budgets', label: 'Budgets', icon: 'pie-chart' },
-  { name: 'bills', href: '/bills', label: 'Bills', icon: 'event-repeat' },
-  { name: 'stats', href: '/stats', label: 'Stats', icon: 'bar-chart' },
 ] as const;
 
 export default function TabLayout() {

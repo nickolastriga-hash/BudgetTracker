@@ -13,8 +13,11 @@ function formatAmount(amount: number) {
 }
 
 // A plain row, not its own card — meant to sit inside a screen's grouped-list
-// container (see the `group`/`divider` styles in index.tsx/transactions.tsx),
-// iOS Settings-style, rather than being individually shadowed.
+// container (see the `group`/`divider` styles in index.tsx/transactions.tsx).
+// Redesigned 2026-08-26 (dropped the old left accent bar + arrow glyph for a
+// flatter, more modern look — just a bigger icon badge and a bold colored
+// amount carrying the expense/income cue) per explicit feedback that the
+// previous version looked dated.
 export function TransactionRow({
   transaction,
   category,
@@ -26,18 +29,18 @@ export function TransactionRow({
 }) {
   const theme = useTheme();
   const isExpense = transaction.type === 'expense';
-  // Standardized across the app: expenses are always destructive (red),
-  // income is always success (green) — never just per-category color.
+  // Standardized: expenses are always destructive (red), income is always
+  // success (green) here — a transaction has one unambiguous type, so the
+  // badge itself carries that color rather than the category's own.
   const typeColor = isExpense ? theme.destructive : theme.success;
 
   return (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [styles.row, { backgroundColor: pressed ? theme.backgroundElement : 'transparent' }]}>
-      <View style={[styles.accentBar, { backgroundColor: typeColor }]} />
-      {category && <CategoryBadge category={category} color={typeColor} />}
+      {category && <CategoryBadge category={category} color={typeColor} size={42} />}
       <View style={styles.middle}>
-        <ThemedText type="default" numberOfLines={1}>
+        <ThemedText type="default" style={styles.categoryName} numberOfLines={1}>
           {category?.name ?? 'Other'}
         </ThemedText>
         {transaction.note ? (
@@ -46,12 +49,10 @@ export function TransactionRow({
           </ThemedText>
         ) : null}
       </View>
-      <View style={styles.amountGroup}>
-        <MaterialIcons name={isExpense ? 'arrow-downward' : 'arrow-upward'} size={13} color={typeColor} />
-        <ThemedText type="default" style={[styles.amount, { color: typeColor }]}>
-          {isExpense ? '-' : '+'}${formatAmount(transaction.amount)}
-        </ThemedText>
-      </View>
+      <ThemedText type="default" style={[styles.amount, { color: typeColor }]}>
+        {isExpense ? '-' : '+'}${formatAmount(transaction.amount)}
+      </ThemedText>
+      <MaterialIcons name="chevron-right" size={20} color={theme.textTertiary} />
     </Pressable>
   );
 }
@@ -63,27 +64,17 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
     paddingVertical: Spacing.three,
     paddingHorizontal: Spacing.three,
-    overflow: 'hidden',
-  },
-  accentBar: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 4,
   },
   middle: {
     flex: 1,
     gap: 2,
-    marginLeft: Spacing.one,
   },
-  amountGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
+  categoryName: {
+    fontWeight: '600',
   },
   amount: {
     fontVariant: ['tabular-nums'],
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });

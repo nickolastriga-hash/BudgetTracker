@@ -7,23 +7,33 @@
 A single-user, offline-first budget tracking app built with Expo Router. Users log expense/income
 transactions against a fixed set of categories, set optional monthly spending limits per category,
 and can mark a transaction as recurring monthly (e.g. rent, subscriptions) so it's regenerated
-automatically each month. Five tabs:
+automatically each month. Three tabs, each opening with a `ScreenHeader` title (added 2026-08-26,
+`components/screen-header.tsx` — 28/700, matching HabitTracker's own per-tab header sizing) plus a
+`SettingsButton` in the header's top-right corner (also 2026-08-26, matching HabitTracker's
+ProfileButton size/placement — a gear glyph instead of a profile avatar, since there's no accounts
+system to show a profile for; opens `app/settings.tsx`, see its own bullet below):
 
-- **Home** — month nav, an income/expenses/net summary card, a preview of up to 3 budget
-  categories' progress, and the month's most recent transactions. FAB opens the add-transaction modal.
-- **Transactions** — month nav, all of that month's transactions grouped by date. Tapping a row
-  opens the same modal in edit mode.
-- **Budgets** — two sections: expense categories with an optional monthly spending limit, and
-  income categories with an optional monthly income goal (added 2026-08-25). Tap a row to
-  set/edit/clear its limit/goal inline; progress bars flip semantics by section — an expense bar
-  turns destructive red past 100% (over budget, bad), an income bar turns success green at/past
+- **Home** — "Home" header, a month nav (same black-chevrons/blue-tappable-label/picker-modal shape
+  as Transactions' below, added 2026-08-26), a dashboard card (a donut ring of the navigated month's
+  expense-by-category breakdown, center showing the top category's icon/amount/name; a compact
+  income/expenses/net row; a 6-month income-vs-expense mini trend chart), a preview of up to 3
+  budget categories' progress, and the month's most recent transactions. FAB opens the
+  add-transaction modal.
+- **Transactions** — "Transactions" header, a month nav (chevrons in `theme.text`/black — plain
+  navigation, not the tappable control — the month label itself is `theme.accent`/blue and opens a
+  month/year picker modal on tap: a year pager plus a 12-month grid, replacing an earlier
+  fast-rewind/fast-forward button pair) above a List/Calendar segmented toggle (added 2026-08-26).
+  List: all of that month's transactions grouped by date, tapping a row opens the same modal in edit
+  mode. Calendar: a day-of-month grid showing that day's total spend, tap a day to expand its
+  transactions below the grid. The two are pages of one horizontal `pagingEnabled` ScrollView — swipe
+  between them, or tap the toggle. See CLAUDE.md's "Transactions List/Calendar" convention bullet
+  below.
+- **Budgets** — "Budgets" header, then two sections: expense categories with an optional monthly
+  spending limit, and income categories with an optional monthly income goal (added 2026-08-25). Tap
+  a row to set/edit/clear its limit/goal inline; progress bars flip semantics by section — an expense
+  bar turns destructive red past 100% (over budget, bad), an income bar turns success green at/past
   100% (goal reached, good). Progress is always against the *current* calendar month (no month nav
   here — a budget is a flat per-category limit/goal, not a per-month record).
-- **Bills** (added 2026-08-25) — the management screen `RecurringTransaction`s never had: every
-  recurring bill/income, sorted by next-due date, with a `+` to add one directly and a tap to
-  edit/cancel it. See `lib/recurring.ts` and `app/bill-editor.tsx` below.
-- **Stats** — a 6-month income-vs-expense bar chart (react-native-svg) and a current-month
-  spending-by-category breakdown with progress bars.
 
 All data is local — `AsyncStorage` only, no accounts, no sync. That's a deliberate v1 scope
 decision, not an oversight; see [TODO.md](TODO.md) for what's intentionally deferred.
@@ -61,7 +71,7 @@ build via `sign.expo.dev` (works with SDK 57 but the provisioning profile expire
 `eas go` + TestFlight (needs a paid Apple Developer account). Revisit this pin once Apple approves
 a newer Expo Go build, or if a dev-client build ever becomes the workflow instead of Expo Go.
 - **TypeScript, strict**, project has zero `tsc --noEmit` errors — keep it that way.
-- **react-native-svg** for the Stats trend chart.
+- **react-native-svg** for Home's dashboard card (`CategoryRingChart`, `MiniTrendChart`).
 - **AsyncStorage** (`@react-native-async-storage/async-storage`) as the only persistence layer.
 - **@expo/vector-icons** (`MaterialIcons`) for all icons — category icons, tab icons (via
   `NativeTabs.Trigger.VectorIcon` on native, plain `<MaterialIcons>` in the web tab bar), and UI
@@ -93,15 +103,10 @@ src/
       _layout.tsx         NativeTabs bar (native)
       _layout.web.tsx     Web fallback tab bar (expo-router/ui)
       index.tsx           Home
-      transactions.tsx    Transactions
+      transactions.tsx    Transactions — List/Calendar swipeable pages (added
+                          2026-08-26), see the "Transactions List/Calendar"
+                          convention bullet below.
       budgets.tsx         Budgets
-      bills.tsx           Bills — flat list of RecurringTransactions sorted by
-                          lib/recurring.ts's nextDueDate(), a `+` to
-                          bill-editor (new) and tap-a-row to bill-editor?id=...
-                          (edit). Calls generateDueTransactions() on focus too
-                          (idempotent, safe alongside the root layout's launch
-                          call) so due dates shown are never stale mid-session.
-      stats.tsx           Stats
     add-transaction.tsx   Add/edit modal — type toggle, amount, category grid,
                           a self-contained calendar-panel date picker (capped at
                           today), optional note, and (new transactions only) a
@@ -131,24 +136,15 @@ src/
                           12-month calendar grid (tap a square to set the
                           "starting on" month for the buttons below — see the
                           `applyLimit` convention bullet), and Reset-to-default.
-    bill-editor.tsx        Add/edit a RecurringTransaction directly (reached
-                          from Bills, not from add-transaction's checkbox).
-                          Same header-with-close-button shell as
-                          budget-editor.tsx. Fields: expense/income toggle,
-                          amount, category grid, a 1-31 day-of-month grid
-                          (recurrence is a day-of-month, not a specific date —
-                          no month/year context needed), optional note. New
-                          bills default `startDate` to today, so if the chosen
-                          day already passed this month the very first
-                          occurrence is generated immediately (same
-                          already-past-this-month behavior as add-transaction's
-                          "Repeat monthly" checkbox). Both add and edit call
-                          `generateDueTransactions()` before navigating back so
-                          a just-added bill materializes without waiting for
-                          next launch. Edit mode's Delete ("Cancel this bill")
-                          is the same two-tap pattern as add-transaction, and
-                          only stops future generation — `deleteRecurring`
-                          never touches transactions already posted.
+    settings.tsx           Settings modal (added 2026-08-26), reached from any
+                          tab's SettingsButton. `headerShown: true` in
+                          _layout.tsx (native title "Settings", auto back
+                          button) — no in-content title of its own, unlike
+                          add-transaction/category-editor which follow the
+                          same convention. One section so far: "Generate
+                          year-to-date data" (two-tap confirm, same pattern as
+                          add-transaction's Delete), calls
+                          lib/demo-data.ts#generateYearToDateDemoData().
 
   lib/
     transactions.ts       Transaction CRUD (AsyncStorage), month/category totals.
@@ -184,21 +180,80 @@ src/
                           "AI" in the picker UI means this offline heuristic,
                           not a live model.
     recurring.ts            RecurringTransaction CRUD + generateDueTransactions(),
-                          called once from the root layout (and again from
-                          Bills on focus — see (tabs)/bills.tsx above).
-                          Monthly-only in v1 (dayOfMonth, clamped to each
-                          month's real length). Materializes any owed months'
-                          transactions lazily on launch rather than being
-                          scheduled ahead of time — there's no OS-level
-                          scheduler involved. `updateRecurring` edits apply
-                          going forward only (like a budget's scheduledChange —
-                          `lastGeneratedMonth` is left alone). `nextDueDate(item,
-                          today)` derives the next date a transaction will post
-                          for the Bills list, assuming generateDueTransactions
-                          already ran this session.
+                          called once from the root layout. Monthly-only in v1
+                          (dayOfMonth, clamped to each month's real length).
+                          Materializes any owed months' transactions lazily on
+                          launch rather than being scheduled ahead of time —
+                          there's no OS-level scheduler involved. Only
+                          add/get/delete + generateDueTransactions are
+                          exported — `updateRecurring`/`nextDueDate` existed
+                          briefly for a Bills management screen that was
+                          removed 2026-08-26 (see TODO.md); re-add them if that
+                          UI comes back.
+    demo-data.ts            generateYearToDateDemoData() (added 2026-08-26),
+                          called from settings.tsx. Backfills Jan 1 of the
+                          current year through today with random expense/
+                          income transactions (existing categories only,
+                          never creates new ones) plus a monthly limit on up
+                          to 6 expense categories via lib/budgets.ts's
+                          applyLimit. Purely additive — never reads existing
+                          transactions/budgets before writing, so it's safe to
+                          run against real data but will double up if run
+                          twice. Sequential `await addTransaction(...)` per
+                          generated row (same read-modify-write-per-call
+                          shape as generateDueTransactions above), not batched
+                          — fine at this data volume (~100-150 rows for a
+                          partial year), would need revisiting if the range or
+                          per-month density grew much larger.
 
   components/
+    category-ring-chart.tsx  Donut/ring chart (added 2026-08-26) for Home's dashboard card — stacked
+                          react-native-svg `Circle`s, one per segment, each showing only its own
+                          slice via strokeDasharray/strokeDashoffset. Each segment is drawn with
+                          `strokeLinecap="round"` and shortened by a small gap (scaled by strokeWidth
+                          and segment count, capped so it doesn't eat too much of the ring) so
+                          segments read as separate rounded pills rather than one connected loop —
+                          even a single 100%-share segment still gets a gap, so it never closes into
+                          a full circle. Each segment is also outlined by a second, wider Circle
+                          drawn behind it in the same color as the card (`outlineColor` prop, not a
+                          literal white — the caller passes `theme.card` so it still looks right in
+                          dark mode) — reads as a white border in light mode, a "cut out of the
+                          surface" border in dark mode either way. Rotated -90deg (12 o'clock start)
+                          via the wrapping View's
+                          `transform` style rather than each Circle's `rotation`/`origin` props — the
+                          latter renders as an invalid `transform-origin` DOM attribute on web.
+                          Center content is a plain absolutely-positioned View (children prop), not
+                          SVG text, so callers reuse ThemedText/CategoryBadge there like anywhere
+                          else in the app.
     category-badge.tsx      Colored circle + MaterialIcons glyph for a Category.
+                          Tints from the category's own custom color by
+                          default; an optional `color` prop overrides it
+                          (transaction-row.tsx's only use, so a transaction's
+                          icon reads as its type, not its category), and an
+                          optional `type: CategoryType` draws a small red/
+                          green corner dot instead, without overriding the
+                          tint (used where the category color should survive
+                          but the type should still be visible at a glance —
+                          budgets.tsx, add-transaction.tsx, budget-editor.tsx).
+                          `type` is ignored if `color` is also set. See the
+                          "Category icon colors" convention bullet below for
+                          the full back-and-forth on this.
+    screen-header.tsx        ScreenHeader({title, right?}) — the 28/700
+                          per-tab title, one per (tabs) screen (added
+                          2026-08-26; `right` slot added same day for
+                          SettingsButton below). Extracted as a real shared
+                          component rather than redefined per file, unlike
+                          this file's other small helpers — Home,
+                          Transactions, and Budgets all needed the identical
+                          treatment at once, crossing the no-premature-
+                          abstraction rule's own 3-occurrence threshold.
+    settings-button.tsx      SettingsButton (added 2026-08-26) — 34px
+                          soft-accent circle + gear glyph, `router.push
+                          ('/settings')`. Same size/shape/placement as
+                          HabitTracker's own ProfileButton (top-right of every
+                          tab's header row via ScreenHeader's `right` slot),
+                          but a settings gear instead of a profile avatar —
+                          this app has no accounts to show a profile for.
     progress-bar.tsx         Track + fill; takes a `type: 'expense' | 'income'`
                           prop (default 'expense') that decides the over-100%
                           fill color — destructive red for expense (over
@@ -210,7 +265,9 @@ src/
                           (the caller looks it up via lib/categories.ts'
                           getCategory) rather than looking it up itself, since
                           categories are no longer a synchronously-importable
-                          constant.
+                          constant. Redesigned 2026-08-26 — see the
+                          "Transaction rows redesigned" convention bullet
+                          below.
     themed-text.tsx, themed-view.tsx, ...   From the Expo default template.
 
   constants/theme.ts      Colors.light / Colors.dark. Extends the template's
@@ -273,17 +330,76 @@ src/
   destructive/success) off the same `category.type` check. There's no separate "goal" data shape —
   an income budget is a `Budget` like any other, just interpreted differently at render/progress
   time because its category happens to be type `'income'`.
-- **Bills (added 2026-08-25)** closes the gap TODO.md used to flag ("no screen listing active
-  recurring items or letting you edit/cancel one"): a new tab lists every `RecurringTransaction`
-  sorted by `nextDueDate()`, `bill-editor.tsx` adds/edits/cancels them directly, and
-  `lib/recurring.ts` gained `updateRecurring`/`nextDueDate` to support it. The "Repeat monthly"
-  checkbox in add-transaction.tsx is unchanged and still the other way to create one — both paths
-  write the same `RecurringTransaction` shape, so either screen can manage what the other created.
+- **A standalone Bills tab (added 2026-08-25) was removed again 2026-08-26** — it listed every
+  `RecurringTransaction` with add/edit/cancel, but got pulled to make room for a dashboard-style
+  redesign instead (see TODO.md). The "Repeat monthly" checkbox in add-transaction.tsx is
+  unaffected and remains the only way to create a `RecurringTransaction`; `lib/recurring.ts`'s core
+  CRUD + `generateDueTransactions()` is untouched, only the Bills-only exports were removed.
+- **Category icon colors: custom per-category, except in transaction rows (settled 2026-08-26 after
+  two reversals)** — `6da13da` forced every `CategoryBadge` to destructive-red/success-green via a
+  `color` override; that was undone the same day (`type: CategoryType` prop instead, drawing a small
+  red/green corner dot without overriding the icon tint) per feedback that custom colors should
+  survive; then *that* was partially undone again after further feedback specifically about
+  transaction rows. Landing point: `CategoryBadge` takes both `color` (hard override) and `type`
+  (dot only, ignored if `color` is set) — **`transaction-row.tsx`** passes `color={typeColor}` so a
+  transaction's own icon is always red/green (a transaction has one unambiguous type, and that's
+  what the row redesign below leans on), while **`budgets.tsx`** (×2), **`add-transaction.tsx`**'s
+  category grid, and **`budget-editor.tsx`** all pass `type={...}` and keep each category's own
+  custom color with just the corner dot. Home's dashboard ring badge passes neither (always an
+  expense category, unambiguous either way).
+- **Transaction rows redesigned (2026-08-26)** — `transaction-row.tsx` (Home's recent list,
+  Transactions' List and Calendar-day-detail lists) dropped the old 4px left accent bar and the
+  small arrow-up/down glyph next to the amount, per feedback that the old look was dated. Now: a
+  bigger 42px icon badge (up from 36), a bold color-coded amount carrying the expense/income cue on
+  its own, and a trailing `chevron-right` (matching Budgets' rows) to reinforce tappability. The
+  `group` list containers on Home (recent transactions) and Transactions (both List's date groups
+  and Calendar's day-detail list) picked up `CardShadow` for a subtle elevated-card look, which
+  required dropping their `overflow: 'hidden'` (shadows get clipped by it) — the only cost is a
+  square instead of rounded corner on the first/last row's press-highlight, not worth the
+  wrapper-View complexity to avoid.
+- **Settings + demo data (added 2026-08-26)** — `app/settings.tsx`, reached via `SettingsButton` on
+  every tab. First (only, so far) feature is "Generate year-to-date data"
+  (`lib/demo-data.ts#generateYearToDateDemoData`), a two-tap-confirmed button that backfills random
+  transactions + a handful of category budgets from Jan 1 of the current year through today — for
+  demoing/testing without hand-entering months of data. Purely additive (never clears/dedupes), so
+  repeated taps pile up rather than reset; there's no companion "clear demo data" yet, see TODO.md.
 - **Mutations to `transactions.ts`/`budgets.ts`/`recurring.ts` all go through the same
   promise-chain write-queue pattern** (`let writeQueue = Promise.resolve(); enqueue(fn)`) — copied
   across all three files rather than shared, per the no-premature-abstraction rule above, but keep
   it in sync if the pattern itself needs to change (e.g. if AsyncStorage read-modify-write races
   turn out to need a smarter merge than "last write wins").
+- **Home's dashboard card (added 2026-08-26)** replaced the old plain income/expenses/net summary
+  card. It uses the *navigated* month (`monthStr`, from Home's own month-nav state), not necessarily
+  the real current month — consistent with the rest of Home, which has always read off `monthStr`
+  rather than `toMonthStr(new Date())`. The ring's center falls back to a "No expenses yet" empty
+  state when `expenseBreakdown` is empty. A legend sits between the ring and the income/expense/net
+  row — a two-column wrap of up to 6 categories (color dot, name, % share of `totals.expense`), with
+  a "+N more" line if there are more than that; defined inline in `index.tsx`, not a shared
+  component. The mini trend chart (`MiniTrendChart` in `index.tsx`) was
+  originally a smaller redraw of the old Stats tab's own `TrendChart` — Stats was removed
+  2026-08-26 (its bar-chart-plus-breakdown content is now covered by Home's dashboard card and
+  Transactions' Calendar view), so `MiniTrendChart` is the only survivor of that bar-chart shape.
+- **Transactions List/Calendar (added 2026-08-26)** — the two are pages of one horizontal
+  `pagingEnabled` ScrollView (`transactions.tsx`), both reading the same shared `month` state so the
+  month/year nav above them always applies to whichever page is active. The segmented toggle calls
+  `pagerRef.current.scrollTo({x, animated: false})` — `animated: true` silently no-ops on
+  react-native-web here (a scroll-snap-type/smooth-scroll interaction, still fine on native), so the
+  toggle jumps instantly rather than animating; swiping directly is unaffected either way. Calendar's
+  per-day total is expense-only ("spending by day," not net) via a `Map<dateStr, number>` built from
+  that month's expense transactions; tapping a day expands its transactions in a list below the grid
+  (`TransactionRow`, same as the List page), and the selection resets whenever the month changes.
+  The month nav itself (added 2026-08-26, replacing an earlier fast-rewind/fast-forward pair)
+  matches HabitTracker's own month-nav shape: chevrons plus a tap-to-open `MonthYearPickerModal`
+  (year pager + 12-month grid). The chevrons stay `theme.text`/black (plain navigation); only the
+  month label is `theme.accent`/blue, signaling *it's* the pressable one that opens the picker —
+  HabitTracker's own arrows are accent-colored while its label is plain text, so this is a
+  deliberate inversion (per an explicit ask), not a literal copy of which piece is blue. The modal
+  uses `animationType="none"`, not `"fade"` — RNW's fade relies on a CSS `animationend` event to
+  actually unmount, which doesn't reliably fire in every browser context and left the modal visually
+  stuck open after `visible` went false; `"none"` sidesteps that class of bug entirely.
+  `MonthYearPickerModal` is defined locally in both `transactions.tsx` and `index.tsx` (Home's month
+  nav got the identical treatment 2026-08-26 too — "same date-area treatment everywhere" was an
+  explicit ask) rather than shared, per the no-premature-abstraction rule — 2 occurrences, not yet 3.
 - **`react-native-draggable-flatlist`/reanimated-heavy list interactions have not been needed
   yet** — there's no drag-and-drop anywhere in this app. If one gets added, read HabitTracker's
   `CLAUDE.md` "Home habit reordering" bullet first; it documents a real, hard-won lesson about

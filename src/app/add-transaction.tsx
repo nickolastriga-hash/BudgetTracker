@@ -232,7 +232,7 @@ export default function AddTransactionScreen() {
                     { borderColor: isSelected ? typeColor : theme.border },
                     isSelected && { backgroundColor: typeColor + '1A' },
                   ]}>
-                  <CategoryBadge category={category} size={26} color={typeColor} />
+                  <CategoryBadge category={category} size={26} type={type} />
                   <ThemedText type="small">{category.name}</ThemedText>
                 </Pressable>
               );

@@ -25,16 +25,6 @@ export default function TabLayout() {
         <Icon sf="chart.pie.fill" androidSrc={<VectorIcon family={MaterialIcons} name="pie-chart" />} />
         <Label>Budgets</Label>
       </NativeTabs.Trigger>
-
-      <NativeTabs.Trigger name="bills">
-        <Icon sf="repeat.circle.fill" androidSrc={<VectorIcon family={MaterialIcons} name="event-repeat" />} />
-        <Label>Bills</Label>
-      </NativeTabs.Trigger>
-
-      <NativeTabs.Trigger name="stats">
-        <Icon sf="chart.bar.fill" androidSrc={<VectorIcon family={MaterialIcons} name="bar-chart" />} />
-        <Label>Stats</Label>
-      </NativeTabs.Trigger>
     </NativeTabs>
   );
 }

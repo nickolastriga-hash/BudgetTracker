@@ -17,9 +17,31 @@ transactions, all local-only. Deliberately deferred:
 - **Light/Dark/Auto override** — currently always follows the OS color scheme
   (`react-native`'s `useColorScheme`), no in-app theme preference like HabitTracker has.
 - **Export / CSV** — no data export yet.
-- ~~**Editing a recurring series**~~ — done (2026-08-25): the new Bills tab lists every
-  `RecurringTransaction` and `bill-editor.tsx` edits/cancels one. See CLAUDE.md's "Bills" bullet.
-- **Bills paid/unpaid tracking** — Bills only manages the recurring *schedule*; it doesn't track
-  whether a given month's occurrence has actually been paid yet (transactions still post
-  automatically on launch, same as before). A "mark as paid" per-month status would need a new
-  field and would change generation from automatic to gated on that status.
+- **Editing a recurring series** — `RecurringTransaction`s can only be created (via the "Repeat
+  monthly" checkbox when adding a transaction) or implicitly stopped (`lib/recurring.ts#deleteRecurring`,
+  not wired to any UI). A standalone Bills tab briefly existed (2026-08-25 – 2026-08-26, listing every
+  recurring item with add/edit/cancel) but was removed to make room for a dashboard-style redesign
+  instead — revisit recurring-series management as part of that, rather than as its own tab. See
+  CLAUDE.md's `lib/recurring.ts` bullet.
+- ~~**Dashboard**~~ — done (2026-08-26): Home's old plain summary card was replaced with a donut-ring
+  category breakdown + compact income/expense/net row + 6-month trend mini chart. See CLAUDE.md's
+  "Home's dashboard card" bullet.
+- ~~**Stats tab**~~ — removed (2026-08-26): its 6-month trend chart and category breakdown are now
+  covered by Home's dashboard card and Transactions' Calendar view, so the standalone tab was
+  dropped rather than kept as a third place showing similar numbers.
+- ~~**Calendar view for Transactions**~~ — done (2026-08-26): a List/Calendar segmented toggle,
+  swipeable (horizontal `pagingEnabled` ScrollView) or tappable, with a day-of-month grid showing
+  that day's spend and a shared month/year nav (chevrons + a tap-to-open month/year picker modal,
+  matching HabitTracker's shape — see CLAUDE.md's "Transactions List/Calendar" convention).
+- **Calendar view is expense-only ("spending by day")** — a day cell shows only that day's expense
+  total, not income or net. If income-by-day ever matters, `spendByDay` in `transactions.tsx` would
+  need a second map (or a type toggle) rather than assuming expense.
+- ~~**Category icon colors forced to red/green**~~ — reverted 2026-08-26: `CategoryBadge` uses the
+  category's own color again, with a small red/green corner dot as the type cue. See CLAUDE.md's
+  "Category icon colors are custom again" convention.
+- ~~**Settings screen / demo data**~~ — done (2026-08-26): `app/settings.tsx`, reached via a
+  `SettingsButton` on every tab, with a "Generate year-to-date data" feature. See CLAUDE.md's
+  "Settings + demo data" convention.
+- **No "clear demo data" companion** — `generateYearToDateDemoData()` is purely additive; there's no
+  button to remove what it added, or to wipe all transactions/budgets generally. Running it more
+  than once just piles up more data rather than replacing the previous batch.

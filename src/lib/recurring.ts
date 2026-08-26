@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { addTransaction, getTransactions, type TransactionType } from '@/lib/transactions';
+import { addTransaction, type TransactionType } from '@/lib/transactions';
 
 // v1 only supports monthly recurrence (the common bill/subscription case) —
 // weekly can be added later without changing this shape (frequency: 'monthly'
@@ -44,19 +44,6 @@ export function addRecurring(data: Omit<RecurringTransaction, 'id' | 'lastGenera
   });
 }
 
-// Edits only affect future generations — `lastGeneratedMonth` is left alone,
-// same "changes apply going forward" convention as a budget's scheduledChange.
-export function updateRecurring(
-  id: string,
-  data: Partial<Omit<RecurringTransaction, 'id' | 'lastGeneratedMonth'>>
-): Promise<void> {
-  return enqueue(async () => {
-    const items = await getRecurring();
-    const next = items.map((r) => (r.id === id ? { ...r, ...data } : r));
-    await saveRecurring(next);
-  });
-}
-
 export function deleteRecurring(id: string): Promise<void> {
   return enqueue(async () => {
     const items = await getRecurring();
@@ -64,30 +51,17 @@ export function deleteRecurring(id: string): Promise<void> {
   });
 }
 
-export function addMonths(monthStr: string, count: number): string {
+function addMonths(monthStr: string, count: number): string {
   const [year, month] = monthStr.split('-').map(Number);
   const date = new Date(year, month - 1 + count, 1);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
-export function dateInMonth(monthStr: string, dayOfMonth: number): string {
+function dateInMonth(monthStr: string, dayOfMonth: number): string {
   const [year, month] = monthStr.split('-').map(Number);
   const lastDayOfMonth = new Date(year, month, 0).getDate();
   const day = Math.min(dayOfMonth, lastDayOfMonth);
   return `${monthStr}-${String(day).padStart(2, '0')}`;
-}
-
-// The next date this item will post a transaction for, assuming
-// generateDueTransactions has already run for the current session (it runs
-// once at launch, and bills.tsx/bill-editor.tsx also call it after an add/
-// edit so this is never stale within a session).
-export function nextDueDate(item: RecurringTransaction, today: Date = new Date()): string {
-  const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
-  const targetMonth =
-    item.lastGeneratedMonth && item.lastGeneratedMonth >= currentMonth
-      ? addMonths(item.lastGeneratedMonth, 1)
-      : currentMonth;
-  return dateInMonth(targetMonth, item.dayOfMonth);
 }
 
 // Materializes any recurring items' occurrences from their start month up to
@@ -131,7 +105,3 @@ export async function generateDueTransactions(today: Date = new Date()): Promise
   }
 }
 
-export async function transactionCountForRecurring(id: string): Promise<number> {
-  const transactions = await getTransactions();
-  return transactions.filter((t) => t.recurringId === id).length;
-}

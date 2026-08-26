@@ -6,6 +6,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CategoryBadge } from '@/components/category-badge';
 import { ProgressBar } from '@/components/progress-bar';
+import { ScreenHeader } from '@/components/screen-header';
+import { SettingsButton } from '@/components/settings-button';
 import { ThemedText } from '@/components/themed-text';
 import { BottomTabInset, CardRadius, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -62,15 +64,11 @@ export default function BudgetsScreen() {
           { paddingTop: insets.top + Spacing.three, paddingBottom: insets.bottom + BottomTabInset + Spacing.six },
         ]}>
         <View style={styles.titleRow}>
-          <View style={styles.titleTextGroup}>
-            <ThemedText type="subtitle" style={styles.title}>
-              Budgets
-            </ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">
-              Tracked against {monthLabel(thisMonth)}. Tap a category to set its limit or goal,
-              hold to edit its icon.
-            </ThemedText>
-          </View>
+          <ScreenHeader title="Budgets" right={<SettingsButton />} />
+          <ThemedText type="small" themeColor="textSecondary">
+            Tracked against {monthLabel(thisMonth)}. Tap a category to set its limit or goal, hold
+            to edit its icon.
+          </ThemedText>
         </View>
 
         <View style={styles.section}>
@@ -101,7 +99,7 @@ export default function BudgetsScreen() {
                     onPress={() => router.push(`/budget-editor?id=${category.id}`)}
                     onLongPress={() => router.push(`/category-editor?id=${category.id}`)}>
                     <View style={styles.rowHeader}>
-                      <CategoryBadge category={category} size={32} color={theme.destructive} />
+                      <CategoryBadge category={category} size={32} type="expense" />
                       <View style={styles.rowTextGroup}>
                         <ThemedText type="small">{category.name}</ThemedText>
                         {progress ? (
@@ -165,7 +163,7 @@ export default function BudgetsScreen() {
                     onPress={() => router.push(`/budget-editor?id=${category.id}`)}
                     onLongPress={() => router.push(`/category-editor?id=${category.id}`)}>
                     <View style={styles.rowHeader}>
-                      <CategoryBadge category={category} size={32} color={theme.success} />
+                      <CategoryBadge category={category} size={32} type="income" />
                       <View style={styles.rowTextGroup}>
                         <ThemedText type="small">{category.name}</ThemedText>
                         {progress ? (
@@ -214,12 +212,6 @@ const styles = StyleSheet.create({
     maxWidth: MaxContentWidth,
   },
   titleRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: Spacing.three,
-  },
-  titleTextGroup: {
-    flex: 1,
     gap: 2,
   },
   section: {
@@ -235,9 +227,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.6,
     fontSize: 12,
-  },
-  title: {
-    marginBottom: -Spacing.one,
   },
   addButton: {
     width: 36,

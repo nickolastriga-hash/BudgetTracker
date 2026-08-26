@@ -107,7 +107,7 @@ export default function BudgetEditorScreen() {
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       <View style={[styles.header, { paddingTop: insets.top + Spacing.two, borderBottomColor: theme.border }]}>
         <View style={styles.headerTitleGroup}>
-          <CategoryBadge category={category} size={30} color={isIncome ? theme.success : theme.destructive} />
+          <CategoryBadge category={category} size={30} type={isIncome ? 'income' : 'expense'} />
           <ThemedText type="default" style={styles.headerTitle}>
             {category.name}
           </ThemedText>
