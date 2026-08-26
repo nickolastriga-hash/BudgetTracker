@@ -36,6 +36,7 @@ export default function RootLayout() {
           options={{ headerShown: true, presentation: 'modal', title: 'New Category' }}
         />
         <Stack.Screen name="budget-editor" options={{ headerShown: false, presentation: 'modal' }} />
+        <Stack.Screen name="bill-editor" options={{ headerShown: false, presentation: 'modal' }} />
       </Stack>
     </ThemeProvider>
   );

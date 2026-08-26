@@ -17,7 +17,9 @@ transactions, all local-only. Deliberately deferred:
 - **Light/Dark/Auto override** — currently always follows the OS color scheme
   (`react-native`'s `useColorScheme`), no in-app theme preference like HabitTracker has.
 - **Export / CSV** — no data export yet.
-- **Editing a recurring series** — `RecurringTransaction`s can only be created (via the "Repeat
-  monthly" checkbox when adding a transaction) or implicitly stopped (delete via
-  `lib/recurring.ts#deleteRecurring`, not yet wired to any UI). There's no screen listing active
-  recurring items or letting you edit/cancel one.
+- ~~**Editing a recurring series**~~ — done (2026-08-25): the new Bills tab lists every
+  `RecurringTransaction` and `bill-editor.tsx` edits/cancels one. See CLAUDE.md's "Bills" bullet.
+- **Bills paid/unpaid tracking** — Bills only manages the recurring *schedule*; it doesn't track
+  whether a given month's occurrence has actually been paid yet (transactions still post
+  automatically on launch, same as before). A "mark as paid" per-month status would need a new
+  field and would change generation from automatic to gated on that status.

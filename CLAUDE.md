@@ -7,15 +7,21 @@
 A single-user, offline-first budget tracking app built with Expo Router. Users log expense/income
 transactions against a fixed set of categories, set optional monthly spending limits per category,
 and can mark a transaction as recurring monthly (e.g. rent, subscriptions) so it's regenerated
-automatically each month. Four tabs:
+automatically each month. Five tabs:
 
 - **Home** — month nav, an income/expenses/net summary card, a preview of up to 3 budget
   categories' progress, and the month's most recent transactions. FAB opens the add-transaction modal.
 - **Transactions** — month nav, all of that month's transactions grouped by date. Tapping a row
   opens the same modal in edit mode.
-- **Budgets** — every expense category with an optional monthly limit; tap a row to set/edit/clear
-  its limit inline. Progress is always against the *current* calendar month (no month nav here —
-  a budget is a flat per-category limit, not a per-month record).
+- **Budgets** — two sections: expense categories with an optional monthly spending limit, and
+  income categories with an optional monthly income goal (added 2026-08-25). Tap a row to
+  set/edit/clear its limit/goal inline; progress bars flip semantics by section — an expense bar
+  turns destructive red past 100% (over budget, bad), an income bar turns success green at/past
+  100% (goal reached, good). Progress is always against the *current* calendar month (no month nav
+  here — a budget is a flat per-category limit/goal, not a per-month record).
+- **Bills** (added 2026-08-25) — the management screen `RecurringTransaction`s never had: every
+  recurring bill/income, sorted by next-due date, with a `+` to add one directly and a tap to
+  edit/cancel it. See `lib/recurring.ts` and `app/bill-editor.tsx` below.
 - **Stats** — a 6-month income-vs-expense bar chart (react-native-svg) and a current-month
   spending-by-category breakdown with progress bars.
 
@@ -89,6 +95,12 @@ src/
       index.tsx           Home
       transactions.tsx    Transactions
       budgets.tsx         Budgets
+      bills.tsx           Bills — flat list of RecurringTransactions sorted by
+                          lib/recurring.ts's nextDueDate(), a `+` to
+                          bill-editor (new) and tap-a-row to bill-editor?id=...
+                          (edit). Calls generateDueTransactions() on focus too
+                          (idempotent, safe alongside the root layout's launch
+                          call) so due dates shown are never stale mid-session.
       stats.tsx           Stats
     add-transaction.tsx   Add/edit modal — type toggle, amount, category grid,
                           a self-contained calendar-panel date picker (capped at
@@ -97,15 +109,18 @@ src/
                           RecurringTransaction. Edit mode adds a Delete button
                           that requires two taps (no Alert.alert dependency —
                           it doesn't behave consistently across web/native).
-    category-editor.tsx   Add/edit-category modal, reached from Budgets (`+`
-                          button to add, long-press a row to edit that
-                          category's name/icon/color) — same AI-suggested-icon
-                          + manual-grid-picker pattern as HabitTracker's
+    category-editor.tsx   Add/edit-category modal, reached from Budgets (a `+`
+                          button in each of the two section headers to add,
+                          long-press a row to edit that category's
+                          name/icon/color) — same AI-suggested-icon +
+                          manual-grid-picker pattern as HabitTracker's
                           add-habit screen (see lib/category-icons.ts).
-                          `type` is fixed per screen, not user-editable: adding
-                          always creates an expense category (Budgets is
-                          expense-only), editing keeps the category's existing
-                          type. No delete yet, see TODO.md.
+                          `type` is fixed per screen, not user-editable: the
+                          add flow reads a `?type=expense|income` query param
+                          (defaulting to expense) set by whichever Budgets
+                          section's `+` button was tapped, so there's still no
+                          in-form type toggle; editing keeps the category's
+                          existing type. No delete yet, see TODO.md.
     budget-editor.tsx     Per-category budget modal, reached by tapping a row on
                           Budgets (`headerShown: false` in _layout.tsx — builds
                           its own header: category name left, a circular "X"
@@ -116,13 +131,36 @@ src/
                           12-month calendar grid (tap a square to set the
                           "starting on" month for the buttons below — see the
                           `applyLimit` convention bullet), and Reset-to-default.
+    bill-editor.tsx        Add/edit a RecurringTransaction directly (reached
+                          from Bills, not from add-transaction's checkbox).
+                          Same header-with-close-button shell as
+                          budget-editor.tsx. Fields: expense/income toggle,
+                          amount, category grid, a 1-31 day-of-month grid
+                          (recurrence is a day-of-month, not a specific date —
+                          no month/year context needed), optional note. New
+                          bills default `startDate` to today, so if the chosen
+                          day already passed this month the very first
+                          occurrence is generated immediately (same
+                          already-past-this-month behavior as add-transaction's
+                          "Repeat monthly" checkbox). Both add and edit call
+                          `generateDueTransactions()` before navigating back so
+                          a just-added bill materializes without waiting for
+                          next launch. Edit mode's Delete ("Cancel this bill")
+                          is the same two-tap pattern as add-transaction, and
+                          only stops future generation — `deleteRecurring`
+                          never touches transactions already posted.
 
   lib/
     transactions.ts       Transaction CRUD (AsyncStorage), month/category totals.
                           Writes go through a private promise-chain queue so two
                           rapid saves can't race on read-modify-write.
     budgets.ts             Budget (categoryId -> monthlyLimit) CRUD + progress calc.
-                          Same write-queue pattern as transactions.ts.
+                          Same write-queue pattern as transactions.ts. A Budget
+                          record doesn't carry its own type — getBudgetProgress
+                          takes the loaded Category[] and resolves each budget's
+                          type from its category to decide whether "spent"
+                          means expense-spent or income-earned (see the
+                          "Income budgets" convention bullet below).
     categories.ts           AsyncStorage-backed category CRUD (seeded from 19
                           built-in defaults — 14 expense + 5 income — on first
                           read; the seeded rows are ordinary editable data
@@ -146,16 +184,26 @@ src/
                           "AI" in the picker UI means this offline heuristic,
                           not a live model.
     recurring.ts            RecurringTransaction CRUD + generateDueTransactions(),
-                          called once from the root layout. Monthly-only in v1
-                          (dayOfMonth, clamped to each month's real length).
-                          Materializes any owed months' transactions lazily on
-                          launch rather than being scheduled ahead of time —
-                          there's no OS-level scheduler involved.
+                          called once from the root layout (and again from
+                          Bills on focus — see (tabs)/bills.tsx above).
+                          Monthly-only in v1 (dayOfMonth, clamped to each
+                          month's real length). Materializes any owed months'
+                          transactions lazily on launch rather than being
+                          scheduled ahead of time — there's no OS-level
+                          scheduler involved. `updateRecurring` edits apply
+                          going forward only (like a budget's scheduledChange —
+                          `lastGeneratedMonth` is left alone). `nextDueDate(item,
+                          today)` derives the next date a transaction will post
+                          for the Bills list, assuming generateDueTransactions
+                          already ran this session.
 
   components/
     category-badge.tsx      Colored circle + MaterialIcons glyph for a Category.
-    progress-bar.tsx         Track + fill; fill color switches to destructive red
-                          past 100%.
+    progress-bar.tsx         Track + fill; takes a `type: 'expense' | 'income'`
+                          prop (default 'expense') that decides the over-100%
+                          fill color — destructive red for expense (over
+                          budget, bad), success green for income (goal
+                          reached, good).
     transaction-row.tsx      One transaction list row (icon, category, note,
                           signed amount) — shared by Home's recent list and the
                           Transactions tab. Takes a resolved `category` prop
@@ -212,6 +260,25 @@ src/
   default) and is the only place that should read a budget's limit — `getBudgetProgress` already
   calls it. `resetToDefault(categoryId, monthStr)` clears whichever of the two is currently
   governing that month.
+- **Income budgets (added 2026-08-25)**: `Budget`/`applyLimit`/`effectiveLimit` are generic and were
+  never expense-specific — the only thing that was expense-only was `getBudgetProgress` always
+  reading `byCategoryTotals(transactions, monthStr, 'expense')` and the Budgets screen only ever
+  listing expense categories. Fixed by having `getBudgetProgress` take the loaded `Category[]` and
+  resolve each budget's `type` from `getCategory(categories, categoryId)?.type` (defaulting to
+  `'expense'` if the category was deleted/missing), picking expense- or income-side
+  `byCategoryTotals` accordingly. The Budgets screen now renders two sections — "Expense Budgets"
+  and "Income Goals" — each with its own `+` (see `category-editor.tsx` above) and its own
+  `ProgressBar type=` so the over-100% color means the right thing per section. `budget-editor.tsx`
+  swaps its wording (placeholder "Monthly limit"/"Monthly goal", "spent"/"earned", badge tint
+  destructive/success) off the same `category.type` check. There's no separate "goal" data shape —
+  an income budget is a `Budget` like any other, just interpreted differently at render/progress
+  time because its category happens to be type `'income'`.
+- **Bills (added 2026-08-25)** closes the gap TODO.md used to flag ("no screen listing active
+  recurring items or letting you edit/cancel one"): a new tab lists every `RecurringTransaction`
+  sorted by `nextDueDate()`, `bill-editor.tsx` adds/edits/cancels them directly, and
+  `lib/recurring.ts` gained `updateRecurring`/`nextDueDate` to support it. The "Repeat monthly"
+  checkbox in add-transaction.tsx is unchanged and still the other way to create one — both paths
+  write the same `RecurringTransaction` shape, so either screen can manage what the other created.
 - **Mutations to `transactions.ts`/`budgets.ts`/`recurring.ts` all go through the same
   promise-chain write-queue pattern** (`let writeQueue = Promise.resolve(); enqueue(fn)`) — copied
   across all three files rather than shared, per the no-premature-abstraction rule above, but keep

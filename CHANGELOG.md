@@ -2,6 +2,35 @@
 
 Newest first.
 
+## 2026-08-25 — Bills tab
+
+- New "Bills" tab (5th, after Budgets): lists every `RecurringTransaction` sorted by next-due date,
+  with a `+` to add one and a tap to edit/cancel — the management screen recurring transactions
+  never had (previously creatable only via add-transaction's "Repeat monthly" checkbox, with no way
+  to view, edit, or cancel one afterward; see TODO.md's now-resolved "Editing a recurring series").
+- New `app/bill-editor.tsx`: expense/income toggle, amount, category grid, a 1-31 day-of-month grid
+  (recurrence is a day, not a specific date), optional note, two-tap "Cancel this bill" delete.
+  Saving (add or edit) calls `generateDueTransactions()` immediately so a newly due bill posts its
+  transaction without waiting for the next app launch.
+- `lib/recurring.ts` gained `updateRecurring` (edits apply going forward only, `lastGeneratedMonth`
+  untouched — same convention as a budget's `scheduledChange`) and `nextDueDate(item, today)`.
+  `addMonths`/`dateInMonth` are now exported instead of file-private.
+- Deleting a bill only stops future generation; transactions it already posted are left alone.
+
+## 2026-08-25 — Income budgets/goals
+
+- Budgets now has two sections: "Expense Budgets" (unchanged) and a new "Income Goals" section for
+  income categories, each with its own `+` to add a category of that type
+  (`category-editor.tsx?type=expense|income`).
+- `lib/budgets.ts`'s `getBudgetProgress` now takes the loaded `Category[]` and resolves each
+  budget's type from its category instead of always reading expense totals — an income budget's
+  "spent" figure is that category's total *earned* this month instead.
+- `ProgressBar` takes a new `type` prop: an expense bar still turns destructive red past 100% (over
+  budget), an income bar turns success green at/past 100% instead (goal reached).
+- `budget-editor.tsx` and the Budgets row list swap wording/badge tint (limit/goal,
+  spent/earned, destructive/success) off the category's own type — no new data shape, an income
+  budget is an ordinary `Budget` record.
+
 ## 2026-08-24 — Custom categories + icon editing
 
 - Categories moved from a fixed constant to AsyncStorage-backed data (`lib/categories.ts`), seeded
