@@ -48,8 +48,11 @@ export default function BudgetsScreen() {
   );
 
   const thisMonth = toMonthStr(new Date());
-  const progressByCategory = new Map(getBudgetProgress(budgets, transactions, thisMonth).map((p) => [p.categoryId, p]));
+  const progressByCategory = new Map(
+    getBudgetProgress(budgets, transactions, thisMonth, categories).map((p) => [p.categoryId, p])
+  );
   const expenseCategories = categoriesForType(categories, 'expense');
+  const incomeCategories = categoriesForType(categories, 'income');
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.backgroundElement }}>
@@ -64,67 +67,138 @@ export default function BudgetsScreen() {
               Budgets
             </ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
-              Tracked against {monthLabel(thisMonth)}. Tap a category to set its limit, hold to
-              edit its icon.
+              Tracked against {monthLabel(thisMonth)}. Tap a category to set its limit or goal,
+              hold to edit its icon.
             </ThemedText>
           </View>
-          <Pressable
-            onPress={() => router.push('/category-editor')}
-            hitSlop={8}
-            style={[styles.addButton, { backgroundColor: theme.accent }]}>
-            <MaterialIcons name="add" size={22} color="#ffffff" />
-          </Pressable>
         </View>
 
-        <View style={[styles.group, { backgroundColor: theme.card, borderColor: theme.border }]}>
-          {expenseCategories.map((category, i) => {
-            const progress = progressByCategory.get(category.id);
-            const scheduled = budgets.find((b) => b.categoryId === category.id)?.scheduledChange;
-            const upcoming = scheduled && scheduled.startMonth > thisMonth ? scheduled : null;
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <ThemedText type="small" themeColor="textSecondary" style={styles.sectionTitle}>
+              EXPENSE BUDGETS
+            </ThemedText>
+            <Pressable
+              onPress={() => router.push('/category-editor?type=expense')}
+              hitSlop={8}
+              style={[styles.addButton, { backgroundColor: theme.accent }]}>
+              <MaterialIcons name="add" size={20} color="#ffffff" />
+            </Pressable>
+          </View>
+          <View style={[styles.group, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            {expenseCategories.map((category, i) => {
+              const progress = progressByCategory.get(category.id);
+              const scheduled = budgets.find((b) => b.categoryId === category.id)?.scheduledChange;
+              const upcoming = scheduled && scheduled.startMonth > thisMonth ? scheduled : null;
 
-            return (
-              <View key={category.id}>
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.row,
-                    { backgroundColor: pressed ? theme.backgroundElement : 'transparent' },
-                  ]}
-                  onPress={() => router.push(`/budget-editor?id=${category.id}`)}
-                  onLongPress={() => router.push(`/category-editor?id=${category.id}`)}>
-                  <View style={styles.rowHeader}>
-                    <CategoryBadge category={category} size={32} color={theme.destructive} />
-                    <View style={styles.rowTextGroup}>
-                      <ThemedText type="small">{category.name}</ThemedText>
-                      {progress ? (
-                        <ThemedText type="small" themeColor="textSecondary">
-                          ${formatAmount(progress.spent)} / ${formatAmount(progress.limit)}
-                        </ThemedText>
-                      ) : (
-                        <ThemedText type="small" themeColor="accent">
-                          Set budget
-                        </ThemedText>
-                      )}
-                      {upcoming && (
-                        <ThemedText type="small" themeColor="accent">
-                          Changing to ${formatAmount(upcoming.limit)} in {monthLabel(upcoming.startMonth)}
-                        </ThemedText>
-                      )}
+              return (
+                <View key={category.id}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.row,
+                      { backgroundColor: pressed ? theme.backgroundElement : 'transparent' },
+                    ]}
+                    onPress={() => router.push(`/budget-editor?id=${category.id}`)}
+                    onLongPress={() => router.push(`/category-editor?id=${category.id}`)}>
+                    <View style={styles.rowHeader}>
+                      <CategoryBadge category={category} size={32} color={theme.destructive} />
+                      <View style={styles.rowTextGroup}>
+                        <ThemedText type="small">{category.name}</ThemedText>
+                        {progress ? (
+                          <ThemedText type="small" themeColor="textSecondary">
+                            ${formatAmount(progress.spent)} / ${formatAmount(progress.limit)}
+                          </ThemedText>
+                        ) : (
+                          <ThemedText type="small" themeColor="accent">
+                            Set budget
+                          </ThemedText>
+                        )}
+                        {upcoming && (
+                          <ThemedText type="small" themeColor="accent">
+                            Changing to ${formatAmount(upcoming.limit)} in {monthLabel(upcoming.startMonth)}
+                          </ThemedText>
+                        )}
+                      </View>
+                      <MaterialIcons name="chevron-right" size={22} color={theme.textTertiary} />
                     </View>
-                    <MaterialIcons name="chevron-right" size={22} color={theme.textTertiary} />
-                  </View>
 
-                  {progress && (
-                    <View style={styles.progressWrap}>
-                      <ProgressBar percent={progress.percent} color={category.color} />
-                    </View>
+                    {progress && (
+                      <View style={styles.progressWrap}>
+                        <ProgressBar percent={progress.percent} color={category.color} type="expense" />
+                      </View>
+                    )}
+                  </Pressable>
+                  {i < expenseCategories.length - 1 && (
+                    <View style={[styles.divider, { backgroundColor: theme.border }]} />
                   )}
-                </Pressable>
-                {i < expenseCategories.length - 1 && (
-                  <View style={[styles.divider, { backgroundColor: theme.border }]} />
-                )}
-              </View>
-            );
-          })}
+                </View>
+              );
+            })}
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <ThemedText type="small" themeColor="textSecondary" style={styles.sectionTitle}>
+              INCOME GOALS
+            </ThemedText>
+            <Pressable
+              onPress={() => router.push('/category-editor?type=income')}
+              hitSlop={8}
+              style={[styles.addButton, { backgroundColor: theme.accent }]}>
+              <MaterialIcons name="add" size={20} color="#ffffff" />
+            </Pressable>
+          </View>
+          <View style={[styles.group, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            {incomeCategories.map((category, i) => {
+              const progress = progressByCategory.get(category.id);
+              const scheduled = budgets.find((b) => b.categoryId === category.id)?.scheduledChange;
+              const upcoming = scheduled && scheduled.startMonth > thisMonth ? scheduled : null;
+
+              return (
+                <View key={category.id}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.row,
+                      { backgroundColor: pressed ? theme.backgroundElement : 'transparent' },
+                    ]}
+                    onPress={() => router.push(`/budget-editor?id=${category.id}`)}
+                    onLongPress={() => router.push(`/category-editor?id=${category.id}`)}>
+                    <View style={styles.rowHeader}>
+                      <CategoryBadge category={category} size={32} color={theme.success} />
+                      <View style={styles.rowTextGroup}>
+                        <ThemedText type="small">{category.name}</ThemedText>
+                        {progress ? (
+                          <ThemedText type="small" themeColor="textSecondary">
+                            ${formatAmount(progress.spent)} / ${formatAmount(progress.limit)}
+                          </ThemedText>
+                        ) : (
+                          <ThemedText type="small" themeColor="accent">
+                            Set goal
+                          </ThemedText>
+                        )}
+                        {upcoming && (
+                          <ThemedText type="small" themeColor="accent">
+                            Changing to ${formatAmount(upcoming.limit)} in {monthLabel(upcoming.startMonth)}
+                          </ThemedText>
+                        )}
+                      </View>
+                      <MaterialIcons name="chevron-right" size={22} color={theme.textTertiary} />
+                    </View>
+
+                    {progress && (
+                      <View style={styles.progressWrap}>
+                        <ProgressBar percent={progress.percent} color={category.color} type="income" />
+                      </View>
+                    )}
+                  </Pressable>
+                  {i < incomeCategories.length - 1 && (
+                    <View style={[styles.divider, { backgroundColor: theme.border }]} />
+                  )}
+                </View>
+              );
+            })}
+          </View>
         </View>
       </ScrollView>
     </View>
@@ -147,6 +221,20 @@ const styles = StyleSheet.create({
   titleTextGroup: {
     flex: 1,
     gap: 2,
+  },
+  section: {
+    gap: Spacing.two,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.two,
+  },
+  sectionTitle: {
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    fontSize: 12,
   },
   title: {
     marginBottom: -Spacing.one,

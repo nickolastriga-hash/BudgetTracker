@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { getCategory, type Category, type CategoryType } from '@/lib/categories';
 import { byCategoryTotals, type Transaction } from '@/lib/transactions';
 
 export interface Budget {
@@ -96,22 +97,32 @@ export function effectiveLimit(budget: Budget, monthStr: string): number {
 
 export interface BudgetProgress {
   categoryId: string;
+  type: CategoryType;
   limit: number;
+  // Actual amount transacted this month against the category — spent, for an
+  // expense budget's limit; earned, for an income budget's goal.
   spent: number;
-  percent: number; // 0-1+, can exceed 1 when over budget
+  percent: number; // 0-1+, can exceed 1 when over budget/goal
 }
 
+// A budget's own type isn't tracked on the Budget record itself — it's
+// resolved from its category, so an income category's budget reads as a
+// goal (spent = earned this month) instead of a spending limit.
 export function getBudgetProgress(
   budgets: Budget[],
   transactions: Transaction[],
-  monthStr: string
+  monthStr: string,
+  categories: Category[]
 ): BudgetProgress[] {
   const spentByCategory = byCategoryTotals(transactions, monthStr, 'expense');
+  const earnedByCategory = byCategoryTotals(transactions, monthStr, 'income');
   return budgets.map((b) => {
-    const spent = spentByCategory[b.categoryId] ?? 0;
+    const type = getCategory(categories, b.categoryId)?.type ?? 'expense';
+    const spent = (type === 'income' ? earnedByCategory : spentByCategory)[b.categoryId] ?? 0;
     const limit = effectiveLimit(b, monthStr);
     return {
       categoryId: b.categoryId,
+      type,
       limit,
       spent,
       percent: limit > 0 ? spent / limit : 0,

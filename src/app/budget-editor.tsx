@@ -68,13 +68,15 @@ export default function BudgetEditorScreen() {
       const existing = budgets.find((b) => b.categoryId === id);
       setBudget(existing);
       setDraftLimit(existing ? String(effectiveLimit(existing, thisMonth)) : '');
-      const progress = getBudgetProgress(budgets, transactions, thisMonth).find((p) => p.categoryId === id);
+      const progress = getBudgetProgress(budgets, transactions, thisMonth, categories).find((p) => p.categoryId === id);
       setSpent(progress?.spent ?? 0);
       setLoaded(true);
     });
   }, [id]);
 
   if (!loaded || !category || !id) return null;
+
+  const isIncome = category.type === 'income';
 
   const hasActiveOverride =
     !!budget && (budget.overrides?.[thisMonth] != null || (!!budget.scheduledChange && budget.scheduledChange.startMonth <= thisMonth));
@@ -105,7 +107,7 @@ export default function BudgetEditorScreen() {
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       <View style={[styles.header, { paddingTop: insets.top + Spacing.two, borderBottomColor: theme.border }]}>
         <View style={styles.headerTitleGroup}>
-          <CategoryBadge category={category} size={30} color={theme.destructive} />
+          <CategoryBadge category={category} size={30} color={isIncome ? theme.success : theme.destructive} />
           <ThemedText type="default" style={styles.headerTitle}>
             {category.name}
           </ThemedText>
@@ -121,8 +123,8 @@ export default function BudgetEditorScreen() {
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + Spacing.six }]}>
         <View>
           <ThemedText type="small" themeColor="textSecondary">
-            ${formatAmount(spent)} spent of ${formatAmount(budget ? effectiveLimit(budget, thisMonth) : 0)} this
-            month
+            ${formatAmount(spent)} {isIncome ? 'earned' : 'spent'} of $
+            {formatAmount(budget ? effectiveLimit(budget, thisMonth) : 0)} {isIncome ? 'goal ' : ''}this month
           </ThemedText>
           {upcoming && (
             <ThemedText type="small" themeColor="accent">
@@ -135,7 +137,7 @@ export default function BudgetEditorScreen() {
           <TextInput
             value={draftLimit}
             onChangeText={setDraftLimit}
-            placeholder="Monthly limit"
+            placeholder={isIncome ? 'Monthly goal' : 'Monthly limit'}
             placeholderTextColor={theme.textTertiary}
             keyboardType="decimal-pad"
             style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.card }]}

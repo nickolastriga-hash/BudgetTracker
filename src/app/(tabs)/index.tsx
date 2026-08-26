@@ -53,7 +53,7 @@ export default function HomeScreen() {
   const totals = monthTotals(transactions, monthStr);
   const monthTransactions = transactionsForMonth(transactions, monthStr).sort((a, b) => (a.date < b.date ? 1 : -1));
   const recent = monthTransactions.slice(0, 8);
-  const budgetProgress = getBudgetProgress(budgets, transactions, monthStr).slice(0, 3);
+  const budgetProgress = getBudgetProgress(budgets, transactions, monthStr, categories).slice(0, 3);
   const netPositive = totals.net >= 0;
 
   return (
@@ -131,7 +131,7 @@ export default function HomeScreen() {
                           ${formatAmount(bp.spent)} / ${formatAmount(bp.limit)}
                         </ThemedText>
                       </View>
-                      <ProgressBar percent={bp.percent} color={category.color} />
+                      <ProgressBar percent={bp.percent} color={category.color} type={bp.type} />
                     </View>
                     {i < budgetProgress.length - 1 && (
                       <View style={[styles.divider, { backgroundColor: theme.border }]} />

@@ -21,12 +21,16 @@ const ICON_ROWS: (typeof CATEGORY_ICONS)[number][][] = Array.from({ length: ICON
 export default function CategoryEditorScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  // `type` only matters when adding (`isEditing` false) — it's how the two
+  // Budgets sections' separate "+" buttons pick which kind of category gets
+  // created, since the type toggle itself still isn't user-editable (see
+  // note on updateCategory below).
+  const { id, type } = useLocalSearchParams<{ id?: string; type?: string }>();
   const isEditing = !!id;
 
   const [name, setName] = useState('');
   const [color, setColor] = useState<string>(CATEGORY_COLORS[0]);
-  const [categoryType, setCategoryType] = useState<'expense' | 'income'>('expense');
+  const [categoryType, setCategoryType] = useState<'expense' | 'income'>(type === 'income' ? 'income' : 'expense');
   const [loaded, setLoaded] = useState(!isEditing);
 
   // While the icon hasn't been manually overridden, it live-follows the name
