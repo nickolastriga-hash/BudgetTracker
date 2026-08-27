@@ -40,9 +40,12 @@ export function CategoryRingChart({
   // separate pill-shaped slices instead of one solid connected loop — scaled
   // down when there are many segments so gaps don't eat too much of the
   // ring, but never smaller than the outline needs to clear the next
-  // segment's own outline.
+  // segment's own outline. No gap when there's only one segment (it's the
+  // only category with any spending, i.e. 100% of the ring) — there's
+  // nothing to separate it from, so it should read as one unbroken circle
+  // rather than a pill with its two round caps butted together.
   const gap =
-    total > 0
+    total > 0 && segments.length > 1
       ? Math.max(OUTLINE_WIDTH * 4, Math.min(strokeWidth * 0.6, (circumference / segments.length) * 0.3))
       : 0;
 
