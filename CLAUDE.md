@@ -212,9 +212,11 @@ src/
                           slice via strokeDasharray/strokeDashoffset. Each segment is drawn with
                           `strokeLinecap="round"` and shortened by a small gap (scaled by strokeWidth
                           and segment count, capped so it doesn't eat too much of the ring) so
-                          segments read as separate rounded pills rather than one connected loop —
-                          even a single 100%-share segment still gets a gap, so it never closes into
-                          a full circle. Each segment is also outlined by a second, wider Circle
+                          segments read as separate rounded pills rather than one connected loop — a
+                          single 100%-share segment skips the gap entirely (2026-08-27 fix; there's
+                          nothing to separate it from) and closes into one full unbroken circle
+                          instead of a pill with its two round caps butted together. Each segment is
+                          also outlined by a second, wider Circle
                           drawn behind it in the same color as the card (`outlineColor` prop, not a
                           literal white — the caller passes `theme.card` so it still looks right in
                           dark mode) — reads as a white border in light mode, a "cut out of the

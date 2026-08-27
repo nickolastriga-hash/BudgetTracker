@@ -1,6 +1,6 @@
 # Project State
 
-_Last updated: 2026-08-26_
+_Last updated: 2026-08-27_
 
 Snapshot of where the app stands. History: [CHANGELOG.md](CHANGELOG.md). Upcoming: [TODO.md](TODO.md).
 
@@ -58,6 +58,16 @@ Snapshot of where the app stands. History: [CHANGELOG.md](CHANGELOG.md). Upcomin
 - **Local-only** — AsyncStorage, no accounts/sync (deliberate v1 scope, see TODO.md).
 - **Pinned to Expo SDK 54** (not the current 57) so the App Store build of Expo Go can run it —
   Apple's Expo Go approval has been stuck since SDK 55. See CLAUDE.md "Why SDK 54, not 57".
+
+## Open verification items (2026-08-27)
+
+- **Ring chart single-segment fix** — `CategoryRingChart` no longer subtracts the inter-segment gap
+  when there's only one segment, so a category at 100% of the month's spend closes into a full
+  circle instead of a pill with a visible seam. Verified two ways: a hand-reproduction of the
+  component's exact gap/dash math confirmed `stroke-dasharray` covers the full circumference at
+  100%, and the running web preview showed the same after adding a single real transaction. Also
+  diagnosed (not a code bug) that a long-running native Metro process — up since before today's
+  branch switch to `main` — was serving Expo Go a stale bundle; restarted with `expo start -c`.
 
 ## Stability
 
