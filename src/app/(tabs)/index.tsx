@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Rect } from 'react-native-svg';
 
 import { CategoryBadge } from '@/components/category-badge';
-import { CategoryRingChart } from '@/components/category-ring-chart';
+import { CategoryRingChart, groupRingSegments, RING_OTHER_KEY } from '@/components/category-ring-chart';
 import { ProgressBar } from '@/components/progress-bar';
 import { ScreenHeader } from '@/components/screen-header';
 import { SettingsButton } from '@/components/settings-button';
@@ -79,9 +79,7 @@ function MonthYearPickerModal({
             <Pressable hitSlop={10} onPress={() => setPickerYear((y) => y - 1)}>
               <MaterialIcons name="chevron-left" size={24} color={theme.accent} />
             </Pressable>
-            <ThemedText type="smallBold" themeColor="accent">
-              {pickerYear}
-            </ThemedText>
+            <ThemedText type="smallBold">{pickerYear}</ThemedText>
             <Pressable hitSlop={10} onPress={() => setPickerYear((y) => y + 1)}>
               <MaterialIcons name="chevron-right" size={24} color={theme.accent} />
             </Pressable>
@@ -168,6 +166,7 @@ export default function HomeScreen() {
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [pickerVisible, setPickerVisible] = useState(false);
+  const [selectedRingKey, setSelectedRingKey] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -186,6 +185,13 @@ export default function HomeScreen() {
   );
 
   const monthStr = toMonthStr(month);
+  // The set of tappable categories changes whenever the navigated month
+  // does — clear any selection rather than let it point at a category with
+  // nothing to show in the new month.
+  useEffect(() => {
+    setSelectedRingKey(null);
+  }, [monthStr]);
+
   const totals = monthTotals(transactions, monthStr);
   const monthTransactions = transactionsForMonth(transactions, monthStr).sort((a, b) => (a.date < b.date ? 1 : -1));
   const recent = monthTransactions.slice(0, 8);
@@ -199,7 +205,22 @@ export default function HomeScreen() {
       .filter((e) => e.category)
       .sort((a, b) => b.amount - a.amount);
   }, [transactions, categories, monthStr]);
-  const topExpense = expenseBreakdown[0];
+
+  // Small categories collapse into one grey "Other" wedge in the ring
+  // itself (groupRingSegments, see category-ring-chart.tsx) — computed here
+  // rather than inside the chart so this screen knows exactly what landed
+  // in "Other" and can build a matching center callout when it's tapped.
+  const ringSegments = useMemo(
+    () =>
+      groupRingSegments(
+        expenseBreakdown.map((e) => ({ key: e.categoryId, amount: e.amount, color: e.category!.color })),
+        { otherColor: theme.textTertiary }
+      ),
+    [expenseBreakdown, theme.textTertiary]
+  );
+  const selectedOther = selectedRingKey === RING_OTHER_KEY ? ringSegments.find((s) => s.key === RING_OTHER_KEY) : undefined;
+  const selectedExpense =
+    selectedRingKey && selectedRingKey !== RING_OTHER_KEY ? expenseBreakdown.find((e) => e.categoryId === selectedRingKey) : undefined;
 
   const trendMonths = useMemo(() => lastNMonths(6), []);
   const trendTotals = useMemo(() => {
@@ -212,45 +233,81 @@ export default function HomeScreen() {
   }, [transactions, trendMonths]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.backgroundElement }}>
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
+      {/* Pinned above the ScrollView (not inside it) so the title and month
+          nav stay visible while scrolling the dashboard/budgets/recent list
+          below — same treatment as Transactions' own header. */}
+      <View style={{ paddingTop: insets.top + Spacing.three, backgroundColor: theme.background }}>
+        <View style={[styles.headerContent, { paddingHorizontal: Spacing.three }]}>
+          <ScreenHeader title="Home" right={<SettingsButton />} />
+
+          <View style={styles.monthNav}>
+            <Pressable
+              hitSlop={12}
+              onPress={() => setMonth((m) => new Date(m.getFullYear(), m.getMonth() - 1, 1))}>
+              <MaterialIcons name="chevron-left" size={26} color={theme.accent} />
+            </Pressable>
+            <Pressable hitSlop={12} onPress={() => setPickerVisible(true)}>
+              <ThemedText type="smallBold">{monthLabel(month)}</ThemedText>
+            </Pressable>
+            <Pressable
+              hitSlop={12}
+              onPress={() => setMonth((m) => new Date(m.getFullYear(), m.getMonth() + 1, 1))}>
+              <MaterialIcons name="chevron-right" size={26} color={theme.accent} />
+            </Pressable>
+          </View>
+        </View>
+      </View>
+
       <ScrollView
         contentContainerStyle={[
           styles.content,
-          { paddingTop: insets.top + Spacing.three, paddingBottom: insets.bottom + BottomTabInset + Spacing.six },
+          { paddingTop: Spacing.three, paddingBottom: insets.bottom + BottomTabInset + Spacing.six },
         ]}>
-        <ScreenHeader title="Home" right={<SettingsButton />} />
-
-        <View style={styles.monthNav}>
-          <Pressable
-            hitSlop={12}
-            onPress={() => setMonth((m) => new Date(m.getFullYear(), m.getMonth() - 1, 1))}>
-            <MaterialIcons name="chevron-left" size={26} color={theme.text} />
-          </Pressable>
-          <Pressable hitSlop={12} onPress={() => setPickerVisible(true)}>
-            <ThemedText type="smallBold" themeColor="accent">
-              {monthLabel(month)}
-            </ThemedText>
-          </Pressable>
-          <Pressable
-            hitSlop={12}
-            onPress={() => setMonth((m) => new Date(m.getFullYear(), m.getMonth() + 1, 1))}>
-            <MaterialIcons name="chevron-right" size={26} color={theme.text} />
-          </Pressable>
-        </View>
-
         <View style={[styles.dashboardCard, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
           <CategoryRingChart
-            segments={expenseBreakdown.map((e) => ({ key: e.categoryId, amount: e.amount, color: e.category!.color }))}
+            segments={ringSegments}
             trackColor={theme.backgroundElement}
-            outlineColor={theme.card}>
-            {topExpense ? (
+            outlineColor={theme.card}
+            highlightColor={theme.accent}
+            selectedKey={selectedRingKey}
+            // Tapping the already-selected segment again clears it, back to
+            // the default top-category view.
+            onSelectSegment={(key) => setSelectedRingKey((prev) => (prev === key ? null : key))}>
+            {selectedOther ? (
               <>
-                <CategoryBadge category={topExpense.category!} size={40} />
+                <View style={[styles.otherBadge, { backgroundColor: theme.textTertiary + '26' }]}>
+                  <MaterialIcons name="more-horiz" size={22} color={theme.textTertiary} />
+                </View>
                 <ThemedText type="title" style={styles.ringAmount}>
-                  ${formatAmount(topExpense.amount)}
+                  ${formatAmount(selectedOther.amount)}
                 </ThemedText>
                 <ThemedText type="small" themeColor="textSecondary" style={styles.ringLabel}>
-                  {topExpense.category!.name.toUpperCase()}
+                  OTHER
+                </ThemedText>
+              </>
+            ) : selectedExpense ? (
+              <>
+                <CategoryBadge category={selectedExpense.category!} size={40} />
+                <ThemedText type="title" style={styles.ringAmount}>
+                  ${formatAmount(selectedExpense.amount)}
+                </ThemedText>
+                <ThemedText type="small" themeColor="textSecondary" style={styles.ringLabel}>
+                  {selectedExpense.category!.name.toUpperCase()}
+                </ThemedText>
+              </>
+            ) : totals.expense > 0 ? (
+              // Default (nothing selected) view: the month's total expense,
+              // not any one category — tap a segment to drill into it.
+              <>
+                <View style={[styles.otherBadge, { backgroundColor: theme.accent + '26' }]}>
+                  <MaterialIcons name="receipt-long" size={22} color={theme.accent} />
+                </View>
+                <ThemedText type="title" style={styles.ringAmount}>
+                  ${formatAmount(totals.expense)}
+                </ThemedText>
+                <ThemedText type="small" themeColor="textSecondary" style={styles.ringLabel}>
+                  TOTAL EXPENSES
                 </ThemedText>
               </>
             ) : (
@@ -413,6 +470,12 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  headerContent: {
+    gap: Spacing.three,
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: MaxContentWidth,
+  },
   content: {
     paddingHorizontal: Spacing.three,
     gap: Spacing.four,
@@ -443,6 +506,16 @@ const styles = StyleSheet.create({
   ringLabel: {
     letterSpacing: 0.6,
     fontSize: 11,
+  },
+  // Same tinted-circle look as CategoryBadge, sized to match its size={40}
+  // — used for the "Other" and "total expenses" callouts, neither of which
+  // has a real Category to badge.
+  otherBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   legend: {
     flexDirection: 'row',

@@ -48,7 +48,7 @@ function CalendarPicker({
             setViewYear(d.getFullYear());
             setViewMonth(d.getMonth());
           }}>
-          <MaterialIcons name="chevron-left" size={22} color={theme.text} />
+          <MaterialIcons name="chevron-left" size={22} color={theme.accent} />
         </Pressable>
         <ThemedText type="small">
           {new Date(viewYear, viewMonth, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
@@ -60,7 +60,7 @@ function CalendarPicker({
             setViewYear(d.getFullYear());
             setViewMonth(d.getMonth());
           }}>
-          <MaterialIcons name="chevron-right" size={22} color={theme.text} />
+          <MaterialIcons name="chevron-right" size={22} color={theme.accent} />
         </Pressable>
       </View>
       <View style={styles.calendarGrid}>

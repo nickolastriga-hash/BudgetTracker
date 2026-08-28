@@ -6,6 +6,32 @@ Snapshot of where the app stands. History: [CHANGELOG.md](CHANGELOG.md). Upcomin
 
 ## What's implemented
 
+- **Ring is now tappable (2026-08-27)** — tapping a `CategoryRingChart` segment selects it, swapping
+  the ring's center to that category's amount/name (or the merged "Other" wedge's total) and
+  highlighting the segment's outline in `theme.accent`; tapping the same segment again deselects,
+  back to the default center view, which is now the month's *total* expense rather than the top
+  category. Hit-testing is hand-rolled (angle + radius math off a `Pressable` overlay, not `onPress`
+  on the SVG shapes directly — that logs console errors on web) since react-native-svg shapes don't
+  reliably take touch events cross-platform. See CLAUDE.md's `category-ring-chart.tsx` bullet.
+- **Ring segments no longer overlap, gaps tightened, small ones grouped into "Other" (2026-08-27)** —
+  `CategoryRingChart`'s gap between segments is a fixed margin sized off the wider outline circle's
+  stroke width (accounting for how far its round line cap actually bleeds past the dash's endpoint),
+  replacing a flat gap that shrank for "many segments" without accounting for that bleed — the
+  shrunk gap could end up smaller than the outline's own cap radius, letting one segment's outline
+  paint over its neighbor. Tightened further the same day (`OUTLINE_WIDTH` 3→2, smaller `desiredGap`
+  factor) per feedback that the gap was still wider than it needed to be. Segments too small to draw
+  a real sliver are now summed into one merged grey "Other" wedge instead of rendering invisibly.
+  See CLAUDE.md's `category-ring-chart.tsx` bullet.
+- **White backgrounds, pinned headers, sticky list headers, page dots, blue arrows (2026-08-27)** —
+  every tab's screen background is now white (`theme.background`, was `theme.backgroundElement`
+  grey). Home/Budgets' headers (Home's with its month nav) are pinned above their scroll instead of
+  scrolling away; Budgets' two section headers are sticky via `stickyHeaderIndices`; Transactions'
+  List is now a `SectionList` with sticky per-date headers, and its Calendar page pins the day grid
+  above a separate scrollable day-detail list. Transactions' Calendar day cells show both expense
+  (red) and income (green), not expense-only. Transactions gained a HabitTracker-style page-dot row
+  under its List/Calendar toggle. Every date selector's chevrons are now blue/label black (reversed
+  from the prior black-chevron/blue-label scheme). See CLAUDE.md's "Pinned headers + white
+  backgrounds" and "Transactions List/Calendar" convention bullets.
 - **Home, Transactions, Budgets** tabs (Expo Router `NativeTabs`, SDK 54; Stats was removed
   2026-08-26 — its content is now covered by Home's dashboard card and Transactions' Calendar view).
   Each opens with a `ScreenHeader` title (2026-08-26, new `components/screen-header.tsx`, 28/700 —
@@ -61,6 +87,28 @@ Snapshot of where the app stands. History: [CHANGELOG.md](CHANGELOG.md). Upcomin
 
 ## Open verification items (2026-08-27)
 
+- **Ring segments no longer overlap, gaps tightened, small ones grouped into "Other"** — verified
+  mathematically against the actual rendered `stroke-dasharray`/`stroke-dashoffset` values on the
+  same 11-category seeded data, twice (screenshots weren't available either time this session — the
+  Browser pane wasn't displayed client-side): first pass confirmed every neighbor pair landed exactly
+  `desiredGap` (6px) apart with zero overlap, but 6 of the 11 categories rendered invisibly
+  (`dash: 0`) rather than grouping. After tightening the gap and adding "Other" grouping, re-verified
+  against the re-rendered SVG: now only 6 segments draw (5 real categories + one grey `#98989D`
+  "Other" wedge summing the other 6), the full cursor chain closes exactly back to the circumference
+  at the wraparound seam, and the real gap between adjacent colors is 7px (down from 12px) with the
+  same zero-overlap guarantee. Not yet given a visual (screenshot or on-device) pass.
+- **White backgrounds, pinned headers, sticky list headers, page dots, blue arrows** — verified in
+  the web preview with seeded demo data: root screen background is `rgb(255, 255, 255)` on all three
+  tabs; Home's title stayed at the same viewport position before/after scrolling 400px while
+  "RECENT TRANSACTIONS" moved up underneath it, confirming the pinned header; Budgets' "EXPENSE
+  BUDGETS" header stayed pinned (`position: sticky`, solid white background fully covering scrolled
+  rows) while "Food & Dining" scrolled to `top: -121`; Transactions' List showed 4
+  `position: sticky` date headers with solid backgrounds; Transactions' Calendar showed a day with
+  both `-$153` (expense) and `+$3.3k` (income) and, after tapping a day, the day-grid stayed put
+  while the day's transaction list appeared below it; the page-dot row rendered as a 16px accent dot
+  (active) next to a 6px grey dot (inactive); month/year labels computed to `rgb(0, 0, 0)` and their
+  chevrons to `rgb(0, 122, 255)` on Home and Transactions. No console errors on any of the three
+  tabs. `tsc --noEmit` and `expo lint` both clean. Not yet given an on-device pass.
 - **Ring chart single-segment fix** — `CategoryRingChart` no longer subtracts the inter-segment gap
   when there's only one segment, so a category at 100% of the month's spend closes into a full
   circle instead of a pill with a visible seam. Verified two ways: a hand-reproduction of the

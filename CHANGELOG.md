@@ -2,6 +2,74 @@
 
 Newest first.
 
+## 2026-08-27 — Ring gaps tightened + small segments grouped into "Other"
+
+- Follow-up to the overlap fix below, per feedback that gaps were still too wide in places and some
+  segments were still overlapping. Reduced `OUTLINE_WIDTH` from 3 to 2 and `desiredGap` from a flat
+  `OUTLINE_WIDTH * 2` to `OUTLINE_WIDTH * 1.5` — smaller outline stroke means a smaller mandatory
+  margin (13.5px vs 16px), which tightens the real visible gap between adjacent segments' colors
+  from 12px to 7px of circumference while keeping the same non-overlap guarantee (verified the same
+  way as before, against real rendered `stroke-dasharray`/`stroke-dashoffset` values).
+- Segments too small to draw a real sliver (dash would land under a `MIN_VISIBLE_DASH` floor once
+  the margin is trimmed off both ends) are now summed into one merged "Other" wedge instead of
+  rendering as an invisible zero-length dash — on the same 11-category seeded data this turned 6
+  invisible slivers into one visible grey (`otherColor`, caller passes `theme.textTertiary`) wedge.
+  This is computed inside `CategoryRingChart` itself (generic, threshold tied to the same margin
+  math that decides visibility) rather than in `index.tsx`'s data prep, and only affects the ring —
+  the dashboard legend below it is unchanged and still lists real per-category breakdown with its
+  own separate "+N more" cutoff.
+
+## 2026-08-27 — Ring segments no longer overlap
+
+- Fixed `CategoryRingChart` segments visually overlapping each other's rounded ends. The previous
+  gap math shrank the flat gap between segments for "many segments" without accounting for how far a
+  round line cap actually bleeds past its dash's mathematical endpoint (half the stroke's own
+  width) — for the wider outline circle (26px) that bleed could exceed the shrunk gap entirely,
+  letting one segment's outline paint over its neighbor's color. Replaced it with a fixed margin
+  (`desiredGap/2 + outlineStrokeWidth/2`) trimmed from both ends of every segment's dash and folded
+  into its offset, sized off the *outline's* stroke width (the widest of the two stacked circles) —
+  this keeps a small, constant, count-independent gap between every pair of neighboring segments'
+  painted pixels, verified directly against the rendered `stroke-dasharray`/`stroke-dashoffset`
+  values (each segment's painted range lands exactly `desiredGap` inside its raw slice boundary on
+  both sides). A side effect: a slice too small to fit a full margin on both sides now renders with
+  `dash: 0` (invisible) rather than a forced 1px sliver that could still overlap its neighbor — seen
+  on today's seeded demo data (11 expense categories, 6 too small to render a visible arc, matching
+  the dashboard legend's own "+N more" cutoff). Single-segment behavior (skip the gap, close into one
+  full circle) is unchanged.
+
+## 2026-08-27 — White backgrounds, pinned headers, calendar income, page dots, arrow recolor
+
+- Every tab's screen background switched from `theme.backgroundElement` (light grey) to
+  `theme.background` (white) — Home, Transactions, Budgets. Modals (`add-transaction`,
+  `category-editor`, `budget-editor`, `settings`) already used white and are unchanged.
+- "Freeze panes": each tab's title/date-selector area is now pinned above its ScrollView instead of
+  scrolling away with the content, matching a pattern Transactions already had.
+  - Home: `ScreenHeader` + month nav pinned above the dashboard/budgets/recent-list scroll.
+  - Budgets: `ScreenHeader` pinned above the scroll; "EXPENSE BUDGETS"/"INCOME GOALS" section
+    headers are now sticky via `ScrollView`'s `stickyHeaderIndices` (each header/group pair had to
+    become direct ScrollView children instead of being nested in one wrapping section View).
+  - Transactions List: rewritten from a plain grouped `ScrollView` to a `SectionList`
+    (`stickySectionHeadersEnabled`) — one section per date, one data item per section (the whole
+    day's transaction array) so the existing card-with-dividers look survives unchanged; each date
+    header now sticks to the top while its card scrolls underneath.
+  - Transactions Calendar: the day-grid (`calendarCard`) is now pinned above a separate inner
+    `ScrollView` holding only the selected day's transaction list, instead of the whole page being
+    one ScrollView — same "pin the date selector above a scrolling detail panel" shape as
+    HabitTracker's own calendar tab.
+- Transactions' Calendar day cells now show income (green, `+$X`) alongside expense (red, `-$X`)
+  instead of expense-only — a day with both renders two lines. Font/line-height on the day number
+  and amount lines tightened so up to three lines (day, expense, income) still fit the small square
+  cells.
+- Added a page-dot row (List/Calendar) to Transactions below the segmented toggle — same shape as
+  HabitTracker's own swipe-page dots (6px inactive, widens to 16px and turns accent when active). The
+  segmented toggle still does the actual tapping; the dots are a passive readout of which page the
+  pager is on.
+- Flipped every date selector's coloring app-wide: chevrons are now `theme.accent` (blue) and the
+  date/month/year label is plain text (black) — the reverse of the "black chevrons, blue label"
+  convention from 2026-08-26 below, per explicit feedback. Covers Home's and Transactions' month
+  nav, both screens' `MonthYearPickerModal` (year pager), add-transaction's `CalendarPicker`, and
+  budget-editor's year nav.
+
 ## 2026-08-26 — Ring outline + legend
 
 - Each `CategoryRingChart` segment now has an outline — a second, wider Circle drawn behind it in

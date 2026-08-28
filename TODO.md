@@ -33,9 +33,8 @@ transactions, all local-only. Deliberately deferred:
   swipeable (horizontal `pagingEnabled` ScrollView) or tappable, with a day-of-month grid showing
   that day's spend and a shared month/year nav (chevrons + a tap-to-open month/year picker modal,
   matching HabitTracker's shape — see CLAUDE.md's "Transactions List/Calendar" convention).
-- **Calendar view is expense-only ("spending by day")** — a day cell shows only that day's expense
-  total, not income or net. If income-by-day ever matters, `spendByDay` in `transactions.tsx` would
-  need a second map (or a type toggle) rather than assuming expense.
+- ~~**Calendar view is expense-only**~~ — done (2026-08-27): day cells now show both expense (red)
+  and income (green) via two separate maps.
 - ~~**Category icon colors forced to red/green**~~ — reverted 2026-08-26: `CategoryBadge` uses the
   category's own color again, with a small red/green corner dot as the type cue. See CLAUDE.md's
   "Category icon colors are custom again" convention.

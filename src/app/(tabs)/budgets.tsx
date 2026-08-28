@@ -57,33 +57,45 @@ export default function BudgetsScreen() {
   const incomeCategories = categoriesForType(categories, 'income');
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.backgroundElement }}>
-      <ScrollView
-        contentContainerStyle={[
-          styles.content,
-          { paddingTop: insets.top + Spacing.three, paddingBottom: insets.bottom + BottomTabInset + Spacing.six },
-        ]}>
-        <View style={styles.titleRow}>
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
+      {/* Pinned above the ScrollView (not inside it) so the title stays
+          visible while scrolling the budget/goal lists below — same
+          treatment as Home and Transactions' own headers. */}
+      <View style={{ paddingTop: insets.top + Spacing.three, backgroundColor: theme.background }}>
+        <View style={[styles.titleRow, styles.headerContent, { paddingHorizontal: Spacing.three }]}>
           <ScreenHeader title="Budgets" right={<SettingsButton />} />
           <ThemedText type="small" themeColor="textSecondary">
             Tracked against {monthLabel(thisMonth)}. Tap a category to set its limit or goal, hold
             to edit its icon.
           </ThemedText>
         </View>
+      </View>
 
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <ThemedText type="small" themeColor="textSecondary" style={styles.sectionTitle}>
-              EXPENSE BUDGETS
-            </ThemedText>
-            <Pressable
-              onPress={() => router.push('/category-editor?type=expense')}
-              hitSlop={8}
-              style={[styles.addButton, { backgroundColor: theme.accent }]}>
-              <MaterialIcons name="add" size={20} color="#ffffff" />
-            </Pressable>
-          </View>
-          <View style={[styles.group, { backgroundColor: theme.card, borderColor: theme.border }]}>
+      {/* Sticky section headers (indices 0 and 2 below) — "EXPENSE BUDGETS"
+          stays pinned while its category list scrolls underneath, then
+          "INCOME GOALS" takes over once that section scrolls into view,
+          mirroring the frozen-header-row behavior Transactions' List page
+          gets from SectionList. Each header/group pair must be direct
+          ScrollView children (not wrapped in one enclosing View) for
+          stickyHeaderIndices to address them. */}
+      <ScrollView
+        stickyHeaderIndices={[0, 2]}
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: Spacing.three, paddingBottom: insets.bottom + BottomTabInset + Spacing.six },
+        ]}>
+        <View style={[styles.sectionHeader, styles.stickyHeader, { backgroundColor: theme.background }]}>
+          <ThemedText type="small" themeColor="textSecondary" style={styles.sectionTitle}>
+            EXPENSE BUDGETS
+          </ThemedText>
+          <Pressable
+            onPress={() => router.push('/category-editor?type=expense')}
+            hitSlop={8}
+            style={[styles.addButton, { backgroundColor: theme.accent }]}>
+            <MaterialIcons name="add" size={20} color="#ffffff" />
+          </Pressable>
+        </View>
+        <View style={[styles.group, { backgroundColor: theme.card, borderColor: theme.border }]}>
             {expenseCategories.map((category, i) => {
               const progress = progressByCategory.get(category.id);
               const scheduled = budgets.find((b) => b.categoryId === category.id)?.scheduledChange;
@@ -133,20 +145,18 @@ export default function BudgetsScreen() {
               );
             })}
           </View>
-        </View>
 
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <ThemedText type="small" themeColor="textSecondary" style={styles.sectionTitle}>
-              INCOME GOALS
-            </ThemedText>
-            <Pressable
-              onPress={() => router.push('/category-editor?type=income')}
-              hitSlop={8}
-              style={[styles.addButton, { backgroundColor: theme.accent }]}>
-              <MaterialIcons name="add" size={20} color="#ffffff" />
-            </Pressable>
-          </View>
+        <View style={[styles.sectionHeader, styles.stickyHeader, { backgroundColor: theme.background }]}>
+          <ThemedText type="small" themeColor="textSecondary" style={styles.sectionTitle}>
+            INCOME GOALS
+          </ThemedText>
+          <Pressable
+            onPress={() => router.push('/category-editor?type=income')}
+            hitSlop={8}
+            style={[styles.addButton, { backgroundColor: theme.accent }]}>
+            <MaterialIcons name="add" size={20} color="#ffffff" />
+          </Pressable>
+        </View>
           <View style={[styles.group, { backgroundColor: theme.card, borderColor: theme.border }]}>
             {incomeCategories.map((category, i) => {
               const progress = progressByCategory.get(category.id);
@@ -197,13 +207,18 @@ export default function BudgetsScreen() {
               );
             })}
           </View>
-        </View>
       </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  headerContent: {
+    gap: Spacing.three,
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: MaxContentWidth,
+  },
   content: {
     paddingHorizontal: Spacing.three,
     gap: Spacing.three,
@@ -214,14 +229,16 @@ const styles = StyleSheet.create({
   titleRow: {
     gap: 2,
   },
-  section: {
-    gap: Spacing.two,
-  },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: Spacing.two,
+  },
+  // Solid background so the pinned header fully covers rows scrolling
+  // underneath it, plus a little breathing room so it reads as a bar.
+  stickyHeader: {
+    paddingVertical: Spacing.two - 4,
   },
   sectionTitle: {
     textTransform: 'uppercase',

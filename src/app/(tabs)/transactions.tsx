@@ -8,6 +8,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  SectionList,
   StyleSheet,
   useWindowDimensions,
   View,
@@ -90,9 +91,7 @@ function MonthYearPickerModal({
             <Pressable hitSlop={10} onPress={() => setPickerYear((y) => y - 1)}>
               <MaterialIcons name="chevron-left" size={24} color={theme.accent} />
             </Pressable>
-            <ThemedText type="smallBold" themeColor="accent">
-              {pickerYear}
-            </ThemedText>
+            <ThemedText type="smallBold">{pickerYear}</ThemedText>
             <Pressable hitSlop={10} onPress={() => setPickerYear((y) => y + 1)}>
               <MaterialIcons name="chevron-right" size={24} color={theme.accent} />
             </Pressable>
@@ -127,10 +126,12 @@ function CalendarView({
   month,
   transactions,
   categories,
+  bottomPadding,
 }: {
   month: Date;
   transactions: Transaction[];
   categories: Category[];
+  bottomPadding: number;
 }) {
   const theme = useTheme();
   const monthStr = toMonthStr(month);
@@ -141,10 +142,21 @@ function CalendarView({
     setSelectedDay(null);
   }, [monthStr]);
 
-  const spendByDay = useMemo(() => {
+  // Both sides of each day now, not just spend — expense in red, income in
+  // green, same color convention as everywhere else a transaction's type
+  // shows.
+  const expenseByDay = useMemo(() => {
     const totals = new Map<string, number>();
     for (const t of transactionsForMonth(transactions, monthStr)) {
       if (t.type !== 'expense') continue;
+      totals.set(t.date, (totals.get(t.date) ?? 0) + t.amount);
+    }
+    return totals;
+  }, [transactions, monthStr]);
+  const incomeByDay = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const t of transactionsForMonth(transactions, monthStr)) {
+      if (t.type !== 'income') continue;
       totals.set(t.date, (totals.get(t.date) ?? 0) + t.amount);
     }
     return totals;
@@ -164,84 +176,99 @@ function CalendarView({
     : [];
 
   return (
-    <View style={styles.calendarPage}>
-      <View style={[styles.calendarCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-        <View style={styles.weekdayRow}>
-          {WEEKDAY_LABELS.map((w, i) => (
-            <ThemedText key={i} type="small" themeColor="textTertiary" style={styles.weekdayLabel}>
-              {w}
-            </ThemedText>
-          ))}
-        </View>
-        <View style={styles.dayGrid}>
-          {cells.map((day, i) => {
-            if (day === null) return <View key={`empty-${i}`} style={styles.dayCell} />;
-            const dateStr = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-            const spend = spendByDay.get(dateStr) ?? 0;
-            const isToday = dateStr === todayStr;
-            const isSelected = dateStr === selectedDay;
-            return (
-              <Pressable
-                key={dateStr}
-                onPress={() => setSelectedDay((d) => (d === dateStr ? null : dateStr))}
-                style={styles.dayCell}>
-                <View
-                  style={[
-                    styles.dayCellInner,
-                    isSelected && { backgroundColor: theme.accent },
-                    !isSelected && isToday && { borderColor: theme.accent, borderWidth: 1.5 },
-                  ]}>
-                  <ThemedText
-                    type="small"
-                    themeColor={isSelected ? 'text' : 'text'}
-                    style={isSelected && styles.dayNumberSelected}>
-                    {day}
-                  </ThemedText>
-                  {spend > 0 && (
-                    <ThemedText
-                      type="small"
-                      themeColor={isSelected ? 'text' : 'destructive'}
-                      style={[styles.daySpend, isSelected && styles.daySpendSelected]}
-                      numberOfLines={1}>
-                      ${spend >= 1000 ? `${Math.round(spend / 100) / 10}k` : Math.round(spend)}
+    <View style={{ flex: 1 }}>
+      {/* Pinned above the ScrollView below (not inside it) so the day grid —
+          this page's own date selector — stays visible while scrolling a
+          long day-detail list, matching Home/Transactions' header treatment
+          and HabitTracker's own calendar page. */}
+      <View style={styles.content}>
+        <View style={[styles.calendarCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <View style={styles.weekdayRow}>
+            {WEEKDAY_LABELS.map((w, i) => (
+              <ThemedText key={i} type="small" themeColor="textTertiary" style={styles.weekdayLabel}>
+                {w}
+              </ThemedText>
+            ))}
+          </View>
+          <View style={styles.dayGrid}>
+            {cells.map((day, i) => {
+              if (day === null) return <View key={`empty-${i}`} style={styles.dayCell} />;
+              const dateStr = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+              const expense = expenseByDay.get(dateStr) ?? 0;
+              const income = incomeByDay.get(dateStr) ?? 0;
+              const isToday = dateStr === todayStr;
+              const isSelected = dateStr === selectedDay;
+              return (
+                <Pressable
+                  key={dateStr}
+                  onPress={() => setSelectedDay((d) => (d === dateStr ? null : dateStr))}
+                  style={styles.dayCell}>
+                  <View
+                    style={[
+                      styles.dayCellInner,
+                      isSelected && { backgroundColor: theme.accent },
+                      !isSelected && isToday && { borderColor: theme.accent, borderWidth: 1.5 },
+                    ]}>
+                    <ThemedText type="small" style={[styles.dayNumber, isSelected && styles.dayNumberSelected]}>
+                      {day}
                     </ThemedText>
-                  )}
-                </View>
-              </Pressable>
-            );
-          })}
+                    {expense > 0 && (
+                      <ThemedText
+                        type="small"
+                        themeColor={isSelected ? 'text' : 'destructive'}
+                        style={[styles.daySpend, isSelected && styles.daySpendSelected]}
+                        numberOfLines={1}>
+                        -${expense >= 1000 ? `${Math.round(expense / 100) / 10}k` : Math.round(expense)}
+                      </ThemedText>
+                    )}
+                    {income > 0 && (
+                      <ThemedText
+                        type="small"
+                        themeColor={isSelected ? 'text' : 'success'}
+                        style={[styles.daySpend, isSelected && styles.daySpendSelected]}
+                        numberOfLines={1}>
+                        +${income >= 1000 ? `${Math.round(income / 100) / 10}k` : Math.round(income)}
+                      </ThemedText>
+                    )}
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
       </View>
 
-      {selectedDay && (
-        <View style={styles.dateGroup}>
-          <ThemedText type="small" themeColor="textSecondary" style={styles.dateHeader}>
-            {dateHeaderLabel(selectedDay).toUpperCase()}
-          </ThemedText>
-          {selectedDayTransactions.length === 0 ? (
-            <View style={[styles.group, styles.emptyGroup, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
-              <ThemedText type="small" themeColor="textSecondary">
-                No transactions this day.
-              </ThemedText>
-            </View>
-          ) : (
-            <View style={[styles.group, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
-              {selectedDayTransactions.map((t, i) => (
-                <View key={t.id}>
-                  <TransactionRow
-                    transaction={t}
-                    category={getCategory(categories, t.categoryId)}
-                    onPress={() => router.push(`/add-transaction?id=${t.id}`)}
-                  />
-                  {i < selectedDayTransactions.length - 1 && (
-                    <View style={[styles.divider, styles.rowDividerInset, { backgroundColor: theme.border }]} />
-                  )}
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
-      )}
+      <ScrollView contentContainerStyle={[styles.content, { paddingTop: Spacing.four, paddingBottom: bottomPadding }]}>
+        {selectedDay && (
+          <View style={styles.dateGroup}>
+            <ThemedText type="small" themeColor="textSecondary" style={styles.dateHeader}>
+              {dateHeaderLabel(selectedDay).toUpperCase()}
+            </ThemedText>
+            {selectedDayTransactions.length === 0 ? (
+              <View style={[styles.group, styles.emptyGroup, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                <ThemedText type="small" themeColor="textSecondary">
+                  No transactions this day.
+                </ThemedText>
+              </View>
+            ) : (
+              <View style={[styles.group, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                {selectedDayTransactions.map((t, i) => (
+                  <View key={t.id}>
+                    <TransactionRow
+                      transaction={t}
+                      category={getCategory(categories, t.categoryId)}
+                      onPress={() => router.push(`/add-transaction?id=${t.id}`)}
+                    />
+                    {i < selectedDayTransactions.length - 1 && (
+                      <View style={[styles.divider, styles.rowDividerInset, { backgroundColor: theme.border }]} />
+                    )}
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+      </ScrollView>
     </View>
   );
 }
@@ -299,23 +326,31 @@ export default function TransactionsScreen() {
     setView(index === 0 ? 'list' : 'calendar');
   }
 
+  const bottomPadding = insets.bottom + BottomTabInset + Spacing.six;
+  // Section-per-date, one data item per section (the whole day's
+  // transaction array) — SectionList's own sticky-header machinery then
+  // pins each date header at the top while its card of rows scrolls
+  // underneath, the "freeze panes on rows" treatment. keyExtractor keys off
+  // that date since there's exactly one item per section (index lines up).
+  const sections = groups.map(([date, items]) => ({ date, data: [items] }));
+
   return (
-    <View style={{ flex: 1, backgroundColor: theme.backgroundElement }}>
-      <View style={{ paddingTop: insets.top + Spacing.three }}>
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
+      <View style={{ paddingTop: insets.top + Spacing.three, backgroundColor: theme.background }}>
         <View style={[styles.headerContent, { paddingHorizontal: Spacing.three }]}>
           <ScreenHeader title="Transactions" right={<SettingsButton />} />
 
           <View style={styles.monthNav}>
             <Pressable hitSlop={10} onPress={() => setMonth((m) => new Date(m.getFullYear(), m.getMonth() - 1, 1))}>
-              <MaterialIcons name="chevron-left" size={26} color={theme.text} />
+              <MaterialIcons name="chevron-left" size={26} color={theme.accent} />
             </Pressable>
             <Pressable hitSlop={10} onPress={() => setPickerVisible(true)}>
-              <ThemedText type="smallBold" themeColor="accent" style={styles.monthLabel}>
+              <ThemedText type="smallBold" style={styles.monthLabel}>
                 {monthLabel(month)}
               </ThemedText>
             </Pressable>
             <Pressable hitSlop={10} onPress={() => setMonth((m) => new Date(m.getFullYear(), m.getMonth() + 1, 1))}>
-              <MaterialIcons name="chevron-right" size={26} color={theme.text} />
+              <MaterialIcons name="chevron-right" size={26} color={theme.accent} />
             </Pressable>
           </View>
 
@@ -342,6 +377,15 @@ export default function TransactionsScreen() {
               );
             })}
           </View>
+
+          {/* Page dots — same shape as HabitTracker's own swipe-page
+              indicator (6px dot, active one widens to 16 and turns accent) —
+              a passive readout of which page the pager is on, alongside the
+              segmented control above which still does the actual tapping. */}
+          <View style={styles.pageDots}>
+            <View style={[styles.pageDot, { backgroundColor: theme.border }, view === 'list' && [styles.pageDotActive, { backgroundColor: theme.accent }]]} />
+            <View style={[styles.pageDot, { backgroundColor: theme.border }, view === 'calendar' && [styles.pageDotActive, { backgroundColor: theme.accent }]]} />
+          </View>
         </View>
       </View>
 
@@ -351,53 +395,51 @@ export default function TransactionsScreen() {
           horizontal
           pagingEnabled
           showsHorizontalScrollIndicator={false}
-          onMomentumScrollEnd={onPagerScrollEnd}>
-          <ScrollView
-            style={{ width: pageWidth }}
-            contentContainerStyle={[
-              styles.content,
-              { paddingBottom: insets.bottom + BottomTabInset + Spacing.six },
-            ]}>
-            {groups.length === 0 ? (
-              <View style={[styles.group, styles.emptyGroup, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                <MaterialIcons name="receipt-long" size={28} color={theme.textTertiary} />
-                <ThemedText type="small" themeColor="textSecondary">
-                  No transactions this month.
-                </ThemedText>
-              </View>
-            ) : (
-              groups.map(([date, items]) => (
-                <View key={date} style={styles.dateGroup}>
-                  <ThemedText type="small" themeColor="textSecondary" style={styles.dateHeader}>
-                    {dateHeaderLabel(date).toUpperCase()}
+          onMomentumScrollEnd={onPagerScrollEnd}
+          style={{ flex: 1 }}>
+          <View style={{ width: pageWidth, flex: 1 }}>
+            <SectionList
+              sections={sections}
+              keyExtractor={(_, index) => sections[index]?.date ?? String(index)}
+              stickySectionHeadersEnabled
+              contentContainerStyle={[styles.content, { gap: 0, paddingBottom: bottomPadding }]}
+              ListEmptyComponent={
+                <View style={[styles.group, styles.emptyGroup, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                  <MaterialIcons name="receipt-long" size={28} color={theme.textTertiary} />
+                  <ThemedText type="small" themeColor="textSecondary">
+                    No transactions this month.
                   </ThemedText>
-                  <View style={[styles.group, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                    {items.map((t, i) => (
-                      <View key={t.id}>
-                        <TransactionRow
-                          transaction={t}
-                          category={getCategory(categories, t.categoryId)}
-                          onPress={() => router.push(`/add-transaction?id=${t.id}`)}
-                        />
-                        {i < items.length - 1 && (
-                          <View style={[styles.divider, styles.rowDividerInset, { backgroundColor: theme.border }]} />
-                        )}
-                      </View>
-                    ))}
-                  </View>
                 </View>
-              ))
-            )}
-          </ScrollView>
+              }
+              renderSectionHeader={({ section }) => (
+                <View style={[styles.stickyDateHeader, { backgroundColor: theme.background }]}>
+                  <ThemedText type="small" themeColor="textSecondary" style={styles.dateHeader}>
+                    {dateHeaderLabel(section.date).toUpperCase()}
+                  </ThemedText>
+                </View>
+              )}
+              renderItem={({ item }) => (
+                <View style={[styles.group, styles.dateGroupCard, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                  {item.map((t, i) => (
+                    <View key={t.id}>
+                      <TransactionRow
+                        transaction={t}
+                        category={getCategory(categories, t.categoryId)}
+                        onPress={() => router.push(`/add-transaction?id=${t.id}`)}
+                      />
+                      {i < item.length - 1 && (
+                        <View style={[styles.divider, styles.rowDividerInset, { backgroundColor: theme.border }]} />
+                      )}
+                    </View>
+                  ))}
+                </View>
+              )}
+            />
+          </View>
 
-          <ScrollView
-            style={{ width: pageWidth }}
-            contentContainerStyle={[
-              styles.content,
-              { paddingBottom: insets.bottom + BottomTabInset + Spacing.six },
-            ]}>
-            <CalendarView month={month} transactions={transactions} categories={categories} />
-          </ScrollView>
+          <View style={{ width: pageWidth, flex: 1 }}>
+            <CalendarView month={month} transactions={transactions} categories={categories} bottomPadding={bottomPadding} />
+          </View>
         </ScrollView>
       </View>
 
@@ -468,8 +510,33 @@ const styles = StyleSheet.create({
     borderRadius: Spacing.two - 2,
     alignItems: 'center',
   },
+  // Same shape as HabitTracker's own swipe-page dots.
+  pageDots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  pageDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  pageDotActive: {
+    width: 16,
+  },
   dateGroup: {
     gap: Spacing.two,
+  },
+  // The SectionList's own header, sticky via stickySectionHeadersEnabled —
+  // needs its own top spacing and a solid background (the sticky container
+  // sits above cards scrolling underneath it) since contentContainerStyle's
+  // gap is zeroed out for this list, unlike every other screen's ScrollView.
+  stickyDateHeader: {
+    paddingTop: Spacing.four,
+    paddingBottom: Spacing.two,
+  },
+  dateGroupCard: {
+    marginBottom: Spacing.four,
   },
   dateHeader: {
     paddingHorizontal: Spacing.two,
@@ -529,11 +596,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 1,
   },
+  dayNumber: {
+    fontSize: 12,
+    lineHeight: 14,
+  },
   dayNumberSelected: {
     color: '#ffffff',
   },
+  // Tight lineHeight (not just fontSize) since a cell can now show up to
+  // three lines — day number, expense, income — in a small square.
   daySpend: {
-    fontSize: 10,
+    fontSize: 9,
+    lineHeight: 11,
   },
   daySpendSelected: {
     color: '#ffffff',

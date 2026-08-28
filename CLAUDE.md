@@ -13,21 +13,24 @@ automatically each month. Three tabs, each opening with a `ScreenHeader` title (
 ProfileButton size/placement — a gear glyph instead of a profile avatar, since there's no accounts
 system to show a profile for; opens `app/settings.tsx`, see its own bullet below):
 
-- **Home** — "Home" header, a month nav (same black-chevrons/blue-tappable-label/picker-modal shape
-  as Transactions' below, added 2026-08-26), a dashboard card (a donut ring of the navigated month's
-  expense-by-category breakdown, center showing the top category's icon/amount/name; a compact
-  income/expenses/net row; a 6-month income-vs-expense mini trend chart), a preview of up to 3
-  budget categories' progress, and the month's most recent transactions. FAB opens the
+- **Home** — "Home" header pinned above the scroll (2026-08-27, see the "Pinned headers" convention
+  below), a month nav (same blue-chevrons/black-tappable-label/picker-modal shape as Transactions'
+  below, added 2026-08-26, recolored 2026-08-27), a dashboard card (a donut ring of the navigated
+  month's expense-by-category breakdown, center showing the top category's icon/amount/name; a
+  compact income/expenses/net row; a 6-month income-vs-expense mini trend chart), a preview of up to
+  3 budget categories' progress, and the month's most recent transactions. FAB opens the
   add-transaction modal.
-- **Transactions** — "Transactions" header, a month nav (chevrons in `theme.text`/black — plain
-  navigation, not the tappable control — the month label itself is `theme.accent`/blue and opens a
-  month/year picker modal on tap: a year pager plus a 12-month grid, replacing an earlier
-  fast-rewind/fast-forward button pair) above a List/Calendar segmented toggle (added 2026-08-26).
-  List: all of that month's transactions grouped by date, tapping a row opens the same modal in edit
-  mode. Calendar: a day-of-month grid showing that day's total spend, tap a day to expand its
-  transactions below the grid. The two are pages of one horizontal `pagingEnabled` ScrollView — swipe
-  between them, or tap the toggle. See CLAUDE.md's "Transactions List/Calendar" convention bullet
-  below.
+- **Transactions** — "Transactions" header pinned above the scroll, a month nav (chevrons in
+  `theme.accent`/blue — plain navigation, not the tappable control, but recolored 2026-08-27 to match
+  HabitTracker's own arrows-blue/label-black scheme — the month label itself is plain text/black and
+  opens a month/year picker modal on tap: a year pager plus a 12-month grid, replacing an earlier
+  fast-rewind/fast-forward button pair) above a List/Calendar segmented toggle plus a page-dot row
+  (added 2026-08-26, dots added 2026-08-27). List: all of that month's transactions grouped by date
+  with sticky per-date headers, tapping a row opens the same modal in edit mode. Calendar: a
+  day-of-month grid (pinned above the day-detail scroll) showing that day's expense (red) and income
+  (green), tap a day to expand its transactions below the grid. The two are pages of one horizontal
+  `pagingEnabled` ScrollView — swipe between them, or tap the toggle. See CLAUDE.md's "Transactions
+  List/Calendar" convention bullet below.
 - **Budgets** — "Budgets" header, then two sections: expense categories with an optional monthly
   spending limit, and income categories with an optional monthly income goal (added 2026-08-25). Tap
   a row to set/edit/clear its limit/goal inline; progress bars flip semantics by section — an expense
@@ -209,19 +212,52 @@ src/
   components/
     category-ring-chart.tsx  Donut/ring chart (added 2026-08-26) for Home's dashboard card — stacked
                           react-native-svg `Circle`s, one per segment, each showing only its own
-                          slice via strokeDasharray/strokeDashoffset. Each segment is drawn with
-                          `strokeLinecap="round"` and shortened by a small gap (scaled by strokeWidth
-                          and segment count, capped so it doesn't eat too much of the ring) so
-                          segments read as separate rounded pills rather than one connected loop — a
-                          single 100%-share segment skips the gap entirely (2026-08-27 fix; there's
-                          nothing to separate it from) and closes into one full unbroken circle
-                          instead of a pill with its two round caps butted together. Each segment is
-                          also outlined by a second, wider Circle
-                          drawn behind it in the same color as the card (`outlineColor` prop, not a
-                          literal white — the caller passes `theme.card` so it still looks right in
-                          dark mode) — reads as a white border in light mode, a "cut out of the
-                          surface" border in dark mode either way. Rotated -90deg (12 o'clock start)
-                          via the wrapping View's
+                          slice via strokeDasharray/strokeDashoffset. Small segments (their dash
+                          would land under `MIN_VISIBLE_DASH`) are meant to be pre-merged by the
+                          caller into one `RING_OTHER_KEY` wedge via the exported `groupRingSegments`
+                          helper (same margin math as the component itself, so the threshold always
+                          matches what would actually render) — done in `index.tsx`, not inside the
+                          component, so the screen (which has the real Category data) knows what
+                          landed in "Other" and can build a matching center callout. The legend below
+                          the ring is unrelated — it lists real per-category breakdown with its own
+                          "+N more" cutoff.
+                          Tapping a segment (2026-08-27) selects it: a transparent `Pressable`
+                          overlay (a sibling of the `<Svg>`, not a wrapper — react-native-svg's shapes
+                          carry their own legacy touch-responder wiring, and a `Pressable` ancestor of
+                          an `<Svg>` triggers spurious "Unknown event handler property" console errors
+                          on web) hand-computes which segment was hit: `measureInWindow` on the outer
+                          `View` (not the Pressable's own ref — same web console-error issue) plus the
+                          tap's `pageX`/`pageY` gives a local point, undoing the -90deg display
+                          rotation recovers the path's own angle, and a radial-distance check rejects
+                          taps on the empty center or outside the ring. Selection is controlled
+                          (`selectedKey`/`onSelectSegment`/`highlightColor` props) — the component
+                          only knows keys/amounts/colors, so the caller owns what "selected" means and
+                          re-renders the center `children` to match; index.tsx toggles a tapped
+                          segment off (back to the total-expense default) if tapped again. The
+                          selected segment's outline swaps to `highlightColor` and thickens slightly.
+                          Each drawn segment is rendered with `strokeLinecap="round"`, trimmed on
+                          both ends by a fixed `margin` (`desiredGap/2 + outlineStrokeWidth/2`,
+                          folded into the dash's offset too) so segments read as separate rounded
+                          pills rather than one connected loop. The margin is sized off the
+                          *outline* circle's stroke width (the wider of the two stacked circles, not
+                          the plain color one) since a round cap bleeds past its dash's mathematical
+                          endpoint by half the stroke's own width — sizing the margin off the
+                          narrower color stroke let the wider outline's own cap bleed into the next
+                          segment (2026-08-27 fix; the previous version instead shrank a flat gap for
+                          "many segments", which is what caused the overlap). This keeps a small,
+                          constant, segment-count-independent gap between every pair of neighbors
+                          regardless of how many segments there are — tightened the same day
+                          (`OUTLINE_WIDTH` 3→2, `desiredGap` from a flat `OUTLINE_WIDTH * 2` to
+                          `OUTLINE_WIDTH * 1.5`) per feedback that the gap was still wider than it
+                          needed to be even after the overlap was fixed. A single 100%-share segment
+                          skips all of this (no margin, no offset shift; there's nothing to separate
+                          it from) and closes into one full unbroken circle instead of a pill with
+                          its two round caps butted together. Each segment is also outlined by a
+                          second, wider Circle drawn behind it in the same color as the card
+                          (`outlineColor` prop, not a literal white — the caller passes `theme.card`
+                          so it still looks right in dark mode) — reads as a white border in light
+                          mode, a "cut out of the surface" border in dark mode either way. Rotated
+                          -90deg (12 o'clock start) via the wrapping View's
                           `transform` style rather than each Circle's `rotation`/`origin` props — the
                           latter renders as an invalid `transform-origin` DOM attribute on web.
                           Center content is a plain absolutely-positioned View (children prop), not
@@ -373,8 +409,11 @@ src/
 - **Home's dashboard card (added 2026-08-26)** replaced the old plain income/expenses/net summary
   card. It uses the *navigated* month (`monthStr`, from Home's own month-nav state), not necessarily
   the real current month — consistent with the rest of Home, which has always read off `monthStr`
-  rather than `toMonthStr(new Date())`. The ring's center falls back to a "No expenses yet" empty
-  state when `expenseBreakdown` is empty. A legend sits between the ring and the income/expense/net
+  rather than `toMonthStr(new Date())`. The ring's center defaults to the month's total expense
+  (2026-08-27; was the top category before) with a "No expenses yet" empty state when there's none,
+  and shows the tapped category (or the merged "Other" wedge) while one is selected — see
+  `category-ring-chart.tsx`'s own bullet above for the tap-to-select mechanics. A legend sits between
+  the ring and the income/expense/net
   row — a two-column wrap of up to 6 categories (color dot, name, % share of `totals.expense`), with
   a "+N more" line if there are more than that; defined inline in `index.tsx`, not a shared
   component. The mini trend chart (`MiniTrendChart` in `index.tsx`) was
@@ -383,25 +422,45 @@ src/
   Transactions' Calendar view), so `MiniTrendChart` is the only survivor of that bar-chart shape.
 - **Transactions List/Calendar (added 2026-08-26)** — the two are pages of one horizontal
   `pagingEnabled` ScrollView (`transactions.tsx`), both reading the same shared `month` state so the
-  month/year nav above them always applies to whichever page is active. The segmented toggle calls
-  `pagerRef.current.scrollTo({x, animated: false})` — `animated: true` silently no-ops on
-  react-native-web here (a scroll-snap-type/smooth-scroll interaction, still fine on native), so the
-  toggle jumps instantly rather than animating; swiping directly is unaffected either way. Calendar's
-  per-day total is expense-only ("spending by day," not net) via a `Map<dateStr, number>` built from
-  that month's expense transactions; tapping a day expands its transactions in a list below the grid
-  (`TransactionRow`, same as the List page), and the selection resets whenever the month changes.
+  month/year nav above them always applies to whichever page is active. A page-dot row (2026-08-27,
+  same 6px/16px-active shape as HabitTracker's own swipe-page dots) sits below the segmented toggle
+  as a passive readout of which page is active — the toggle itself still does the tapping. The
+  segmented toggle calls `pagerRef.current.scrollTo({x, animated: false})` — `animated: true`
+  silently no-ops on react-native-web here (a scroll-snap-type/smooth-scroll interaction, still fine
+  on native), so the toggle jumps instantly rather than animating; swiping directly is unaffected
+  either way. List is a `SectionList` (switched from a plain grouped `ScrollView` 2026-08-27, one
+  section per date, one data item per section — the whole day's transaction array — so the existing
+  card-with-dividers look survives unchanged) with `stickySectionHeadersEnabled`, so each date header
+  freezes at the top while its card scrolls underneath. Calendar shows both expense (red) and income
+  (green) per day (2026-08-27; was expense-only before) via two `Map<dateStr, number>`s built from
+  that month's transactions; tapping a day expands its transactions in a list below the grid
+  (`TransactionRow`, same as the List page), and the selection resets whenever the month changes. The
+  day grid itself is pinned above a separate inner `ScrollView` holding only the selected day's list
+  (2026-08-27, "freeze panes" — same "pin the date selector above a scrolling detail panel" shape as
+  HabitTracker's own calendar tab) rather than the whole page being one ScrollView.
   The month nav itself (added 2026-08-26, replacing an earlier fast-rewind/fast-forward pair)
   matches HabitTracker's own month-nav shape: chevrons plus a tap-to-open `MonthYearPickerModal`
-  (year pager + 12-month grid). The chevrons stay `theme.text`/black (plain navigation); only the
-  month label is `theme.accent`/blue, signaling *it's* the pressable one that opens the picker —
-  HabitTracker's own arrows are accent-colored while its label is plain text, so this is a
-  deliberate inversion (per an explicit ask), not a literal copy of which piece is blue. The modal
+  (year pager + 12-month grid). Chevrons are `theme.accent`/blue and the month label is plain
+  text/black (recolored 2026-08-27, per explicit feedback, to match HabitTracker's own
+  arrows-blue/label-black scheme app-wide — this reverses the 2026-08-26 "deliberate inversion" note
+  that used to live here; there is no inversion anymore, both apps now agree). The modal
   uses `animationType="none"`, not `"fade"` — RNW's fade relies on a CSS `animationend` event to
   actually unmount, which doesn't reliably fire in every browser context and left the modal visually
   stuck open after `visible` went false; `"none"` sidesteps that class of bug entirely.
   `MonthYearPickerModal` is defined locally in both `transactions.tsx` and `index.tsx` (Home's month
   nav got the identical treatment 2026-08-26 too — "same date-area treatment everywhere" was an
   explicit ask) rather than shared, per the no-premature-abstraction rule — 2 occurrences, not yet 3.
+- **Pinned headers + white backgrounds (2026-08-27)** — every tab's screen background switched from
+  `theme.backgroundElement` (light grey) to `theme.background` (white), per explicit feedback; the
+  grey remains in use elsewhere (pressed-row highlight, the ring chart's track color, disabled-button
+  fill) since only the screen-level background was called out. Each tab's title/date-selector area
+  is now pinned above its `ScrollView`/`SectionList` instead of scrolling away with the content
+  ("freeze panes") — Home and Budgets' `ScreenHeader` (Home's also carries its month nav); Budgets'
+  two section headers ("EXPENSE BUDGETS"/"INCOME GOALS") are additionally sticky via `ScrollView`'s
+  `stickyHeaderIndices`, which required flattening each header+group pair into direct ScrollView
+  children instead of nesting them in one wrapping section `View` (`stickyHeaderIndices` addresses a
+  `View`'s direct children by position). See the Transactions bullet above for that tab's own version
+  of the same idea (`SectionList` sticky headers on List, a pinned day-grid on Calendar).
 - **`react-native-draggable-flatlist`/reanimated-heavy list interactions have not been needed
   yet** — there's no drag-and-drop anywhere in this app. If one gets added, read HabitTracker's
   `CLAUDE.md` "Home habit reordering" bullet first; it documents a real, hard-won lesson about

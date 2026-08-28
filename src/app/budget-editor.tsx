@@ -152,13 +152,13 @@ export default function BudgetEditorScreen() {
         <View>
           <View style={styles.yearNav}>
             <Pressable hitSlop={10} onPress={() => setCalendarYear((y) => y - 1)}>
-              <MaterialIcons name="chevron-left" size={22} color={theme.text} />
+              <MaterialIcons name="chevron-left" size={22} color={theme.accent} />
             </Pressable>
             <ThemedText type="small" themeColor="textSecondary">
               Tap a month to set its starting point — {calendarYear}
             </ThemedText>
             <Pressable hitSlop={10} onPress={() => setCalendarYear((y) => y + 1)}>
-              <MaterialIcons name="chevron-right" size={22} color={theme.text} />
+              <MaterialIcons name="chevron-right" size={22} color={theme.accent} />
             </Pressable>
           </View>
 
