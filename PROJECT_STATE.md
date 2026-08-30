@@ -1,11 +1,22 @@
 # Project State
 
-_Last updated: 2026-08-27_
+_Last updated: 2026-08-29_
 
 Snapshot of where the app stands. History: [CHANGELOG.md](CHANGELOG.md). Upcoming: [TODO.md](TODO.md).
 
 ## What's implemented
 
+- **Budgets and Home both gained swipeable Expense/Income pagers (2026-08-29)** — Budgets replaced
+  its two stacked "Expense Budgets"/"Income Goals" sections with two pages of a horizontal
+  `pagingEnabled` toggle (own summary card + status pill per page — a red "N over budget" pill on
+  Expense, a new green "N goals reached" pill on Income) and picked up its own month nav (progress
+  now follows whatever month is navigated to, not just the real current month). Home's ring-chart
+  breakdown panel got the same swipeable treatment, nested inside its dashboard card — both sides are
+  mounted at once with independent tapped-segment selection so swiping back doesn't lose what you
+  tapped. Transactions gained a Week/Month/Year range nav (same machinery as Home's) replacing its
+  old month-only nav, plus a funnel-button filter (type + multi-category) that narrows both its List
+  and Calendar pages live. See CLAUDE.md's "Budgets Expense/Income pages", "Home's Expense/Income
+  breakdown panel", "Transactions range selector", and "Transactions filter" convention bullets.
 - **Ring is now tappable (2026-08-27)** — tapping a `CategoryRingChart` segment selects it, swapping
   the ring's center to that category's amount/name (or the merged "Other" wedge's total) and
   highlighting the segment's outline in `theme.accent`; tapping the same segment again deselects,
@@ -84,6 +95,19 @@ Snapshot of where the app stands. History: [CHANGELOG.md](CHANGELOG.md). Upcomin
 - **Local-only** — AsyncStorage, no accounts/sync (deliberate v1 scope, see TODO.md).
 - **Pinned to Expo SDK 54** (not the current 57) so the App Store build of Expo Go can run it —
   Apple's Expo Go approval has been stuck since SDK 55. See CLAUDE.md "Why SDK 54, not 57".
+
+## Open verification items (2026-08-29)
+
+- **Budgets/Home swipeable pagers + Transactions range/filter** — all verified in the web preview:
+  Budgets' Expense/Income toggle recolors red/green and its pills render (tested a $200 Salary goal
+  against $4,244.85 earned → "1 goal reached"); Home's ring panel toggle switches pages and keeps
+  per-page tapped-segment selection independent (confirmed via the accessibility tree, since both
+  pages stay mounted); Transactions' Week/Month/Year toggle correctly hides the List/Calendar toggle
+  outside Month mode, and the filter modal narrows both List and Calendar (confirmed a
+  Food & Dining-only filter and an Income-only filter each producing the expected day totals). Real
+  touch-swipe gestures weren't testable (mouse-drag in this environment just selects page text
+  instead of scrolling) — only the toggle-tap code path (which drives the same `scrollTo`) was
+  exercised. `tsc --noEmit` and `expo lint` both clean. Not yet given an on-device pass.
 
 ## Open verification items (2026-08-27)
 

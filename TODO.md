@@ -12,7 +12,11 @@ transactions, all local-only. Deliberately deferred:
   transactions/budget (reassign to "Other" is the obvious default) — not built yet.
 - **Weekly/biweekly recurring transactions** — `lib/recurring.ts` only supports monthly. The
   `RecurringTransaction` shape would need a discriminated union on frequency.
-- **Per-month budget history** — a `Budget` is currently a single flat limit, not tracked per month.
+- **Per-month budget history** — a `Budget` is currently a single flat limit (plus at most one
+  override and one scheduled future change, see `lib/budgets.ts`), not a full per-month history.
+  Budgets gained its own month nav (2026-08-29) so a past/future month's spent-vs-limit can be
+  *reviewed*, but that's still reading the same flat-limit-plus-overrides model, not storing a
+  distinct record per month.
 - **Multi-currency** — amounts are unitless numbers rendered with a hardcoded `$`.
 - **Light/Dark/Auto override** — currently always follows the OS color scheme
   (`react-native`'s `useColorScheme`), no in-app theme preference like HabitTracker has.

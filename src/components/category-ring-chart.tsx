@@ -15,14 +15,35 @@ export interface RingSegment {
 // than SVG text, so it can reuse ThemedText/CategoryBadge like the rest of
 // the app instead of duplicating font handling in SVG.
 const OUTLINE_WIDTH = 2;
+// How much wider a selected segment's own stroke (and its outline) gets
+// drawn, beyond the normal width — the ring's own radius has to leave room
+// for this even when nothing is selected, since the path radius is shared
+// by every segment and can't change just because the selection did (that
+// would make the whole ring resize/jump on tap).
+const SELECTED_STROKE_EXTRA = 3;
+// How much the *other* segments fade once one is selected — the emphasis
+// comes from everything else receding, not from recoloring the selected
+// segment's own border (2026-08-28: replaced an accent-colored outline swap,
+// which read as an unrelated blue ring slapped onto whatever color the
+// segment already was — fading the rest keeps every segment in its own
+// color and still makes the selection unambiguous).
+const DIMMED_OPACITY = 0.32;
 
 // Shared with groupRingSegments below so its margin math always matches
 // whatever CategoryRingChart itself would actually render with — exported
 // so a caller that doesn't override size/strokeWidth doesn't have to repeat
 // the same literals to call the grouping helper correctly.
-export const RING_DEFAULT_SIZE = 176;
+export const RING_DEFAULT_SIZE = 200;
 export const RING_DEFAULT_STROKE_WIDTH = 20;
 export const RING_OTHER_KEY = '__other__';
+
+// The widest a stroke on the ring's path ever gets (a selected segment's
+// outline circle) — the path radius is sized to keep even this within the
+// SVG's bounds, so nothing bleeds past the canvas edge and gets clipped top
+// or bottom regardless of what's selected.
+function maxStrokeWidth(strokeWidth: number) {
+  return strokeWidth + OUTLINE_WIDTH * 2 + SELECTED_STROKE_EXTRA;
+}
 
 function ringMargin(strokeWidth: number) {
   const outlineStrokeWidth = strokeWidth + OUTLINE_WIDTH * 2;
@@ -52,7 +73,7 @@ export function groupRingSegments(
   segments: RingSegment[],
   { size = RING_DEFAULT_SIZE, strokeWidth = RING_DEFAULT_STROKE_WIDTH, otherColor }: { size?: number; strokeWidth?: number; otherColor: string }
 ): RingSegment[] {
-  const radius = (size - strokeWidth) / 2;
+  const radius = (size - maxStrokeWidth(strokeWidth)) / 2;
   const circumference = 2 * Math.PI * radius;
   const margin = ringMargin(strokeWidth);
   const total = segments.reduce((sum, s) => sum + s.amount, 0);
@@ -73,7 +94,6 @@ export function CategoryRingChart({
   outlineColor,
   selectedKey,
   onSelectSegment,
-  highlightColor,
   children,
 }: {
   // Pass through groupRingSegments first if small segments should collapse
@@ -93,13 +113,9 @@ export function CategoryRingChart({
   // a "category" is, only keys/amounts/colors).
   selectedKey?: string | null;
   onSelectSegment?: (key: string) => void;
-  // The selected segment's outline swaps to this color instead of
-  // `outlineColor`, so it reads as highlighted rather than just another
-  // card-colored cutout border. Required whenever onSelectSegment is passed.
-  highlightColor?: string;
   children?: React.ReactNode;
 }) {
-  const radius = (size - strokeWidth) / 2;
+  const radius = (size - maxStrokeWidth(strokeWidth)) / 2;
   const circumference = 2 * Math.PI * radius;
   const total = segments.reduce((sum, s) => sum + s.amount, 0);
   const outlineStrokeWidth = strokeWidth + OUTLINE_WIDTH * 2;
@@ -171,14 +187,19 @@ export function CategoryRingChart({
               const offset = laidOut.length > 1 ? -(s.start + margin) : 0;
               const dashArray = `${dash} ${circumference - dash}`;
               const isSelected = s.key === selectedKey;
+              // Emphasis is relative: nothing dims until something is
+              // selected, and then only the segments that aren't it do.
+              const dimmed = selectedKey != null && !isSelected;
+              const extra = isSelected ? SELECTED_STROKE_EXTRA : 0;
               return [
                 <Circle
                   key={`${s.key}-outline`}
                   cx={size / 2}
                   cy={size / 2}
                   r={radius}
-                  stroke={isSelected ? highlightColor : outlineColor}
-                  strokeWidth={isSelected ? outlineStrokeWidth + 3 : outlineStrokeWidth}
+                  stroke={outlineColor}
+                  strokeWidth={outlineStrokeWidth + extra}
+                  strokeOpacity={dimmed ? DIMMED_OPACITY : 1}
                   strokeLinecap="round"
                   strokeDasharray={dashArray}
                   strokeDashoffset={offset}
@@ -190,7 +211,8 @@ export function CategoryRingChart({
                   cy={size / 2}
                   r={radius}
                   stroke={s.color}
-                  strokeWidth={strokeWidth}
+                  strokeWidth={strokeWidth + extra}
+                  strokeOpacity={dimmed ? DIMMED_OPACITY : 1}
                   strokeLinecap="round"
                   strokeDasharray={dashArray}
                   strokeDashoffset={offset}

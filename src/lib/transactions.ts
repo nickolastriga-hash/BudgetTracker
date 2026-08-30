@@ -91,3 +91,39 @@ export function byCategoryTotals(
   }
   return totals;
 }
+
+// Generic [startDate, endDate] (both "YYYY-MM-DD", inclusive) equivalents of
+// the month-scoped helpers above — added for Home's week/month/year range
+// selector, which needs to total an arbitrary week or year, not just a
+// month; Transactions' own List page adopted the same range selector
+// 2026-08-29 and now uses transactionsInRange too (its Calendar page is
+// still month-only — a day-of-month grid has no other shape — so it keeps
+// using transactionsForMonth). Plain string comparison works here since
+// "YYYY-MM-DD" sorts lexicographically the same as chronologically. The
+// month-scoped functions above are left as-is (still what Budgets/
+// demo-data/Transactions' Calendar page use) rather than rewritten atop
+// these, since they're simpler for the common "just this month" case.
+export function transactionsInRange(transactions: Transaction[], startDate: string, endDate: string): Transaction[] {
+  return transactions.filter((t) => t.date >= startDate && t.date <= endDate);
+}
+
+export function rangeTotals(transactions: Transaction[], startDate: string, endDate: string): MonthTotals {
+  const inRange = transactionsInRange(transactions, startDate, endDate);
+  const income = inRange.filter((t) => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+  const expense = inRange.filter((t) => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+  return { income, expense, net: income - expense };
+}
+
+export function byCategoryTotalsInRange(
+  transactions: Transaction[],
+  startDate: string,
+  endDate: string,
+  type: TransactionType
+): Record<string, number> {
+  const inRange = transactionsInRange(transactions, startDate, endDate).filter((t) => t.type === type);
+  const totals: Record<string, number> = {};
+  for (const t of inRange) {
+    totals[t.categoryId] = (totals[t.categoryId] ?? 0) + t.amount;
+  }
+  return totals;
+}

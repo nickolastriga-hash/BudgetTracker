@@ -20,23 +20,35 @@ system to show a profile for; opens `app/settings.tsx`, see its own bullet below
   compact income/expenses/net row; a 6-month income-vs-expense mini trend chart), a preview of up to
   3 budget categories' progress, and the month's most recent transactions. FAB opens the
   add-transaction modal.
-- **Transactions** — "Transactions" header pinned above the scroll, a month nav (chevrons in
-  `theme.accent`/blue — plain navigation, not the tappable control, but recolored 2026-08-27 to match
-  HabitTracker's own arrows-blue/label-black scheme — the month label itself is plain text/black and
-  opens a month/year picker modal on tap: a year pager plus a 12-month grid, replacing an earlier
-  fast-rewind/fast-forward button pair) above a List/Calendar segmented toggle plus a page-dot row
-  (added 2026-08-26, dots added 2026-08-27). List: all of that month's transactions grouped by date
-  with sticky per-date headers, tapping a row opens the same modal in edit mode. Calendar: a
-  day-of-month grid (pinned above the day-detail scroll) showing that day's expense (red) and income
-  (green), tap a day to expand its transactions below the grid. The two are pages of one horizontal
-  `pagingEnabled` ScrollView — swipe between them, or tap the toggle. See CLAUDE.md's "Transactions
-  List/Calendar" convention bullet below.
-- **Budgets** — "Budgets" header, then two sections: expense categories with an optional monthly
-  spending limit, and income categories with an optional monthly income goal (added 2026-08-25). Tap
-  a row to set/edit/clear its limit/goal inline; progress bars flip semantics by section — an expense
-  bar turns destructive red past 100% (over budget, bad), an income bar turns success green at/past
-  100% (goal reached, good). Progress is always against the *current* calendar month (no month nav
-  here — a budget is a flat per-category limit/goal, not a per-month record).
+- **Transactions** — "Transactions" header (a filter button — see below — plus `SettingsButton` in
+  its top-right corner) pinned above the scroll, a Week/Month/Year range nav (2026-08-29, same
+  chevrons-blue/label-black-tappable shape as Home's own, replacing an earlier month-only nav — see
+  the "Transactions range selector" convention bullet below) above a List/Calendar segmented toggle
+  plus a page-dot row (added 2026-08-26, dots added 2026-08-27; only shown in Month mode — Week/Year
+  mode has no Calendar page, see that same bullet). List: all of the navigated range's transactions
+  grouped by date with sticky per-date headers, tapping a row opens the same modal in edit mode.
+  Calendar (Month mode only): a day-of-month grid (pinned above the day-detail scroll) showing that
+  day's expense (red) and income (green), tap a day to expand its transactions below the grid. In
+  Month mode, List and Calendar are pages of one horizontal `pagingEnabled` ScrollView — swipe
+  between them, or tap the toggle. A funnel button next to `SettingsButton` (2026-08-29) opens a
+  type/category filter that narrows both pages at once — see the "Transactions filter" convention
+  bullet below.
+- **Budgets** — "Budgets" header, a month nav (same shape as Transactions'), then an Expense/Income
+  segmented toggle plus a page-dot row (2026-08-29, replacing two stacked sections with two pages of
+  one horizontal `pagingEnabled` ScrollView — swipe between them, or tap the toggle, same pattern as
+  Transactions' List/Calendar). Expense page: a "Total Budgeted" summary card (over-100% categories
+  called out in a red pill) above the expense category list, each with an optional monthly spending
+  limit. Income page: an "Income Goals" summary card (goals reached called out in a green pill) above
+  the income category list, each with an optional monthly income goal. Tap a row to set/edit/clear
+  its limit/goal inline; progress bars flip semantics by page — an expense bar turns destructive red
+  past 100% (over budget, bad), an income bar turns success green at/past 100% (goal reached, good).
+  The toggle itself fills red/green on selection (same convention as add-transaction.tsx's own
+  Expense/Income toggle) rather than a flat accent color. Progress (and `budget-editor.tsx`'s own
+  spent-vs-limit, via a `month` query param carried from here) is computed against whatever month
+  the nav is showing, not necessarily today's real calendar month — a `Budget`'s `monthlyLimit`
+  still applies every month by default (see the `effectiveLimit`/`applyLimit` convention bullet
+  below for the override/scheduled-change machinery), the nav just lets a past or future month's
+  actual spent/earned be reviewed against that limit.
 
 All data is local — `AsyncStorage` only, no accounts, no sync. That's a deliberate v1 scope
 decision, not an oversight; see [TODO.md](TODO.md) for what's intentionally deferred.
@@ -340,10 +352,12 @@ src/
   the loaded list as their first argument now. If you add a new screen that shows a category, load
   it the same way (`getCategories()` inside the screen's existing `useFocusEffect`/`Promise.all`
   fetch), don't reach for a module-level constant that no longer exists.
-- **A `Budget`'s recurring `monthlyLimit` applies every month by default; the Budgets screen itself
-  has no month nav** — progress there and on Home always computes against the *real current* month
-  (`toMonthStr(new Date())`), regardless of what month is selected elsewhere in the app (e.g.
-  Transactions). Two ways to deviate from the recurring default, both set from `budget-editor.tsx`'s
+- **A `Budget`'s recurring `monthlyLimit` applies every month by default.** The Budgets screen
+  gained its own month nav (2026-08-27ish, alongside the Expense/Income page split — see the
+  screen's own bullet above) — progress there is computed against whatever month the nav is
+  showing, passed through to `getBudgetProgress`/`effectiveLimit` and on to `budget-editor.tsx` via
+  a `month` query param, not hardcoded to `toMonthStr(new Date())` the way Home's dashboard card
+  still is. Two ways to deviate from the recurring default, both set from `budget-editor.tsx`'s
   modal via `lib/budgets.ts`'s `applyLimit(categoryId, startMonth, limit, scope)`: `scope:
   'once'` writes to `Budget.overrides["YYYY-MM"]`, a single month's limit with no effect on any
   other month; `scope: 'onward'` writes `Budget.scheduledChange: { startMonth, limit }`, a change to
@@ -361,13 +375,26 @@ src/
   listing expense categories. Fixed by having `getBudgetProgress` take the loaded `Category[]` and
   resolve each budget's `type` from `getCategory(categories, categoryId)?.type` (defaulting to
   `'expense'` if the category was deleted/missing), picking expense- or income-side
-  `byCategoryTotals` accordingly. The Budgets screen now renders two sections — "Expense Budgets"
-  and "Income Goals" — each with its own `+` (see `category-editor.tsx` above) and its own
-  `ProgressBar type=` so the over-100% color means the right thing per section. `budget-editor.tsx`
+  `byCategoryTotals` accordingly. The Budgets screen renders "Expense Budgets" and "Income Goals" as
+  two pages of one swipeable toggle (2026-08-29, see the screen's own bullet above — originally two
+  stacked sections in one scroll), each with its own `+` (see `category-editor.tsx` above) and its
+  own `ProgressBar type=` so the over-100% color means the right thing per page. `budget-editor.tsx`
   swaps its wording (placeholder "Monthly limit"/"Monthly goal", "spent"/"earned", badge tint
   destructive/success) off the same `category.type` check. There's no separate "goal" data shape —
   an income budget is a `Budget` like any other, just interpreted differently at render/progress
   time because its category happens to be type `'income'`.
+- **Budgets Expense/Income pages (added 2026-08-29)** — replaced the two stacked sections (each with
+  a summary card above it) with two pages of one horizontal `pagingEnabled` ScrollView, same
+  swipe-or-tap-the-toggle pattern as Transactions' List/Calendar. The Expense/Income segmented
+  control fills destructive-red/success-green on selection instead of a flat accent color — same
+  convention as add-transaction.tsx's own type toggle — so the page's color, not just its label,
+  says which one is active; the page-dot row below it is tinted to match for the same reason. Each
+  summary card (`Total Budgeted` / `Income Goals`, both existing since the totals-and-status-pill
+  work earlier the same day) now lives inside its own page instead of being one combined card with
+  both blocks stacked — `overBudgetCount`/`goalsReachedCount` and their pills stayed put, just split
+  across the two card instances. The section label + `+` add button is the one thing still shared
+  across both pages rather than duplicated per page — it sits in the pinned header above the pager
+  and swaps its text/handler off the `view` state, rather than living inside each page's own scroll.
 - **A standalone Bills tab (added 2026-08-25) was removed again 2026-08-26** — it listed every
   `RecurringTransaction` with add/edit/cancel, but got pulled to make room for a dashboard-style
   redesign instead (see TODO.md). The "Repeat monthly" checkbox in add-transaction.tsx is
@@ -420,9 +447,29 @@ src/
   originally a smaller redraw of the old Stats tab's own `TrendChart` — Stats was removed
   2026-08-26 (its bar-chart-plus-breakdown content is now covered by Home's dashboard card and
   Transactions' Calendar view), so `MiniTrendChart` is the only survivor of that bar-chart shape.
-- **Transactions List/Calendar (added 2026-08-26)** — the two are pages of one horizontal
-  `pagingEnabled` ScrollView (`transactions.tsx`), both reading the same shared `month` state so the
-  month/year nav above them always applies to whichever page is active. A page-dot row (2026-08-27,
+- **Home's Expense/Income breakdown panel is a swipeable pager (added 2026-08-29)** — same
+  horizontal `pagingEnabled`-ScrollView-plus-segmented-toggle pattern as Budgets' Expense/Income
+  pages and Transactions' List/Calendar, applied to the ring chart + legend below the toggle
+  (`index.tsx`). Unlike those two, this pager lives nested inside `dashboardCard` — a padded,
+  `MaxContentWidth`-capped card, not the full screen — so its page width comes from an `onLayout`
+  measurement of a wrapping `View` (`breakdownPanelWidth`) instead of `useWindowDimensions()`, and
+  because a horizontal `ScrollView` doesn't size itself to its tallest child, each page also reports
+  its own measured height via `onLayout` and the pager takes `Math.max` of the two
+  (`breakdownPanelHeight`). Both pages are mounted at all times (`BreakdownPanel`, a local component
+  parameterized by `type: TransactionType` — extracted here since the ring+legend JSX is large enough
+  that duplicating it verbatim for both sides risked the two copies drifting) rather than only
+  rendering whichever side the toggle is on, since a real pager needs the *other* page already in the
+  DOM for a swipe to reveal it; `categoryBreakdown()` (a plain helper, not a hook) computes each
+  side's category list once per render. Tapped-segment selection is two separate pieces of state,
+  `selectedExpenseKey`/`selectedIncomeKey`, rather than one shared `selectedRingKey` — switching pages
+  no longer clears the other page's selection, only navigating to a different range (`start`/`end`
+  changing) does. The toggle still fills destructive-red/success-green on selection (unchanged from
+  its original 2026-08-26 styling) and the page-dot row is tinted to match, same as Budgets' own
+  Expense/Income toggle.
+- **Transactions List/Calendar (added 2026-08-26)** — only reachable in Month mode (2026-08-29, see
+  the "Transactions range selector" bullet below); the two are pages of one horizontal
+  `pagingEnabled` ScrollView (`transactions.tsx`), both reading the same shared `anchor` state so the
+  range nav above them always applies to whichever page is active. A page-dot row (2026-08-27,
   same 6px/16px-active shape as HabitTracker's own swipe-page dots) sits below the segmented toggle
   as a passive readout of which page is active — the toggle itself still does the tapping. The
   segmented toggle calls `pagerRef.current.scrollTo({x, animated: false})` — `animated: true`
@@ -437,30 +484,53 @@ src/
   (`TransactionRow`, same as the List page), and the selection resets whenever the month changes. The
   day grid itself is pinned above a separate inner `ScrollView` holding only the selected day's list
   (2026-08-27, "freeze panes" — same "pin the date selector above a scrolling detail panel" shape as
-  HabitTracker's own calendar tab) rather than the whole page being one ScrollView.
-  The month nav itself (added 2026-08-26, replacing an earlier fast-rewind/fast-forward pair)
-  matches HabitTracker's own month-nav shape: chevrons plus a tap-to-open `MonthYearPickerModal`
-  (year pager + 12-month grid). Chevrons are `theme.accent`/blue and the month label is plain
-  text/black (recolored 2026-08-27, per explicit feedback, to match HabitTracker's own
-  arrows-blue/label-black scheme app-wide — this reverses the 2026-08-26 "deliberate inversion" note
-  that used to live here; there is no inversion anymore, both apps now agree). The modal
-  uses `animationType="none"`, not `"fade"` — RNW's fade relies on a CSS `animationend` event to
-  actually unmount, which doesn't reliably fire in every browser context and left the modal visually
-  stuck open after `visible` went false; `"none"` sidesteps that class of bug entirely.
-  `MonthYearPickerModal` is defined locally in both `transactions.tsx` and `index.tsx` (Home's month
-  nav got the identical treatment 2026-08-26 too — "same date-area treatment everywhere" was an
-  explicit ask) rather than shared, per the no-premature-abstraction rule — 2 occurrences, not yet 3.
+  HabitTracker's own calendar tab) rather than the whole page being one ScrollView. Chevrons are
+  `theme.accent`/blue and the range label is plain text/black (recolored 2026-08-27, per explicit
+  feedback, to match HabitTracker's own arrows-blue/label-black scheme app-wide — this reverses the
+  2026-08-26 "deliberate inversion" note that used to live here; there is no inversion anymore, both
+  apps now agree).
+- **Transactions range selector (added 2026-08-29)** — replaced the earlier month-only nav (chevrons
+  plus a tap-to-open `MonthYearPickerModal`, year pager + 12-month grid) with the same Week/Month/Year
+  `rangeType`/`anchor`/`rangeBounds`/`shiftAnchor`/`RangePickerModal` machinery as Home's own range
+  selector (see Home's dashboard card bullet above) — `RangePickerModal` is defined locally in both
+  `transactions.tsx` and `index.tsx` (2 occurrences, not yet 3), same no-premature-abstraction call as
+  the modal it replaced here. The modal still uses `animationType="none"`, not `"fade"` — RNW's fade
+  relies on a CSS `animationend` event to actually unmount, which doesn't reliably fire in every
+  browser context and left the modal visually stuck open after `visible` went false; `"none"`
+  sidesteps that class of bug entirely. List reads off `transactionsInRange(filteredTransactions,
+  start, end)` now instead of `transactionsForMonth` (see `lib/transactions.ts`'s own comment on the
+  two), so Week and Year modes total an arbitrary week or year, not just a month. Calendar has no
+  week/year equivalent — a day-of-month grid has no other shape — so switching `rangeType` away from
+  `'month'` snaps `view` back to `'list'` (a `useEffect` on `rangeType`, read via the functional
+  `setState` form so it doesn't also need `view` in its dependency array) and Month mode is the only
+  time the List/Calendar toggle and page-dot row render at all; Week/Year mode renders the same
+  `transactionList` element directly, full-bleed, with no pager around it.
+- **Transactions filter (added 2026-08-29)** — a funnel button next to `SettingsButton` in the header
+  (fills solid `theme.accent` with a small destructive dot badge when a filter is active, otherwise
+  the same soft-accent-circle look as `SettingsButton`) opens `FilterModal`: an "All/Expenses/Income"
+  segmented toggle plus a multi-select grid of category chips (same `categoryChip` shape as
+  add-transaction.tsx's own category grid), filtered to whichever type is selected. Picking a type
+  drops any already-selected category that no longer matches it (an income category selected under an
+  'expense' filter could never match anything). Selections apply live — no separate Apply/Done step —
+  via a `TransactionFilter = { type: 'all' | TransactionType; categoryIds: string[] }` that the screen
+  runs every loaded transaction through once (`applyTransactionFilter`, empty `categoryIds` meaning
+  "every category of whichever type") before either page ever sees them, so neither List nor Calendar
+  has to know filtering exists — Calendar's per-day expense/income figures and its day-detail list
+  narrow for free since they're already computed off the filtered set. "Clear filters" resets to
+  `EMPTY_FILTER` and is disabled (greyed, no-op) when nothing is active.
 - **Pinned headers + white backgrounds (2026-08-27)** — every tab's screen background switched from
   `theme.backgroundElement` (light grey) to `theme.background` (white), per explicit feedback; the
   grey remains in use elsewhere (pressed-row highlight, the ring chart's track color, disabled-button
   fill) since only the screen-level background was called out. Each tab's title/date-selector area
   is now pinned above its `ScrollView`/`SectionList` instead of scrolling away with the content
-  ("freeze panes") — Home and Budgets' `ScreenHeader` (Home's also carries its month nav); Budgets'
-  two section headers ("EXPENSE BUDGETS"/"INCOME GOALS") are additionally sticky via `ScrollView`'s
-  `stickyHeaderIndices`, which required flattening each header+group pair into direct ScrollView
-  children instead of nesting them in one wrapping section `View` (`stickyHeaderIndices` addresses a
-  `View`'s direct children by position). See the Transactions bullet above for that tab's own version
-  of the same idea (`SectionList` sticky headers on List, a pinned day-grid on Calendar).
+  ("freeze panes") — Home and Budgets' `ScreenHeader` (Home's also carries its month nav). Budgets'
+  own pinned area originally kept its "EXPENSE BUDGETS"/"INCOME GOALS" section headers sticky via
+  `ScrollView`'s `stickyHeaderIndices` when both sections shared one scroll; the 2026-08-29
+  Expense/Income page split (see the screen's own bullet above) replaced that with a single section
+  label + `+` button living in the pinned area itself, above a horizontal pager — so there's no
+  `stickyHeaderIndices` on Budgets anymore, each page's own `ScrollView` is a plain single-section
+  scroll. See the Transactions bullet above for that tab's own version of the pinned-header idea
+  (`SectionList` sticky headers on List, a pinned day-grid on Calendar).
 - **`react-native-draggable-flatlist`/reanimated-heavy list interactions have not been needed
   yet** — there's no drag-and-drop anywhere in this app. If one gets added, read HabitTracker's
   `CLAUDE.md` "Home habit reordering" bullet first; it documents a real, hard-won lesson about

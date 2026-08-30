@@ -14,8 +14,11 @@ export default function RootLayout() {
 
   useEffect(() => {
     // Materialize any due recurring transactions once per session, then reveal the UI.
+    // hideAsync() rejects (unhandled) if the splash is already gone — e.g. a Fast
+    // Refresh reload, or React dev-mode double-invoking this effect — so swallow it;
+    // there's nothing to recover from and it isn't worth surfacing as an error.
     generateDueTransactions().finally(() => {
-      SplashScreen.hideAsync();
+      SplashScreen.hideAsync().catch(() => {});
     });
   }, []);
 

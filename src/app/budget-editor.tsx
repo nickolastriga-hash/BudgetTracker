@@ -51,7 +51,13 @@ const thisMonth = toMonthStr(new Date());
 export default function BudgetEditorScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, month } = useLocalSearchParams<{ id: string; month?: string }>();
+  // The month Budgets was navigated to when this row was tapped — everything
+  // here (spent/limit shown, whether an override is "active", the default
+  // "starting on" point below) is relative to that, not necessarily today's
+  // real calendar month. Falls back to the real current month if opened
+  // without one (e.g. a stale deep link).
+  const viewedMonth = month ?? thisMonth;
 
   const [category, setCategory] = useState<Category | null>(null);
   const [budget, setBudget] = useState<Budget | undefined>(undefined);
@@ -59,28 +65,29 @@ export default function BudgetEditorScreen() {
   const [loaded, setLoaded] = useState(false);
 
   const [draftLimit, setDraftLimit] = useState('');
-  const [draftStartMonth, setDraftStartMonth] = useState(thisMonth);
-  const [calendarYear, setCalendarYear] = useState(() => new Date().getFullYear());
+  const [draftStartMonth, setDraftStartMonth] = useState(viewedMonth);
+  const [calendarYear, setCalendarYear] = useState(() => Number(viewedMonth.split('-')[0]));
 
   useEffect(() => {
     Promise.all([getCategories(), getBudgets(), getTransactions()]).then(([categories, budgets, transactions]) => {
       setCategory(categories.find((c) => c.id === id) ?? null);
       const existing = budgets.find((b) => b.categoryId === id);
       setBudget(existing);
-      setDraftLimit(existing ? String(effectiveLimit(existing, thisMonth)) : '');
-      const progress = getBudgetProgress(budgets, transactions, thisMonth, categories).find((p) => p.categoryId === id);
+      setDraftLimit(existing ? String(effectiveLimit(existing, viewedMonth)) : '');
+      const progress = getBudgetProgress(budgets, transactions, viewedMonth, categories).find((p) => p.categoryId === id);
       setSpent(progress?.spent ?? 0);
       setLoaded(true);
     });
-  }, [id]);
+  }, [id, viewedMonth]);
 
   if (!loaded || !category || !id) return null;
 
   const isIncome = category.type === 'income';
 
   const hasActiveOverride =
-    !!budget && (budget.overrides?.[thisMonth] != null || (!!budget.scheduledChange && budget.scheduledChange.startMonth <= thisMonth));
-  const upcoming = budget?.scheduledChange && budget.scheduledChange.startMonth > thisMonth ? budget.scheduledChange : null;
+    !!budget &&
+    (budget.overrides?.[viewedMonth] != null || (!!budget.scheduledChange && budget.scheduledChange.startMonth <= viewedMonth));
+  const upcoming = budget?.scheduledChange && budget.scheduledChange.startMonth > viewedMonth ? budget.scheduledChange : null;
   const startLabel = draftStartMonth === thisMonth ? 'This month' : monthLabel(draftStartMonth);
   const calendarMonths = monthsInYear(calendarYear);
   const calendarRows = [calendarMonths.slice(0, 4), calendarMonths.slice(4, 8), calendarMonths.slice(8, 12)];
@@ -94,7 +101,7 @@ export default function BudgetEditorScreen() {
   }
 
   async function handleReset() {
-    if (id) await resetToDefault(id, thisMonth);
+    if (id) await resetToDefault(id, viewedMonth);
     router.back();
   }
 
@@ -124,7 +131,8 @@ export default function BudgetEditorScreen() {
         <View>
           <ThemedText type="small" themeColor="textSecondary">
             ${formatAmount(spent)} {isIncome ? 'earned' : 'spent'} of $
-            {formatAmount(budget ? effectiveLimit(budget, thisMonth) : 0)} {isIncome ? 'goal ' : ''}this month
+            {formatAmount(budget ? effectiveLimit(budget, viewedMonth) : 0)} {isIncome ? 'goal ' : ''}
+            {viewedMonth === thisMonth ? 'this month' : `in ${monthLabel(viewedMonth)}`}
           </ThemedText>
           {upcoming && (
             <ThemedText type="small" themeColor="accent">
@@ -211,7 +219,7 @@ export default function BudgetEditorScreen() {
         {hasActiveOverride && (
           <Pressable onPress={handleReset} hitSlop={8}>
             <ThemedText type="small" themeColor="accent">
-              Reset {monthLabel(thisMonth)} to the recurring default
+              Reset {monthLabel(viewedMonth)} to the recurring default
             </ThemedText>
           </Pressable>
         )}
