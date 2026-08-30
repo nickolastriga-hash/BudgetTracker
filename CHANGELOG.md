@@ -2,6 +2,22 @@
 
 Newest first.
 
+## 2026-08-30 — Custom date range + new Trends tab
+
+- Home and Transactions' Week/Month/Year range nav gained a 4th "Custom" option — two taps on a
+  calendar day grid set a start/end range, and the nav chevrons slide the whole window by its own
+  length. Once a 3rd screen (Trends, below) needed the same machinery, `rangeBounds`/`shiftAnchor`/
+  `shiftCustomRange`/`RangePickerModal` were extracted out of their per-file duplicates into
+  `lib/date-range.ts` and `components/range-picker-modal.tsx`; Home and Transactions now import from
+  there instead.
+- New **Trends** tab: a Month/Year/Custom range nav (no Week) plus a swipeable Expenses/Income/Net
+  pager. Each page is a `CumulativeTrendChart` (`components/cumulative-trend-chart.tsx`, new
+  react-native-svg component) — a running daily total of actual transactions, capped at today, against
+  a flat grey dotted line at that period's total budgeted/goal amount (summed only from categories
+  that actually have a limit/goal set). Net's line is derived from the other two (`income - expense`)
+  rather than scanned separately. Press-and-hold-drag on the chart shows a per-day callout with that
+  day's date, actual total, and budget total.
+
 ## 2026-08-27 — Ring gaps tightened + small segments grouped into "Other"
 
 - Follow-up to the overlap fix below, per feedback that gaps were still too wide in places and some

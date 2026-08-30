@@ -1,10 +1,20 @@
 # Project State
 
-_Last updated: 2026-08-29_
+_Last updated: 2026-08-30_
 
 Snapshot of where the app stands. History: [CHANGELOG.md](CHANGELOG.md). Upcoming: [TODO.md](TODO.md).
 
 ## What's implemented
+
+- **Custom date range + new Trends tab (2026-08-30)** — Home and Transactions' Week/Month/Year range
+  nav gained a 4th "Custom" pill (tap two days on a calendar to set start/end; nav chevrons slide the
+  whole window by its own length). That range-picker machinery (`rangeBounds`/`shiftAnchor`/
+  `RangePickerModal`, previously duplicated per-file) was extracted to `lib/date-range.ts` +
+  `components/range-picker-modal.tsx` once a 4th tab, **Trends**, became a 3rd near-identical
+  consumer. Trends shows cumulative actual-vs-budget: a Month/Year/Custom nav, an Expenses/Income/Net
+  swipeable pager, each page a `CumulativeTrendChart` line (actual, capped at today) against a flat
+  grey dotted budget/goal reference line, with press-and-hold-drag scrubbing for a per-day value
+  callout. See CLAUDE.md's "Custom date range" and "Trends tab" convention bullets for the mechanics.
 
 - **Budgets and Home both gained swipeable Expense/Income pagers (2026-08-29)** — Budgets replaced
   its two stacked "Expense Budgets"/"Income Goals" sections with two pages of a horizontal

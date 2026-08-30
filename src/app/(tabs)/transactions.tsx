@@ -1,6 +1,6 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Modal,
   NativeScrollEvent,
@@ -16,6 +16,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CategoryBadge } from '@/components/category-badge';
+import { RangePickerModal } from '@/components/range-picker-modal';
 import { ScreenHeader } from '@/components/screen-header';
 import { SettingsButton } from '@/components/settings-button';
 import { ThemedText } from '@/components/themed-text';
@@ -23,9 +24,17 @@ import { TransactionRow } from '@/components/transaction-row';
 import { BottomTabInset, CardRadius, CardShadow, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { categoriesForType, getCategories, getCategory, type Category } from '@/lib/categories';
+import {
+  daysInMonth,
+  rangeBounds,
+  shiftAnchor,
+  shiftCustomRange,
+  toDateStr,
+  toMonthStr,
+  type CustomRange,
+  type RangeType,
+} from '@/lib/date-range';
 import { getTransactions, transactionsForMonth, transactionsInRange, type Transaction, type TransactionType } from '@/lib/transactions';
-
-type RangeType = 'week' | 'month' | 'year';
 
 // Which transactions to show — 'all' (no type filter) plus an optional set
 // of category ids. An empty categoryIds list means "every category of
@@ -46,246 +55,13 @@ function applyTransactionFilter(transactions: Transaction[], filter: Transaction
   });
 }
 
-function toMonthStr(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-}
-
-function toDateStr(date: Date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
-function monthLabel(date: Date) {
-  return date.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
-}
-
-function shortDateLabel(date: Date) {
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
-
 function dateHeaderLabel(dateStr: string) {
   const date = new Date(`${dateStr}T00:00:00`);
   return date.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
 }
 
-function daysInMonth(year: number, month: number) {
-  return new Date(year, month + 1, 0).getDate();
-}
-
-// Sunday-start week, matching the weekday grid Calendar's own day grid uses
-// (WEEKDAY_LABELS below starts with 'S') and Home's own week range.
-function startOfWeek(date: Date) {
-  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  d.setDate(d.getDate() - d.getDay());
-  return d;
-}
-
-function endOfWeek(date: Date) {
-  const d = startOfWeek(date);
-  d.setDate(d.getDate() + 6);
-  return d;
-}
-
-// Resolves the range-type toggle + navigated anchor date into the
-// [start, end] "YYYY-MM-DD" bounds transactionsInRange takes, plus the label
-// shown between the nav chevrons — same shape as Home's own rangeBounds,
-// duplicated rather than shared per the no-premature-abstraction rule (2
-// occurrences, not yet 3).
-function rangeBounds(rangeType: RangeType, anchor: Date): { start: string; end: string; label: string } {
-  if (rangeType === 'week') {
-    const start = startOfWeek(anchor);
-    const end = endOfWeek(anchor);
-    const label =
-      start.getFullYear() === end.getFullYear()
-        ? `${shortDateLabel(start)} – ${end.getMonth() === start.getMonth() ? end.getDate() : shortDateLabel(end)}, ${end.getFullYear()}`
-        : `${shortDateLabel(start)}, ${start.getFullYear()} – ${shortDateLabel(end)}, ${end.getFullYear()}`;
-    return { start: toDateStr(start), end: toDateStr(end), label };
-  }
-  if (rangeType === 'year') {
-    const year = anchor.getFullYear();
-    return { start: `${year}-01-01`, end: `${year}-12-31`, label: String(year) };
-  }
-  const start = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
-  const end = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0);
-  return { start: toDateStr(start), end: toDateStr(end), label: monthLabel(anchor) };
-}
-
-function shiftAnchor(rangeType: RangeType, anchor: Date, dir: 1 | -1): Date {
-  if (rangeType === 'week') return new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate() + 7 * dir);
-  if (rangeType === 'year') return new Date(anchor.getFullYear() + dir, anchor.getMonth(), 1);
-  return new Date(anchor.getFullYear(), anchor.getMonth() + dir, 1);
-}
-
+// Also used by Calendar's own day-of-month grid below.
 const WEEKDAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-
-const MONTH_NAMES = Array.from({ length: 12 }, (_, m) =>
-  new Date(2000, m, 1).toLocaleDateString(undefined, { month: 'short' })
-);
-// Years grouped 12-per-page purely so the year grid reuses the exact same
-// 4-column/3-row pickerGrid/pickerCell shape as the month grid below — not
-// tied to any calendar meaning the way a decade would be.
-const YEARS_PER_PAGE = 12;
-
-// Same trigger (tap the nav label) opens this for all three range types, but
-// what it shows differs — a year-pager + 12-month grid for month mode (the
-// original, single-purpose picker this grew out of), a paged 12-years grid
-// for year mode, and a month-pager + day-of-month grid (picking any day
-// selects the week it falls in) for week mode. Same shape as Home's own
-// RangePickerModal, duplicated rather than shared (2 occurrences, not yet
-// 3) — this replaced the plain month/year-only picker Transactions had
-// before it grew a week/year range selector of its own (2026-08-29).
-function RangePickerModal({
-  visible,
-  rangeType,
-  anchor,
-  onSelect,
-  onClose,
-}: {
-  visible: boolean;
-  rangeType: RangeType;
-  anchor: Date;
-  onSelect: (date: Date) => void;
-  onClose: () => void;
-}) {
-  const theme = useTheme();
-  const [cursor, setCursor] = useState(anchor);
-
-  useEffect(() => {
-    if (visible) setCursor(anchor);
-  }, [visible, anchor]);
-
-  let header: ReactNode;
-  let body: ReactNode;
-
-  if (rangeType === 'year') {
-    const pageStart = Math.floor(cursor.getFullYear() / YEARS_PER_PAGE) * YEARS_PER_PAGE;
-    const years = Array.from({ length: YEARS_PER_PAGE }, (_, i) => pageStart + i);
-    header = (
-      <>
-        <Pressable hitSlop={10} onPress={() => setCursor((c) => new Date(c.getFullYear() - YEARS_PER_PAGE, 0, 1))}>
-          <MaterialIcons name="chevron-left" size={24} color={theme.accent} />
-        </Pressable>
-        <ThemedText type="smallBold">
-          {years[0]}–{years[years.length - 1]}
-        </ThemedText>
-        <Pressable hitSlop={10} onPress={() => setCursor((c) => new Date(c.getFullYear() + YEARS_PER_PAGE, 0, 1))}>
-          <MaterialIcons name="chevron-right" size={24} color={theme.accent} />
-        </Pressable>
-      </>
-    );
-    body = (
-      <View style={styles.pickerGrid}>
-        {years.map((y) => {
-          const isSelected = y === anchor.getFullYear();
-          return (
-            <Pressable
-              key={y}
-              onPress={() => onSelect(new Date(y, 0, 1))}
-              style={[styles.pickerCell, isSelected && { backgroundColor: theme.accent }]}>
-              <ThemedText type="smallBold" style={isSelected && styles.pickerCellTextSelected}>
-                {y}
-              </ThemedText>
-            </Pressable>
-          );
-        })}
-      </View>
-    );
-  } else if (rangeType === 'week') {
-    const year = cursor.getFullYear();
-    const monthIndex = cursor.getMonth();
-    const firstWeekday = new Date(year, monthIndex, 1).getDay();
-    const total = daysInMonth(year, monthIndex);
-    const cells: (number | null)[] = [
-      ...Array(firstWeekday).fill(null),
-      ...Array.from({ length: total }, (_, i) => i + 1),
-    ];
-    const selectedStart = toDateStr(startOfWeek(anchor));
-    const selectedEnd = toDateStr(endOfWeek(anchor));
-    header = (
-      <>
-        <Pressable hitSlop={10} onPress={() => setCursor((c) => new Date(c.getFullYear(), c.getMonth() - 1, 1))}>
-          <MaterialIcons name="chevron-left" size={24} color={theme.accent} />
-        </Pressable>
-        <ThemedText type="smallBold">{monthLabel(cursor)}</ThemedText>
-        <Pressable hitSlop={10} onPress={() => setCursor((c) => new Date(c.getFullYear(), c.getMonth() + 1, 1))}>
-          <MaterialIcons name="chevron-right" size={24} color={theme.accent} />
-        </Pressable>
-      </>
-    );
-    body = (
-      <>
-        <View style={styles.weekdayRow}>
-          {WEEKDAY_LABELS.map((w, i) => (
-            <ThemedText key={i} type="small" themeColor="textTertiary" style={styles.weekdayLabel}>
-              {w}
-            </ThemedText>
-          ))}
-        </View>
-        <View style={styles.dayGrid}>
-          {cells.map((day, i) => {
-            if (day === null) return <View key={`empty-${i}`} style={styles.dayCell} />;
-            const dateStr = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-            const inSelectedWeek = dateStr >= selectedStart && dateStr <= selectedEnd;
-            return (
-              <Pressable key={dateStr} onPress={() => onSelect(new Date(year, monthIndex, day))} style={styles.dayCell}>
-                <View style={[styles.dayCellInner, inSelectedWeek && { backgroundColor: theme.accent }]}>
-                  <ThemedText type="small" style={inSelectedWeek && styles.pickerCellTextSelected}>
-                    {day}
-                  </ThemedText>
-                </View>
-              </Pressable>
-            );
-          })}
-        </View>
-      </>
-    );
-  } else {
-    const year = cursor.getFullYear();
-    header = (
-      <>
-        <Pressable hitSlop={10} onPress={() => setCursor((c) => new Date(c.getFullYear() - 1, c.getMonth(), 1))}>
-          <MaterialIcons name="chevron-left" size={24} color={theme.accent} />
-        </Pressable>
-        <ThemedText type="smallBold">{year}</ThemedText>
-        <Pressable hitSlop={10} onPress={() => setCursor((c) => new Date(c.getFullYear() + 1, c.getMonth(), 1))}>
-          <MaterialIcons name="chevron-right" size={24} color={theme.accent} />
-        </Pressable>
-      </>
-    );
-    body = (
-      <View style={styles.pickerGrid}>
-        {MONTH_NAMES.map((name, m) => {
-          const isSelected = year === anchor.getFullYear() && m === anchor.getMonth();
-          return (
-            <Pressable
-              key={name}
-              onPress={() => onSelect(new Date(year, m, 1))}
-              style={[styles.pickerCell, isSelected && { backgroundColor: theme.accent }]}>
-              <ThemedText type="smallBold" style={isSelected && styles.pickerCellTextSelected}>
-                {name}
-              </ThemedText>
-            </Pressable>
-          );
-        })}
-      </View>
-    );
-  }
-
-  return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
-      <Pressable style={styles.modalBackdrop} onPress={onClose}>
-        <Pressable
-          style={[styles.pickerCard, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}
-          onPress={() => {}}>
-          <View style={styles.pickerHeader}>{header}</View>
-          {body}
-        </Pressable>
-      </Pressable>
-    </Modal>
-  );
-}
 
 // Type + category filter, reached via the funnel button in the header.
 // Applies to both List and Calendar (the caller filters `transactions`
@@ -557,6 +333,7 @@ export default function TransactionsScreen() {
   const insets = useSafeAreaInsets();
   const [rangeType, setRangeType] = useState<RangeType>('month');
   const [anchor, setAnchor] = useState(() => new Date());
+  const [customRange, setCustomRange] = useState<CustomRange | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [view, setView] = useState<'list' | 'calendar'>('list');
@@ -581,7 +358,15 @@ export default function TransactionsScreen() {
     }, [])
   );
 
-  const { start, end, label } = rangeBounds(rangeType, anchor);
+  const { start, end, label } = rangeBounds(rangeType, anchor, customRange);
+
+  // Closes the picker the instant a custom range is completed (its second
+  // tap sets `end`) — reference-equal no-op the rest of the time, so
+  // reopening the modal to edit an already-complete range doesn't re-fire
+  // this and immediately close it again.
+  useEffect(() => {
+    if (customRange?.end) setPickerVisible(false);
+  }, [customRange]);
 
   // Calendar is inherently a month-grid view — there's no sensible
   // calendar-page equivalent for a week or a year, so switching away from
@@ -633,7 +418,8 @@ export default function TransactionsScreen() {
   // underneath, the "freeze panes on rows" treatment. keyExtractor keys off
   // that date since there's exactly one item per section (index lines up).
   const sections = groups.map(([date, items]) => ({ date, data: [items] }));
-  const rangeNoun = rangeType === 'week' ? 'week' : rangeType === 'year' ? 'year' : 'month';
+  const rangeNoun =
+    rangeType === 'week' ? 'week' : rangeType === 'year' ? 'year' : rangeType === 'custom' ? 'range' : 'month';
   const emptyMessage = hasFilter ? `No matching transactions this ${rangeNoun}.` : `No transactions this ${rangeNoun}.`;
 
   // Same SectionList either way — month mode nests it as the List page of
@@ -703,7 +489,15 @@ export default function TransactionsScreen() {
           />
 
           <View style={styles.monthNav}>
-            <Pressable hitSlop={10} onPress={() => setAnchor((a) => shiftAnchor(rangeType, a, -1))}>
+            <Pressable
+              hitSlop={10}
+              onPress={() => {
+                if (rangeType === 'custom') {
+                  setCustomRange((r) => (r && r.end ? shiftCustomRange(r, -1) : r));
+                } else {
+                  setAnchor((a) => shiftAnchor(rangeType, a, -1));
+                }
+              }}>
               <MaterialIcons name="chevron-left" size={26} color={theme.accent} />
             </Pressable>
             <Pressable hitSlop={10} onPress={() => setPickerVisible(true)}>
@@ -711,24 +505,35 @@ export default function TransactionsScreen() {
                 {label}
               </ThemedText>
             </Pressable>
-            <Pressable hitSlop={10} onPress={() => setAnchor((a) => shiftAnchor(rangeType, a, 1))}>
+            <Pressable
+              hitSlop={10}
+              onPress={() => {
+                if (rangeType === 'custom') {
+                  setCustomRange((r) => (r && r.end ? shiftCustomRange(r, 1) : r));
+                } else {
+                  setAnchor((a) => shiftAnchor(rangeType, a, 1));
+                }
+              }}>
               <MaterialIcons name="chevron-right" size={26} color={theme.accent} />
             </Pressable>
           </View>
 
-          <View style={[styles.segmented, { borderColor: theme.border }]}>
-            {(['week', 'month', 'year'] as const).map((rt) => {
+          <View style={[styles.segmented, styles.rangeToggle, { borderColor: theme.border }]}>
+            {(['week', 'month', 'year', 'custom'] as const).map((rt) => {
               const isSelected = rangeType === rt;
               return (
                 <Pressable
                   key={rt}
-                  onPress={() => setRangeType(rt)}
+                  onPress={() => {
+                    setRangeType(rt);
+                    if (rt === 'custom' && !customRange) setPickerVisible(true);
+                  }}
                   style={[styles.segment, isSelected && { backgroundColor: theme.accent }]}>
                   <ThemedText
                     type="smallBold"
                     themeColor={isSelected ? 'text' : 'textSecondary'}
                     style={isSelected && { color: '#ffffff' }}>
-                    {rt === 'week' ? 'Week' : rt === 'month' ? 'Month' : 'Year'}
+                    {rt === 'week' ? 'Week' : rt === 'month' ? 'Month' : rt === 'year' ? 'Year' : 'Custom'}
                   </ThemedText>
                 </Pressable>
               );
@@ -812,11 +617,23 @@ export default function TransactionsScreen() {
         visible={pickerVisible}
         rangeType={rangeType}
         anchor={anchor}
+        customRange={customRange}
         onSelect={(date) => {
           setAnchor(date);
           setPickerVisible(false);
         }}
-        onClose={() => setPickerVisible(false)}
+        onSelectCustomDay={(dateStr) => {
+          setCustomRange((r) => {
+            if (!r || r.end !== null) return { start: dateStr, end: null };
+            return dateStr >= r.start ? { start: r.start, end: dateStr } : { start: dateStr, end: r.start };
+          });
+        }}
+        onClose={() => {
+          setPickerVisible(false);
+          // Abandoning a pending pick (start tapped, no end yet) clears it
+          // rather than leaving the range stuck showing "Select end date".
+          setCustomRange((r) => (r && r.end === null ? null : r));
+        }}
       />
 
       <FilterModal
@@ -875,6 +692,11 @@ const styles = StyleSheet.create({
   monthLabel: {
     minWidth: 132,
     textAlign: 'center',
+  },
+  // Wider than the plain segmented cap below — this toggle has a 4th
+  // ("Custom") option the List/Calendar and filter-type toggles don't.
+  rangeToggle: {
+    maxWidth: 320,
   },
   segmented: {
     flexDirection: 'row',
@@ -1002,34 +824,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.4)',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  pickerCard: {
-    borderRadius: CardRadius,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: Spacing.four,
-    width: '85%',
-    maxWidth: 360,
-    gap: Spacing.three,
-  },
-  pickerHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  pickerGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginHorizontal: -Spacing.one,
-  },
-  pickerCell: {
-    width: '25%',
-    paddingHorizontal: Spacing.one,
-    paddingVertical: Spacing.two + 2,
-    borderRadius: Spacing.two,
-    alignItems: 'center',
-  },
-  pickerCellTextSelected: {
-    color: '#ffffff',
   },
   filterCard: {
     borderRadius: CardRadius,

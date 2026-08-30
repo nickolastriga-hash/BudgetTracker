@@ -7,7 +7,8 @@
 A single-user, offline-first budget tracking app built with Expo Router. Users log expense/income
 transactions against a fixed set of categories, set optional monthly spending limits per category,
 and can mark a transaction as recurring monthly (e.g. rent, subscriptions) so it's regenerated
-automatically each month. Three tabs, each opening with a `ScreenHeader` title (added 2026-08-26,
+automatically each month. Four tabs (Home/Transactions/Budgets/Trends — Trends added 2026-08-30, see
+its own bullet below), each opening with a `ScreenHeader` title (added 2026-08-26,
 `components/screen-header.tsx` — 28/700, matching HabitTracker's own per-tab header sizing) plus a
 `SettingsButton` in the header's top-right corner (also 2026-08-26, matching HabitTracker's
 ProfileButton size/placement — a gear glyph instead of a profile avatar, since there's no accounts
@@ -49,6 +50,16 @@ system to show a profile for; opens `app/settings.tsx`, see its own bullet below
   still applies every month by default (see the `effectiveLimit`/`applyLimit` convention bullet
   below for the override/scheduled-change machinery), the nav just lets a past or future month's
   actual spent/earned be reviewed against that limit.
+- **Trends** (added 2026-08-30) — "Trends" header, a Month/Year/Custom range nav (no Week option —
+  see the screen's own convention bullet below), then an Expenses/Income/Net segmented toggle plus a
+  page-dot row, same swipeable-pager pattern as Budgets' and Home's own pagers. Each page is a
+  `CumulativeTrendChart` line — a running daily total of that type's actual transactions across the
+  navigated range — against a flat dashed reference line at that period's total budgeted/goal amount
+  (summed from whichever categories actually have a budget/goal set), plus an actual-vs-budget summary
+  row above the chart (a colored total, the budget total, and a green/red over-or-under pill). Net's
+  page derives its line from the other two (`income - expense`, index-for-index) rather than its own
+  transaction scan, and its "budgeted" reference is `incomeBudgetTotal - expenseBudgetTotal`. See the
+  screen's own convention bullet below for the full mechanics.
 
 All data is local — `AsyncStorage` only, no accounts, no sync. That's a deliberate v1 scope
 decision, not an oversight; see [TODO.md](TODO.md) for what's intentionally deferred.
@@ -86,7 +97,8 @@ build via `sign.expo.dev` (works with SDK 57 but the provisioning profile expire
 `eas go` + TestFlight (needs a paid Apple Developer account). Revisit this pin once Apple approves
 a newer Expo Go build, or if a dev-client build ever becomes the workflow instead of Expo Go.
 - **TypeScript, strict**, project has zero `tsc --noEmit` errors — keep it that way.
-- **react-native-svg** for Home's dashboard card (`CategoryRingChart`, `MiniTrendChart`).
+- **react-native-svg** for Home's dashboard card (`CategoryRingChart`) and Trends' own
+  `CumulativeTrendChart` (added 2026-08-30).
 - **AsyncStorage** (`@react-native-async-storage/async-storage`) as the only persistence layer.
 - **@expo/vector-icons** (`MaterialIcons`) for all icons — category icons, tab icons (via
   `NativeTabs.Trigger.VectorIcon` on native, plain `<MaterialIcons>` in the web tab bar), and UI
@@ -122,6 +134,9 @@ src/
                           2026-08-26), see the "Transactions List/Calendar"
                           convention bullet below.
       budgets.tsx         Budgets
+      trends.tsx           Trends (added 2026-08-30) — Expense/Income/Net
+                          swipeable pager of CumulativeTrendChart lines, see
+                          the "Trends tab" convention bullet below.
     add-transaction.tsx   Add/edit modal — type toggle, amount, category grid,
                           a self-contained calendar-panel date picker (capped at
                           today), optional note, and (new transactions only) a
@@ -162,6 +177,14 @@ src/
                           lib/demo-data.ts#generateYearToDateDemoData().
 
   lib/
+    date-range.ts           Week/Month/Year/Custom range machinery (RangeType,
+                          CustomRange, rangeBounds, shiftAnchor,
+                          shiftCustomRange, daysBetween, monthsBetween, plus
+                          the date-formatting helpers they're built from) —
+                          extracted from Home/Transactions 2026-08-30 when
+                          Trends became a 3rd near-identical copy, see the
+                          "Custom date range" and "Trends tab" convention
+                          bullets below for the full history.
     transactions.ts       Transaction CRUD (AsyncStorage), month/category totals.
                           Writes go through a private promise-chain queue so two
                           rapid saves can't race on read-modify-write.
@@ -222,6 +245,56 @@ src/
                           per-month density grew much larger.
 
   components/
+    range-picker-modal.tsx   RangePickerModal (extracted 2026-08-30 from Home/
+                          Transactions' own near-identical copies once Trends
+                          became a 3rd — see the "Custom date range" and
+                          "Trends tab" convention bullets below). Renders
+                          whichever of the 4 rangeType bodies (year-pager +
+                          12-month grid / paged 12-years grid / month-pager +
+                          day grid for week / same day grid for custom, two
+                          taps) the caller is currently on — it doesn't need
+                          to be told which rangeTypes a given screen offers,
+                          since the caller's own segmented control already
+                          restricts which values ever reach it (Trends never
+                          passes 'week', for instance).
+    cumulative-trend-chart.tsx  CumulativeTrendChart (added 2026-08-30) for
+                          Trends — a react-native-svg `Polyline` running-total
+                          line against a flat grey dotted `Line` at the
+                          period's budget/goal total (`budgetTotal: null`
+                          skips that reference line entirely rather than
+                          drawing it at $0). Bucketed by day regardless of the
+                          caller's range type (Month/Year/Custom all resolve
+                          to a plain day list via lib/date-range's
+                          daysBetween before reaching here, already capped to
+                          today by the caller — see the "Trends tab"
+                          convention bullet below) — one rendering path
+                          instead of three. Press-and-hold-drag scrubbing
+                          (added same day, a follow-up to the initial build)
+                          shows a per-day callout (date, actual, budget) via
+                          a transparent touch-responder `View` overlaid as a
+                          sibling of the `<Svg>` (not a wrapper — same
+                          "ancestor Pressable around an Svg triggers spurious
+                          console errors on web" reasoning as
+                          CategoryRingChart's own tap handling), which also
+                          reuses that component's `measureInWindow`-plus-
+                          cached-offset approach to turn a touch's `pageX`
+                          into a local x rather than trusting the responder
+                          event's own `locationX` (proved unreliable on web
+                          there, so this mirrors what already worked instead
+                          of risking the same class of bug again). Claims the
+                          responder on press-down, not after a hold delay, so
+                          a press-and-drag reads as scrubbing immediately —
+                          the trade-off is that a swipe starting from inside
+                          the chart area won't also page the outer Expense/
+                          Income/Net pager; the segmented toggle and page dots
+                          above it are the way to switch pages from there.
+                          Non-callout numeric labels (axis start/end dates)
+                          are still drawn by the caller with ThemedText, not
+                          SVG text — same "SVG draws shapes, the screen draws
+                          text" split as CategoryRingChart's center content —
+                          but the callout itself is internal to this
+                          component (it needs the chart's own x/y scaling to
+                          position itself, unlike a caller-owned center label).
     category-ring-chart.tsx  Donut/ring chart (added 2026-08-26) for Home's dashboard card — stacked
                           react-native-svg `Circle`s, one per segment, each showing only its own
                           slice via strokeDasharray/strokeDashoffset. Small segments (their dash
@@ -505,6 +578,33 @@ src/
   `setState` form so it doesn't also need `view` in its dependency array) and Month mode is the only
   time the List/Calendar toggle and page-dot row render at all; Week/Year mode renders the same
   `transactionList` element directly, full-bleed, with no pager around it.
+- **Custom date range (added 2026-08-30)** — a 4th "Custom" option alongside Week/Month/Year, on both
+  Home and Transactions' range selectors. `rangeType`/`rangeBounds`/`RangePickerModal` all gained a
+  `'custom'` case, backed by a new `CustomRange = { start: string; end: string | null }` piece of
+  state — `end: null` means only the first of two taps has landed and the picker is mid-pick, waiting
+  on a second. Tapping "Custom" opens the picker immediately if no range is set yet; the picker's day
+  grid (reusing the same month-pager shape as the week picker's own day grid) takes two taps — first
+  sets `start`, second sets `end` (a second tap earlier than `start` swaps rather than restarting) and
+  auto-closes the modal via a `useEffect` keyed on `customRange` that fires only when `.end` goes from
+  unset to set, so reopening the picker to edit an already-complete range doesn't immediately re-close
+  it. Backing out mid-pick (closing with only `start` set) resets to `null` rather than leaving the
+  range stuck on "Select end date". The label is a shared `formatRangeLabel(start, end)` helper
+  (factored out of what was previously just the week case's inline logic, now reused by both week and
+  custom) with a same-day special case rendering a single date instead of "Aug 10 – 10". The nav
+  chevrons stay meaningful in custom mode via `shiftCustomRange`, which slides both `start` and `end`
+  by the range's own length in days (a no-op — returns the input unchanged — until a complete range
+  exists). Home's previous-period delta comparison (`computeDelta`) is `null` (no ▲/▼ shown) in custom
+  mode until a complete range is picked, since there's no anchor-based "previous period" to fall back
+  on the way week/month/year have; once picked, the comparison period is the same
+  `shiftCustomRange`-shifted window one length back. Custom mode has no Calendar-page equivalent, same
+  as Week/Year — Transactions falls back to List, full-bleed, via the same existing
+  `rangeType !== 'month'` effect. All of the above (`RangeType`/`CustomRange`/`rangeBounds`/
+  `shiftAnchor`/`shiftCustomRange`/`formatRangeLabel`/`RangePickerModal`) started out duplicated
+  per-file (2 occurrences, not yet 3, per the no-premature-abstraction rule) but got extracted to
+  `lib/date-range.ts` + `components/range-picker-modal.tsx` the same day, once Trends became a 3rd
+  near-identical copy — see the "Trends tab" bullet below and those two files' own Folder Structure
+  entries above. Home's and Transactions' screens now import from there instead of redefining any of
+  it locally.
 - **Transactions filter (added 2026-08-29)** — a funnel button next to `SettingsButton` in the header
   (fills solid `theme.accent` with a small destructive dot badge when a filter is active, otherwise
   the same soft-accent-circle look as `SettingsButton`) opens `FilterModal`: an "All/Expenses/Income"
@@ -535,3 +635,45 @@ src/
   yet** — there's no drag-and-drop anywhere in this app. If one gets added, read HabitTracker's
   `CLAUDE.md` "Home habit reordering" bullet first; it documents a real, hard-won lesson about
   animating a transform over many native list children.
+- **Trends tab (added 2026-08-30)** — a 4th tab, `app/(tabs)/trends.tsx`, showing cumulative actual
+  spend/income against budgeted/goal totals over time. Range nav is Month/Year/Custom only (no Week —
+  a 7-day cumulative-budget chart reads as less meaningful than a month or year one; the shared
+  `RangePickerModal` still supports all four rangeTypes generically, this screen's own segmented
+  control just never renders a Week pill). Below that, an Expenses/Income/Net segmented toggle plus a
+  page-dot row drives a 3-page horizontal `pagingEnabled` pager (`TrendPanel`, one per type, all three
+  mounted at once — same "pager needs every page already in the DOM for a swipe to reveal it" reasoning
+  as Home's own `BreakdownPanel`), each reporting its own measured height via `onLayout` so the pager
+  takes the tallest of the three. Each panel is a summary row (colored actual total, muted budget
+  total, a green/red over-or-under diff pill — green means "under budget" for Expenses but "at/over
+  goal" for Income/Net, via a `positiveIsGood` flip, same idea as `ProgressBar`'s own type-flipped
+  over-100% semantics) above a `CumulativeTrendChart` (see its own Folder Structure entry above).
+  - **Cumulative line**: `cumulativePoints()` walks every day in the range (`lib/date-range`'s
+    `daysBetween`, so Month/Year/Custom all resolve to the same daily-granularity code path) and
+    carries a running total forward through days with no transactions, so the line is continuous
+    regardless of how sparse the data is. Capped at today (`actualEnd = end > todayStr ? todayStr :
+    end`, a follow-up fix the same day) rather than running out flat to the period's real end — a
+    still-in-progress month or year has no actual data past today, so the line simply stops there
+    instead of implying a flat $0 pace for the rest of the period. The budget/goal reference line is
+    unaffected by this cap — `budgetTotalForRange` below is still totaled against the period's full
+    nominal `start`/`end`, which is the point: actual-to-date against the *whole* period's target, so
+    pacing ahead or behind is visible at a glance. A period entirely in the future (`start` after
+    today) naturally yields an empty `points` array this way (`daysBetween` with `start` past `end`
+    just returns `[]`), which `CumulativeTrendChart` already renders as a blank chart.
+  - **Budget reference line**: `budgetTotalForRange()` sums each relevant budget/goal's
+    `effectiveLimit` (from `lib/budgets.ts`) across every calendar month the range touches
+    (`lib/date-range`'s `monthsBetween`) — a month a custom range only partially overlaps still counts
+    in full, not prorated, a deliberate v1 simplification. Only categories that actually have a
+    budget/goal set contribute to this total (the scoping decision made explicitly for this feature) —
+    an unset category's actual spend/income still moves the cumulative line, it just doesn't move the
+    reference line. A total of exactly 0 (no budgets of that type at all) renders as `budgetTotal:
+    null` so `CumulativeTrendChart` skips the reference line entirely instead of drawing it at $0.
+  - **Net's own numbers are derived, not scanned**: `netPoints` is `incomePoints[i].actual -
+    expensePoints[i].actual` per day (both arrays share the same day list so they line up
+    index-for-index) rather than a third transaction pass, and `netBudgetTotal` is
+    `incomeBudgetTotal - expenseBudgetTotal` — `null` (no reference line, nothing to compare against)
+    unless at least one side actually has a budget/goal set.
+  - **Negative-amount formatting**: Net's actual/budget totals can go negative, unlike Expense/Income's
+    (which never do) — plain `` `$${amount.toLocaleString(...)}` `` renders a negative as "$-2,838.91"
+    (`toLocaleString`'s minus sign lands after the digits start, not before the `$`), so Trends has its
+    own `formatSigned()` that moves the sign in front of the `$` instead — a bug caught and fixed
+    during this feature's own build via the Browser-pane verification workflow, not by inspection.

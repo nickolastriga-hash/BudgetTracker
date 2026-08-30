@@ -1,21 +1,13 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import {
-  Modal,
-  NativeScrollEvent,
-  NativeSyntheticEvent,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CategoryBadge } from '@/components/category-badge';
 import { CategoryRingChart, groupRingSegments, RING_OTHER_KEY } from '@/components/category-ring-chart';
 import { ProgressBar } from '@/components/progress-bar';
+import { RangePickerModal } from '@/components/range-picker-modal';
 import { ScreenHeader } from '@/components/screen-header';
 import { SettingsButton } from '@/components/settings-button';
 import { ThemedText } from '@/components/themed-text';
@@ -25,6 +17,14 @@ import { useTheme } from '@/hooks/use-theme';
 import { getBudgetProgress, type Budget, getBudgets } from '@/lib/budgets';
 import { getCategories, getCategory, type Category } from '@/lib/categories';
 import {
+  rangeBounds,
+  shiftAnchor,
+  shiftCustomRange,
+  toMonthStr,
+  type CustomRange,
+  type RangeType,
+} from '@/lib/date-range';
+import {
   byCategoryTotalsInRange,
   getTransactions,
   rangeTotals,
@@ -32,27 +32,6 @@ import {
   type Transaction,
   type TransactionType,
 } from '@/lib/transactions';
-
-type RangeType = 'week' | 'month' | 'year';
-
-function toMonthStr(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-}
-
-function toDateStr(date: Date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
-function monthLabel(date: Date) {
-  return date.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
-}
-
-function shortDateLabel(date: Date) {
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
 
 function formatAmount(amount: number) {
   return amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -79,48 +58,6 @@ function computeDelta(
   return { label: `${arrow} ${pct}%`, tone };
 }
 
-// Sunday-start week, matching the weekday grid Transactions' own Calendar
-// view already uses (WEEKDAY_LABELS there starts with 'S').
-function startOfWeek(date: Date) {
-  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  d.setDate(d.getDate() - d.getDay());
-  return d;
-}
-
-function endOfWeek(date: Date) {
-  const d = startOfWeek(date);
-  d.setDate(d.getDate() + 6);
-  return d;
-}
-
-// Resolves the range-type toggle + navigated anchor date into the
-// [start, end] "YYYY-MM-DD" bounds lib/transactions.ts's range helpers take,
-// plus the label shown between the nav chevrons.
-function rangeBounds(rangeType: RangeType, anchor: Date): { start: string; end: string; label: string } {
-  if (rangeType === 'week') {
-    const start = startOfWeek(anchor);
-    const end = endOfWeek(anchor);
-    const label =
-      start.getFullYear() === end.getFullYear()
-        ? `${shortDateLabel(start)} – ${end.getMonth() === start.getMonth() ? end.getDate() : shortDateLabel(end)}, ${end.getFullYear()}`
-        : `${shortDateLabel(start)}, ${start.getFullYear()} – ${shortDateLabel(end)}, ${end.getFullYear()}`;
-    return { start: toDateStr(start), end: toDateStr(end), label };
-  }
-  if (rangeType === 'year') {
-    const year = anchor.getFullYear();
-    return { start: `${year}-01-01`, end: `${year}-12-31`, label: String(year) };
-  }
-  const start = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
-  const end = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0);
-  return { start: toDateStr(start), end: toDateStr(end), label: monthLabel(anchor) };
-}
-
-function shiftAnchor(rangeType: RangeType, anchor: Date, dir: 1 | -1): Date {
-  if (rangeType === 'week') return new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate() + 7 * dir);
-  if (rangeType === 'year') return new Date(anchor.getFullYear() + dir, anchor.getMonth(), 1);
-  return new Date(anchor.getFullYear(), anchor.getMonth() + dir, 1);
-}
-
 // Shared by both breakdown panels below (expense and income each call this
 // with their own `type`) rather than computed inline per panel — same data
 // shape, just filtered/sorted for whichever side is being shown.
@@ -138,182 +75,6 @@ function categoryBreakdown(
     .sort((a, b) => b.amount - a.amount);
 }
 type BreakdownEntry = ReturnType<typeof categoryBreakdown>[number];
-
-const MONTH_NAMES = Array.from({ length: 12 }, (_, m) =>
-  new Date(2000, m, 1).toLocaleDateString(undefined, { month: 'short' })
-);
-
-const WEEKDAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-// Years grouped 12-per-page purely so the year grid reuses the exact same
-// 4-column/3-row pickerGrid/pickerCell shape as the month grid below — not
-// tied to any calendar meaning the way a decade would be.
-const YEARS_PER_PAGE = 12;
-
-function daysInMonth(year: number, month: number) {
-  return new Date(year, month + 1, 0).getDate();
-}
-
-// Same trigger (tap the nav label) opens this for all three range types,
-// but what it shows differs: a year-pager + 12-month grid for month mode
-// (this is the original, single-purpose picker this grew out of), a
-// paged 12-years grid for year mode, and a month-pager + day-of-month grid
-// (picking any day selects the week it falls in) for week mode — one
-// component rather than three, since all three share the same modal chrome
-// and are only ever mounted one at a time off the same `rangeType`.
-function RangePickerModal({
-  visible,
-  rangeType,
-  anchor,
-  onSelect,
-  onClose,
-}: {
-  visible: boolean;
-  rangeType: RangeType;
-  anchor: Date;
-  onSelect: (date: Date) => void;
-  onClose: () => void;
-}) {
-  const theme = useTheme();
-  // The picker's own navigation cursor — a year for month/year mode, a
-  // month for week mode (it needs a specific month in view to show that
-  // month's day grid). Reset to the current anchor each time it opens
-  // rather than wherever it was left after a previous open.
-  const [cursor, setCursor] = useState(anchor);
-
-  useEffect(() => {
-    if (visible) setCursor(anchor);
-  }, [visible, anchor]);
-
-  let header: ReactNode;
-  let body: ReactNode;
-
-  if (rangeType === 'year') {
-    const pageStart = Math.floor(cursor.getFullYear() / YEARS_PER_PAGE) * YEARS_PER_PAGE;
-    const years = Array.from({ length: YEARS_PER_PAGE }, (_, i) => pageStart + i);
-    header = (
-      <>
-        <Pressable hitSlop={10} onPress={() => setCursor((c) => new Date(c.getFullYear() - YEARS_PER_PAGE, 0, 1))}>
-          <MaterialIcons name="chevron-left" size={24} color={theme.accent} />
-        </Pressable>
-        <ThemedText type="smallBold">
-          {years[0]}–{years[years.length - 1]}
-        </ThemedText>
-        <Pressable hitSlop={10} onPress={() => setCursor((c) => new Date(c.getFullYear() + YEARS_PER_PAGE, 0, 1))}>
-          <MaterialIcons name="chevron-right" size={24} color={theme.accent} />
-        </Pressable>
-      </>
-    );
-    body = (
-      <View style={styles.pickerGrid}>
-        {years.map((y) => {
-          const isSelected = y === anchor.getFullYear();
-          return (
-            <Pressable
-              key={y}
-              onPress={() => onSelect(new Date(y, 0, 1))}
-              style={[styles.pickerCell, isSelected && { backgroundColor: theme.accent }]}>
-              <ThemedText type="smallBold" style={isSelected && styles.pickerCellTextSelected}>
-                {y}
-              </ThemedText>
-            </Pressable>
-          );
-        })}
-      </View>
-    );
-  } else if (rangeType === 'week') {
-    const year = cursor.getFullYear();
-    const monthIndex = cursor.getMonth();
-    const firstWeekday = new Date(year, monthIndex, 1).getDay();
-    const total = daysInMonth(year, monthIndex);
-    const cells: (number | null)[] = [
-      ...Array(firstWeekday).fill(null),
-      ...Array.from({ length: total }, (_, i) => i + 1),
-    ];
-    const selectedStart = toDateStr(startOfWeek(anchor));
-    const selectedEnd = toDateStr(endOfWeek(anchor));
-    header = (
-      <>
-        <Pressable hitSlop={10} onPress={() => setCursor((c) => new Date(c.getFullYear(), c.getMonth() - 1, 1))}>
-          <MaterialIcons name="chevron-left" size={24} color={theme.accent} />
-        </Pressable>
-        <ThemedText type="smallBold">{monthLabel(cursor)}</ThemedText>
-        <Pressable hitSlop={10} onPress={() => setCursor((c) => new Date(c.getFullYear(), c.getMonth() + 1, 1))}>
-          <MaterialIcons name="chevron-right" size={24} color={theme.accent} />
-        </Pressable>
-      </>
-    );
-    body = (
-      <>
-        <View style={styles.weekdayRow}>
-          {WEEKDAY_LABELS.map((w, i) => (
-            <ThemedText key={i} type="small" themeColor="textTertiary" style={styles.weekdayLabel}>
-              {w}
-            </ThemedText>
-          ))}
-        </View>
-        <View style={styles.dayGrid}>
-          {cells.map((day, i) => {
-            if (day === null) return <View key={`empty-${i}`} style={styles.dayCell} />;
-            const dateStr = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-            const inSelectedWeek = dateStr >= selectedStart && dateStr <= selectedEnd;
-            return (
-              <Pressable key={dateStr} onPress={() => onSelect(new Date(year, monthIndex, day))} style={styles.dayCell}>
-                <View style={[styles.dayCellInner, inSelectedWeek && { backgroundColor: theme.accent }]}>
-                  <ThemedText type="small" style={inSelectedWeek && styles.pickerCellTextSelected}>
-                    {day}
-                  </ThemedText>
-                </View>
-              </Pressable>
-            );
-          })}
-        </View>
-      </>
-    );
-  } else {
-    const year = cursor.getFullYear();
-    header = (
-      <>
-        <Pressable hitSlop={10} onPress={() => setCursor((c) => new Date(c.getFullYear() - 1, c.getMonth(), 1))}>
-          <MaterialIcons name="chevron-left" size={24} color={theme.accent} />
-        </Pressable>
-        <ThemedText type="smallBold">{year}</ThemedText>
-        <Pressable hitSlop={10} onPress={() => setCursor((c) => new Date(c.getFullYear() + 1, c.getMonth(), 1))}>
-          <MaterialIcons name="chevron-right" size={24} color={theme.accent} />
-        </Pressable>
-      </>
-    );
-    body = (
-      <View style={styles.pickerGrid}>
-        {MONTH_NAMES.map((name, m) => {
-          const isSelected = year === anchor.getFullYear() && m === anchor.getMonth();
-          return (
-            <Pressable
-              key={name}
-              onPress={() => onSelect(new Date(year, m, 1))}
-              style={[styles.pickerCell, isSelected && { backgroundColor: theme.accent }]}>
-              <ThemedText type="smallBold" style={isSelected && styles.pickerCellTextSelected}>
-                {name}
-              </ThemedText>
-            </Pressable>
-          );
-        })}
-      </View>
-    );
-  }
-
-  return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
-      <Pressable style={styles.modalBackdrop} onPress={onClose}>
-        <Pressable
-          style={[styles.pickerCard, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}
-          onPress={() => {}}>
-          <View style={styles.pickerHeader}>{header}</View>
-          {body}
-        </Pressable>
-      </Pressable>
-    </Modal>
-  );
-}
 
 // Small ▲/▼N% readout under a summary column's amount — renders nothing for
 // computeDelta's null case (no data in either period to compare) rather
@@ -488,6 +249,7 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const [rangeType, setRangeType] = useState<RangeType>('month');
   const [anchor, setAnchor] = useState(() => new Date());
+  const [customRange, setCustomRange] = useState<CustomRange | null>(null);
   // Which page of the Expense/Income breakdown pager is active — drives the
   // segmented toggle, the page dots, and where goToBreakdown scrolls to; the
   // pager itself always keeps both pages mounted (see BreakdownPanel above)
@@ -526,7 +288,7 @@ export default function HomeScreen() {
     }, [])
   );
 
-  const { start, end, label } = rangeBounds(rangeType, anchor);
+  const { start, end, label } = rangeBounds(rangeType, anchor, customRange);
   // The set of tappable categories changes whenever the navigated
   // range/period does — clear both pages' selections rather than let one
   // point at a category with nothing to show now.
@@ -534,6 +296,14 @@ export default function HomeScreen() {
     setSelectedExpenseKey(null);
     setSelectedIncomeKey(null);
   }, [start, end]);
+
+  // Closes the picker the instant a custom range is completed (its second
+  // tap sets `end`) — reference-equal no-op the rest of the time, so
+  // reopening the modal to edit an already-complete range doesn't re-fire
+  // this and immediately close it again.
+  useEffect(() => {
+    if (customRange?.end) setPickerVisible(false);
+  }, [customRange]);
 
   function goToBreakdown(next: TransactionType) {
     setBreakdownType(next);
@@ -569,16 +339,25 @@ export default function HomeScreen() {
   const overBudgetCount = allBudgetProgress.filter((bp) => bp.type === 'expense' && bp.percent >= 1).length;
   const netPositive = totals.net >= 0;
   const savingsRate = totals.income > 0 ? Math.round((totals.net / totals.income) * 100) : null;
+  const rangeNoun =
+    rangeType === 'week' ? 'week' : rangeType === 'year' ? 'year' : rangeType === 'custom' ? 'range' : 'month';
 
   // Same range-type/length, one period back — shiftAnchor(-1) plus the same
   // rangeBounds resolution the nav itself uses, so a week compares to the
   // previous 7 days, a month to the previous calendar month, a year to the
-  // previous calendar year.
-  const previous = rangeBounds(rangeType, shiftAnchor(rangeType, anchor, -1));
-  const previousTotals = rangeTotals(transactions, previous.start, previous.end);
-  const incomeDelta = computeDelta(totals.income, previousTotals.income, 'up');
-  const expenseDelta = computeDelta(totals.expense, previousTotals.expense, 'down');
-  const netDelta = computeDelta(totals.net, previousTotals.net, 'up');
+  // previous calendar year. Custom mode needs a complete range before there's
+  // anything to shift, so `previous` is null (no comparison shown) until one
+  // is picked, then shiftCustomRange steps back by the range's own length.
+  const previous =
+    rangeType === 'custom'
+      ? customRange?.end
+        ? rangeBounds('custom', anchor, shiftCustomRange(customRange, -1))
+        : null
+      : rangeBounds(rangeType, shiftAnchor(rangeType, anchor, -1), null);
+  const previousTotals = previous ? rangeTotals(transactions, previous.start, previous.end) : { income: 0, expense: 0, net: 0 };
+  const incomeDelta = previous ? computeDelta(totals.income, previousTotals.income, 'up') : null;
+  const expenseDelta = previous ? computeDelta(totals.expense, previousTotals.expense, 'down') : null;
+  const netDelta = previous ? computeDelta(totals.net, previousTotals.net, 'up') : null;
 
   // Expense and income are totaled/broken-down independently (a transaction
   // is one or the other, never both) — both sides are computed unconditionally
@@ -625,7 +404,15 @@ export default function HomeScreen() {
           <ScreenHeader title="Home" right={<SettingsButton />} />
 
           <View style={styles.monthNav}>
-            <Pressable hitSlop={12} onPress={() => setAnchor((a) => shiftAnchor(rangeType, a, -1))}>
+            <Pressable
+              hitSlop={12}
+              onPress={() => {
+                if (rangeType === 'custom') {
+                  setCustomRange((r) => (r && r.end ? shiftCustomRange(r, -1) : r));
+                } else {
+                  setAnchor((a) => shiftAnchor(rangeType, a, -1));
+                }
+              }}>
               <MaterialIcons name="chevron-left" size={26} color={theme.accent} />
             </Pressable>
             <Pressable hitSlop={12} onPress={() => setPickerVisible(true)}>
@@ -633,24 +420,35 @@ export default function HomeScreen() {
                 {label}
               </ThemedText>
             </Pressable>
-            <Pressable hitSlop={12} onPress={() => setAnchor((a) => shiftAnchor(rangeType, a, 1))}>
+            <Pressable
+              hitSlop={12}
+              onPress={() => {
+                if (rangeType === 'custom') {
+                  setCustomRange((r) => (r && r.end ? shiftCustomRange(r, 1) : r));
+                } else {
+                  setAnchor((a) => shiftAnchor(rangeType, a, 1));
+                }
+              }}>
               <MaterialIcons name="chevron-right" size={26} color={theme.accent} />
             </Pressable>
           </View>
 
-          <View style={[styles.segmented, { borderColor: theme.border }]}>
-            {(['week', 'month', 'year'] as const).map((rt) => {
+          <View style={[styles.segmented, styles.rangeToggle, { borderColor: theme.border }]}>
+            {(['week', 'month', 'year', 'custom'] as const).map((rt) => {
               const isSelected = rangeType === rt;
               return (
                 <Pressable
                   key={rt}
-                  onPress={() => setRangeType(rt)}
+                  onPress={() => {
+                    setRangeType(rt);
+                    if (rt === 'custom' && !customRange) setPickerVisible(true);
+                  }}
                   style={[styles.segment, isSelected && { backgroundColor: theme.accent }]}>
                   <ThemedText
                     type="smallBold"
                     themeColor={isSelected ? 'text' : 'textSecondary'}
                     style={isSelected && { color: '#ffffff' }}>
-                    {rt === 'week' ? 'Week' : rt === 'month' ? 'Month' : 'Year'}
+                    {rt === 'week' ? 'Week' : rt === 'month' ? 'Month' : rt === 'year' ? 'Year' : 'Custom'}
                   </ThemedText>
                 </Pressable>
               );
@@ -850,7 +648,7 @@ export default function HomeScreen() {
             <View style={[styles.group, styles.emptyGroup, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
               <MaterialIcons name="receipt-long" size={28} color={theme.textTertiary} />
               <ThemedText type="small" themeColor="textSecondary">
-                No transactions yet this {rangeType}.
+                No transactions yet this {rangeNoun}.
               </ThemedText>
             </View>
           ) : (
@@ -885,11 +683,23 @@ export default function HomeScreen() {
         visible={pickerVisible}
         rangeType={rangeType}
         anchor={anchor}
+        customRange={customRange}
         onSelect={(date) => {
           setAnchor(date);
           setPickerVisible(false);
         }}
-        onClose={() => setPickerVisible(false)}
+        onSelectCustomDay={(dateStr) => {
+          setCustomRange((r) => {
+            if (!r || r.end !== null) return { start: dateStr, end: null };
+            return dateStr >= r.start ? { start: r.start, end: dateStr } : { start: dateStr, end: r.start };
+          });
+        }}
+        onClose={() => {
+          setPickerVisible(false);
+          // Abandoning a pending pick (start tapped, no end yet) clears it
+          // rather than leaving the range stuck showing "Select end date".
+          setCustomRange((r) => (r && r.end === null ? null : r));
+        }}
       />
     </View>
   );
@@ -918,6 +728,11 @@ const styles = StyleSheet.create({
   monthLabel: {
     minWidth: 132,
     textAlign: 'center',
+  },
+  // Wider than the plain segmented cap below — this toggle has a 4th
+  // ("Custom") option the Expense/Income toggle further down doesn't.
+  rangeToggle: {
+    maxWidth: 320,
   },
   // Same shape as Transactions' own List/Calendar toggle.
   segmented: {
@@ -1147,67 +962,5 @@ const styles = StyleSheet.create({
     shadowOpacity: Platform.OS === 'ios' ? 0.25 : 0,
     shadowRadius: 4,
     elevation: 4,
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pickerCard: {
-    borderRadius: CardRadius,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: Spacing.four,
-    width: '85%',
-    maxWidth: 360,
-    gap: Spacing.three,
-  },
-  pickerHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  pickerGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginHorizontal: -Spacing.one,
-  },
-  pickerCell: {
-    width: '25%',
-    paddingHorizontal: Spacing.one,
-    paddingVertical: Spacing.two + 2,
-    borderRadius: Spacing.two,
-    alignItems: 'center',
-  },
-  pickerCellTextSelected: {
-    color: '#ffffff',
-  },
-  // Week mode's day-of-month grid inside the same pickerCard — same 7-column
-  // shape as Transactions' own Calendar view day grid.
-  weekdayRow: {
-    flexDirection: 'row',
-  },
-  weekdayLabel: {
-    flexBasis: '14.2857%',
-    textAlign: 'center',
-    fontSize: 11,
-  },
-  dayGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  dayCell: {
-    flexBasis: '14.2857%',
-    aspectRatio: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 2,
-  },
-  dayCellInner: {
-    flex: 1,
-    width: '100%',
-    borderRadius: Spacing.two,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });

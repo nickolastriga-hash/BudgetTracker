@@ -5,6 +5,10 @@ Current state: [PROJECT_STATE.md](PROJECT_STATE.md). History: [CHANGELOG.md](CHA
 v1 scope was: expense/income logging, per-category monthly budgets, stats/charts, monthly recurring
 transactions, all local-only. Deliberately deferred:
 
+- **Trends' budget total doesn't prorate partial months** — `budgetTotalForRange` (in `trends.tsx`)
+  counts a calendar month's full budget/goal even if a custom range only partially overlaps it. Fine
+  for Month/Year, a known v1 simplification for Custom. Revisit if that reads as misleading in
+  practice.
 - **Accounts / cloud backup** — no sign-in, no sync. Everything lives in AsyncStorage on-device only.
 - **Category delete/reassignment** — categories are now editable (name/icon/color, via long-press
   in Budgets or `+` to add new) and AsyncStorage-backed (`lib/categories.ts`), but there's still no
