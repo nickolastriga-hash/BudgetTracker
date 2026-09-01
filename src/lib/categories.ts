@@ -19,7 +19,13 @@ export interface Category {
   type: CategoryType;
 }
 
-// Swatches offered in the category editor's color picker.
+// Swatches offered in the category editor's color picker. No grey — a
+// budget category's color is also its at-a-glance identity in the ring
+// chart/legend/badges, and grey reads as "uncategorized" or "disabled"
+// there rather than as an actual identity, so every slot stays a real hue
+// (2026-08-31 fix; the last slot used to be systemGray '#8E8E93', swapped
+// for a second, distinctly magenta pink so it doesn't collide with
+// Shopping's existing rose pink, '#FF2D55').
 export const CATEGORY_COLORS = [
   '#FF3B30',
   '#FF9500',
@@ -32,7 +38,7 @@ export const CATEGORY_COLORS = [
   '#AF52DE',
   '#FF2D55',
   '#A2845E',
-  '#8E8E93',
+  '#FF2D95',
 ] as const;
 
 const DEFAULT_CATEGORIES: Category[] = [
@@ -46,7 +52,7 @@ const DEFAULT_CATEGORIES: Category[] = [
   { id: 'health', name: 'Health', icon: 'local-hospital', color: '#FF3B30', type: 'expense' },
   { id: 'education', name: 'Education', icon: 'school', color: '#007AFF', type: 'expense' },
   { id: 'travel', name: 'Travel', icon: 'flight', color: '#00C7BE', type: 'expense' },
-  { id: 'subscriptions', name: 'Subscriptions', icon: 'autorenew', color: '#8E8E93', type: 'expense' },
+  { id: 'subscriptions', name: 'Subscriptions', icon: 'autorenew', color: '#FF2D95', type: 'expense' },
   { id: 'personal_care', name: 'Personal Care', icon: 'spa', color: '#FF6482', type: 'expense' },
   { id: 'gifts_donations', name: 'Gifts & Donations', icon: 'card-giftcard', color: '#30B0C7', type: 'expense' },
   { id: 'other_expense', name: 'Other', icon: 'more-horiz', color: '#98989D', type: 'expense' },

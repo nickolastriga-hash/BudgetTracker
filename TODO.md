@@ -9,6 +9,10 @@ transactions, all local-only. Deliberately deferred:
   counts a calendar month's full budget/goal even if a custom range only partially overlaps it. Fine
   for Month/Year, a known v1 simplification for Custom. Revisit if that reads as misleading in
   practice.
+- **"Other"/"Other Income" are still a muted grey** (`#98989D`) after the 2026-08-31 palette cleanup,
+  which only removed grey from the *pickable* `CATEGORY_COLORS` swatches and recolored Subscriptions
+  (the one default category that had used a swatch grey). Left as a deliberate neutral-catch-all
+  choice, not an oversight — revisit if that still reads as "there's a grey category" in practice.
 - **Accounts / cloud backup** — no sign-in, no sync. Everything lives in AsyncStorage on-device only.
 - **Category delete/reassignment** — categories are now editable (name/icon/color, via long-press
   in Budgets or `+` to add new) and AsyncStorage-backed (`lib/categories.ts`), but there's still no

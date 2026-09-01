@@ -1,20 +1,33 @@
 # Project State
 
-_Last updated: 2026-08-30_
+_Last updated: 2026-08-31_
 
 Snapshot of where the app stands. History: [CHANGELOG.md](CHANGELOG.md). Upcoming: [TODO.md](TODO.md).
 
 ## What's implemented
 
+- **Trends pace line + visibility pass, grey removed from category palette (2026-08-31)** —
+  `CumulativeTrendChart`'s budget reference line is now diagonal ($0 → `budgetTotal` across the full
+  period, not flat) for **Expenses only**; Income/Net pass `paced={false}` and keep a flat "Target"
+  line, since income arrives in lumps (paychecks) and a linear daily pace there falsely flipped
+  ahead/behind. Added an ahead/behind status band (green/red fill between actual and pace, `paced`
+  only), a "Today" marker for in-progress periods, a soft gradient fill under the actual line when
+  there's no band to draw, and a scrub-callout "vs pace"/"vs target" delta. Separately,
+  `lib/categories.ts`'s `CATEGORY_COLORS` swatch palette no longer offers grey — the old systemGray
+  slot is now a second, more magenta pink (`#FF2D95`), and the Subscriptions default category (the
+  one seeded category that used that grey) moved to it. `#98989D` ("Other"/"Other Income", not a
+  palette slot) was left as its own deliberate neutral-catch-all design call. See CLAUDE.md's
+  `cumulative-trend-chart.tsx`/"Trends tab"/"Budget reference line" and `categories.ts` bullets.
 - **Custom date range + new Trends tab (2026-08-30)** — Home and Transactions' Week/Month/Year range
   nav gained a 4th "Custom" pill (tap two days on a calendar to set start/end; nav chevrons slide the
   whole window by its own length). That range-picker machinery (`rangeBounds`/`shiftAnchor`/
   `RangePickerModal`, previously duplicated per-file) was extracted to `lib/date-range.ts` +
   `components/range-picker-modal.tsx` once a 4th tab, **Trends**, became a 3rd near-identical
   consumer. Trends shows cumulative actual-vs-budget: a Month/Year/Custom nav, an Expenses/Income/Net
-  swipeable pager, each page a `CumulativeTrendChart` line (actual, capped at today) against a flat
-  grey dotted budget/goal reference line, with press-and-hold-drag scrubbing for a per-day value
-  callout. See CLAUDE.md's "Custom date range" and "Trends tab" convention bullets for the mechanics.
+  swipeable pager, each page a `CumulativeTrendChart` line (actual, capped at today) against a budget/
+  goal reference line (diagonal for Expenses, flat for Income/Net — see the 2026-08-31 entry above),
+  with press-and-hold-drag scrubbing for a per-day value callout. See CLAUDE.md's "Custom date range"
+  and "Trends tab" convention bullets for the mechanics.
 
 - **Budgets and Home both gained swipeable Expense/Income pagers (2026-08-29)** — Budgets replaced
   its two stacked "Expense Budgets"/"Income Goals" sections with two pages of a horizontal
@@ -105,6 +118,17 @@ Snapshot of where the app stands. History: [CHANGELOG.md](CHANGELOG.md). Upcomin
 - **Local-only** — AsyncStorage, no accounts/sync (deliberate v1 scope, see TODO.md).
 - **Pinned to Expo SDK 54** (not the current 57) so the App Store build of Expo Go can run it —
   Apple's Expo Go approval has been stuck since SDK 55. See CLAUDE.md "Why SDK 54, not 57".
+
+## Open verification items (2026-08-31)
+
+- **Trends pace line + visibility pass** — verified in the web preview: Expenses (Month and Year)
+  shows the diagonal pace line, green/red ahead-behind band, and a "Today" marker on Year (mid-period);
+  Income/Net show a flat "Target" line with no band and a gradient fill instead; scrub callout showed
+  correct "Pace $X"/"Target $X" + signed "vs pace"/"vs target" text (including a negative pace value
+  formatted correctly); checked both light and dark mode. Not yet given an on-device pass.
+- **Grey removed from category palette** — verified in the web preview: the color grid in
+  `category-editor.tsx` no longer offers grey, and recoloring the already-seeded Subscriptions
+  category to the new pink rendered correctly on the Budgets list. Not yet given an on-device pass.
 
 ## Open verification items (2026-08-29)
 

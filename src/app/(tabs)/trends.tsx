@@ -89,7 +89,11 @@ function cumulativePoints(transactions: Transaction[], type: TransactionType, st
 function TrendPanel({
   label,
   points,
+  totalDays,
+  rangeStart,
+  rangeEnd,
   budgetTotal,
+  paced,
   lineColor,
   positiveIsGood,
   width,
@@ -97,7 +101,11 @@ function TrendPanel({
 }: {
   label: string;
   points: TrendPoint[];
+  totalDays: number;
+  rangeStart: string;
+  rangeEnd: string;
   budgetTotal: number | null;
+  paced: boolean;
   lineColor: string;
   positiveIsGood: boolean;
   width: number;
@@ -141,20 +149,23 @@ function TrendPanel({
 
       <CumulativeTrendChart
         points={points}
+        totalDays={totalDays}
         budgetTotal={budgetTotal}
+        paced={paced}
+        positiveIsGood={positiveIsGood}
         width={width}
         height={180}
         lineColor={lineColor}
         formatValue={formatSigned}
         formatDate={shortDateLabel}
       />
-      {points.length > 0 && (
+      {totalDays > 0 && (
         <View style={styles.axisLabelRow}>
           <ThemedText type="small" themeColor="textTertiary">
-            {shortDateLabel(points[0].date)}
+            {shortDateLabel(rangeStart)}
           </ThemedText>
           <ThemedText type="small" themeColor="textTertiary">
-            {shortDateLabel(points[points.length - 1].date)}
+            {shortDateLabel(rangeEnd)}
           </ThemedText>
         </View>
       )}
@@ -216,6 +227,12 @@ export default function TrendsScreen() {
   // CumulativeTrendChart already renders as a blank chart.
   const todayStr = toDateStr(new Date());
   const actualEnd = end > todayStr ? todayStr : end;
+  // The full nominal period's day count — shared x-axis domain for both the
+  // actual line (which stops at actualEnd) and the diagonal budget-pace
+  // line (which always runs the whole way to `end`), so a still-in-progress
+  // period visibly shows the actual line covering only its elapsed fraction
+  // of the chart width. See CumulativeTrendChart's own comment.
+  const totalDays = useMemo(() => daysBetween(start, end).length, [start, end]);
 
   // Closes the picker the instant a custom range is completed (its second
   // tap sets `end`) — reference-equal no-op the rest of the time, so
@@ -385,7 +402,11 @@ export default function TrendsScreen() {
                 <TrendPanel
                   label="Expenses"
                   points={expensePoints}
+                  totalDays={totalDays}
+                  rangeStart={start}
+                  rangeEnd={end}
                   budgetTotal={expenseBudgetTotal > 0 ? expenseBudgetTotal : null}
+                  paced
                   lineColor={theme.destructive}
                   positiveIsGood={false}
                   width={panelWidth}
@@ -396,7 +417,11 @@ export default function TrendsScreen() {
                 <TrendPanel
                   label="Income"
                   points={incomePoints}
+                  totalDays={totalDays}
+                  rangeStart={start}
+                  rangeEnd={end}
                   budgetTotal={incomeBudgetTotal > 0 ? incomeBudgetTotal : null}
+                  paced={false}
                   lineColor={theme.success}
                   positiveIsGood={true}
                   width={panelWidth}
@@ -407,7 +432,11 @@ export default function TrendsScreen() {
                 <TrendPanel
                   label="Net"
                   points={netPoints}
+                  totalDays={totalDays}
+                  rangeStart={start}
+                  rangeEnd={end}
                   budgetTotal={netBudgetTotal}
+                  paced={false}
                   lineColor={theme.accent}
                   positiveIsGood={true}
                   width={panelWidth}
