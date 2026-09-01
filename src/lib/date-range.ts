@@ -26,6 +26,15 @@ export function monthLabel(date: Date) {
   return date.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 }
 
+// Shared 12-short-month-name array (Jan, Feb, ...) — extracted here
+// 2026-09-01 once Transactions' new Year-mode calendar page (see
+// transactions.tsx) became the 3rd near-identical `Array.from({ length: 12
+// }, ...)` definition; budgets.tsx's month/year picker and
+// range-picker-modal.tsx's own month grid each had their own copy until now.
+export const MONTH_NAMES = Array.from({ length: 12 }, (_, m) =>
+  new Date(2000, m, 1).toLocaleDateString(undefined, { month: 'short' })
+);
+
 export function shortDateLabel(date: Date) {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }

@@ -9,15 +9,13 @@ import {
   daysInMonth,
   endOfWeek,
   monthLabel,
+  MONTH_NAMES,
   startOfWeek,
   toDateStr,
   type CustomRange,
   type RangeType,
 } from '@/lib/date-range';
 
-const MONTH_NAMES = Array.from({ length: 12 }, (_, m) =>
-  new Date(2000, m, 1).toLocaleDateString(undefined, { month: 'short' })
-);
 const WEEKDAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 // Years grouped 12-per-page purely so the year grid reuses the exact same
 // 4-column/3-row pickerGrid/pickerCell shape as the month grid below — not

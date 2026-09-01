@@ -22,18 +22,21 @@ system to show a profile for; opens `app/settings.tsx`, see its own bullet below
   3 budget categories' progress, and the month's most recent transactions. FAB opens the
   add-transaction modal.
 - **Transactions** — "Transactions" header (a filter button — see below — plus `SettingsButton` in
-  its top-right corner) pinned above the scroll, a Week/Month/Year range nav (2026-08-29, same
+  its top-right corner) pinned above the scroll, a Week/Month/Year/Custom range nav (2026-08-29, same
   chevrons-blue/label-black-tappable shape as Home's own, replacing an earlier month-only nav — see
   the "Transactions range selector" convention bullet below) above a List/Calendar segmented toggle
-  plus a page-dot row (added 2026-08-26, dots added 2026-08-27; only shown in Month mode — Week/Year
-  mode has no Calendar page, see that same bullet). List: all of the navigated range's transactions
-  grouped by date with sticky per-date headers, tapping a row opens the same modal in edit mode.
-  Calendar (Month mode only): a day-of-month grid (pinned above the day-detail scroll) showing that
-  day's expense (red) and income (green), tap a day to expand its transactions below the grid. In
-  Month mode, List and Calendar are pages of one horizontal `pagingEnabled` ScrollView — swipe
-  between them, or tap the toggle. A funnel button next to `SettingsButton` (2026-08-29) opens a
-  type/category filter that narrows both pages at once — see the "Transactions filter" convention
-  bullet below.
+  plus a page-dot row (added 2026-08-26, dots added 2026-08-27; shown for every rangeType except
+  Custom — Week and Year gained their own Calendar shapes 2026-09-01, see the "Transactions
+  List/Calendar" convention bullet below for all three). List: all of the navigated range's
+  transactions grouped by date with sticky per-date headers, tapping a row opens the same modal in
+  edit mode. Calendar: a day-of-month grid in Month mode, a single 7-day row in Week mode (both pinned
+  above the day-detail scroll, showing that day's expense in red/income in green, tap a day to expand
+  its transactions below the grid), or a 12-month grid in Year mode (tap a month to expand that
+  month's transactions below instead of a day). List and Calendar are pages of one horizontal
+  `pagingEnabled` ScrollView for Month/Week/Year — swipe between them, or tap the toggle; Custom has
+  no Calendar page (no single-grid shape fits an arbitrary range) and renders List alone, full-bleed.
+  A funnel button next to `SettingsButton` (2026-08-29) opens a type/category filter that narrows
+  every page at once — see the "Transactions filter" convention bullet below.
 - **Budgets** — "Budgets" header, a month nav (same shape as Transactions'), then an Expense/Income
   segmented toggle plus a page-dot row (2026-08-29, replacing two stacked sections with two pages of
   one horizontal `pagingEnabled` ScrollView — swipe between them, or tap the toggle, same pattern as
@@ -185,7 +188,12 @@ src/
                           extracted from Home/Transactions 2026-08-30 when
                           Trends became a 3rd near-identical copy, see the
                           "Custom date range" and "Trends tab" convention
-                          bullets below for the full history.
+                          bullets below for the full history. Also exports
+                          MONTH_NAMES (a 12-short-month-name array, added
+                          2026-09-01 once Transactions' new Year calendar page
+                          became the 3rd near-identical copy — budgets.tsx's
+                          month/year picker and range-picker-modal.tsx's own
+                          month grid each had their own until then).
     transactions.ts       Transaction CRUD (AsyncStorage), month/category totals.
                           Writes go through a private promise-chain queue so two
                           rapid saves can't race on read-modify-write.
@@ -210,27 +218,21 @@ src/
                           MaterialIcons>['name']`), not a bare string, so a typo
                           fails tsc instead of failing silently. Also exports
                           CATEGORY_COLORS, the 12-swatch palette offered in
-                          category-editor.tsx — no grey in it (2026-08-31 fix,
-                          per explicit feedback that a category's color is its
-                          at-a-glance identity in the ring chart/legend/badges,
-                          and grey reads as "uncategorized"/disabled there
-                          rather than as a real identity): the palette's old
-                          systemGray slot (`#8E8E93`) is now a second, more
-                          magenta pink (`#FF2D95`, distinct from Shopping's
-                          existing rose pink `#FF2D55`) instead. Subscriptions
-                          — the one seeded default category that had used
-                          `#8E8E93` — moved to the same new pink in
-                          DEFAULT_CATEGORIES. `#98989D`, the muted grey
-                          `other_expense`/`other_income` use, is deliberately
-                          untouched — it's a different hex, not a
-                          CATEGORY_COLORS slot, and a neutral tone for a
-                          catch-all "Other" bucket is its own, separate design
-                          call. Only affects freshly-seeded installs (first
-                          `getCategories()` call with nothing in AsyncStorage
-                          yet) — there's no migration path for a device that
-                          already seeded the old grey, so existing data needs
-                          the same manual long-press-to-edit recolor any other
-                          category customization does.
+                          category-editor.tsx. Briefly lost its grey slot
+                          2026-08-31 (swapped systemGray `#8E8E93` for a
+                          second magenta pink `#FF2D95`, on the theory that
+                          grey reads as "uncategorized"/disabled rather than a
+                          real category identity) — reverted 2026-09-01 per
+                          explicit feedback that grey should actually be
+                          pickable, back to `#8E8E93` in the last slot with
+                          the extra pink dropped; Subscriptions (the one
+                          seeded default category the 08-31 change had
+                          recolored) moved back to `#8E8E93` too. `#98989D`,
+                          the muted grey `other_expense`/`other_income` use,
+                          was untouched by either change — it's a different
+                          hex, not a CATEGORY_COLORS slot, and a neutral tone
+                          for a catch-all "Other" bucket is its own, separate
+                          design call.
     category-icons.ts       Curated MaterialIcons set + offline keyword-based
                           suggestCategoryIcon(name), same shape as
                           HabitTracker's lib/habit-icons.ts (word-boundary
@@ -645,9 +647,10 @@ src/
   changing) does. The toggle still fills destructive-red/success-green on selection (unchanged from
   its original 2026-08-26 styling) and the page-dot row is tinted to match, same as Budgets' own
   Expense/Income toggle.
-- **Transactions List/Calendar (added 2026-08-26)** — only reachable in Month mode (2026-08-29, see
-  the "Transactions range selector" bullet below); the two are pages of one horizontal
-  `pagingEnabled` ScrollView (`transactions.tsx`), both reading the same shared `anchor` state so the
+- **Transactions List/Calendar (added 2026-08-26, Calendar extended to Week/Year 2026-09-01)** —
+  reachable for every rangeType except Custom (2026-09-01, see the "Transactions range selector"
+  bullet below for the history); List and Calendar are pages of one horizontal `pagingEnabled`
+  ScrollView (`transactions.tsx`), both reading the same shared `anchor`/`start`/`end` state so the
   range nav above them always applies to whichever page is active. A page-dot row (2026-08-27,
   same 6px/16px-active shape as HabitTracker's own swipe-page dots) sits below the segmented toggle
   as a passive readout of which page is active — the toggle itself still does the tapping. The
@@ -657,13 +660,28 @@ src/
   either way. List is a `SectionList` (switched from a plain grouped `ScrollView` 2026-08-27, one
   section per date, one data item per section — the whole day's transaction array — so the existing
   card-with-dividers look survives unchanged) with `stickySectionHeadersEnabled`, so each date header
-  freezes at the top while its card scrolls underneath. Calendar shows both expense (red) and income
-  (green) per day (2026-08-27; was expense-only before) via two `Map<dateStr, number>`s built from
-  that month's transactions; tapping a day expands its transactions in a list below the grid
-  (`TransactionRow`, same as the List page), and the selection resets whenever the month changes. The
-  day grid itself is pinned above a separate inner `ScrollView` holding only the selected day's list
-  (2026-08-27, "freeze panes" — same "pin the date selector above a scrolling detail panel" shape as
-  HabitTracker's own calendar tab) rather than the whole page being one ScrollView. Chevrons are
+  freezes at the top while its card scrolls underneath.
+  **Calendar (2026-09-01: generalized from a month-only component to a shared `CalendarView` that
+  also serves Week, plus a new `YearCalendarView` for Year)** — `CalendarView` takes `cells: (DayGridCell
+  | null)[]` (a `{ dateStr, day }` per real day, `null` for a leading blank) and a `periodKey` (resets
+  the tapped-day selection when it changes — a month string for Month, the week's start date for
+  Week) instead of a `month: Date`, so the same weekday-row/day-grid/day-detail-list rendering serves
+  both a full month (leading blanks + every day, built by `monthCells` in `TransactionsScreen`) and a
+  single week (no blanks — a week is always exactly 7 Sunday-start-aligned days, built by
+  `weekCells`); both still show expense (red) and income (green) per day via two `Map<dateStr,
+  number>`s, now built from a `validDates` Set derived from `cells` itself rather than a
+  month-string filter, so the same code has no idea whether it's showing a month or a week.
+  `YearCalendarView` is a separate component (Year's grid is month-cells, not day-cells, and taps a
+  month rather than a day) — a 3-row/4-column grid (same shape as `budget-editor.tsx`'s own year
+  grid) of that year's 12 months, each showing its expense/income totals via `Map<monthStr, number>`s
+  filtered on `t.date.startsWith(String(year))`; tapping a month selects it and expands that month's
+  transactions below (`MONTH_NAMES[monthIndex]` labels the cells — see its own Folder Structure entry
+  in `lib/date-range.ts` for why it's shared, not a new duplicate) — no further day-grid drill-down,
+  per explicit feedback that a day grid *per month* would be more navigation than a quick glance
+  calls for. Both calendar components' day/month grids are pinned above a separate inner `ScrollView`
+  holding only the selected day's/month's list (2026-08-27 for Month, carried through the 2026-09-01
+  generalization — "freeze panes", same "pin the date selector above a scrolling detail panel" shape
+  as HabitTracker's own calendar tab) rather than the whole page being one ScrollView. Chevrons are
   `theme.accent`/blue and the range label is plain text/black (recolored 2026-08-27, per explicit
   feedback, to match HabitTracker's own arrows-blue/label-black scheme app-wide — this reverses the
   2026-08-26 "deliberate inversion" note that used to live here; there is no inversion anymore, both
@@ -678,12 +696,14 @@ src/
   browser context and left the modal visually stuck open after `visible` went false; `"none"`
   sidesteps that class of bug entirely. List reads off `transactionsInRange(filteredTransactions,
   start, end)` now instead of `transactionsForMonth` (see `lib/transactions.ts`'s own comment on the
-  two), so Week and Year modes total an arbitrary week or year, not just a month. Calendar has no
-  week/year equivalent — a day-of-month grid has no other shape — so switching `rangeType` away from
-  `'month'` snaps `view` back to `'list'` (a `useEffect` on `rangeType`, read via the functional
-  `setState` form so it doesn't also need `view` in its dependency array) and Month mode is the only
-  time the List/Calendar toggle and page-dot row render at all; Week/Year mode renders the same
-  `transactionList` element directly, full-bleed, with no pager around it.
+  two), so Week and Year modes total an arbitrary week or year, not just a month. Calendar originally
+  had no week/year equivalent — a day-of-month grid has no other shape — so switching `rangeType`
+  away from `'month'` snapped `view` back to `'list'`; Week and Year each gained their own Calendar
+  shape 2026-09-01 (see the "Transactions List/Calendar" bullet above), so that reset now only fires
+  for Custom, the one rangeType still without a Calendar page (a `useEffect` on `rangeType`, read via
+  the functional `setState` form so it doesn't also need `view` in its dependency array) — the
+  List/Calendar toggle and page-dot row render for every rangeType except Custom, which renders the
+  same `transactionList` element directly, full-bleed, with no pager around it.
 - **Custom date range (added 2026-08-30)** — a 4th "Custom" option alongside Week/Month/Year, on both
   Home and Transactions' range selectors. `rangeType`/`rangeBounds`/`RangePickerModal` all gained a
   `'custom'` case, backed by a new `CustomRange = { start: string; end: string | null }` piece of
@@ -702,9 +722,12 @@ src/
   exists). Home's previous-period delta comparison (`computeDelta`) is `null` (no ▲/▼ shown) in custom
   mode until a complete range is picked, since there's no anchor-based "previous period" to fall back
   on the way week/month/year have; once picked, the comparison period is the same
-  `shiftCustomRange`-shifted window one length back. Custom mode has no Calendar-page equivalent, same
-  as Week/Year — Transactions falls back to List, full-bleed, via the same existing
-  `rangeType !== 'month'` effect. All of the above (`RangeType`/`CustomRange`/`rangeBounds`/
+  `shiftCustomRange`-shifted window one length back. Custom mode has no Calendar-page equivalent (no
+  single-grid shape fits an arbitrary range the way a month/week/year grid does) — Transactions falls
+  back to List, full-bleed, via the `rangeType !== 'custom'` effect (see the "Transactions
+  List/Calendar" bullet above; Week and Year both gained their own Calendar shapes 2026-09-01, so
+  Custom is now the only rangeType this fallback applies to). All of the above
+  (`RangeType`/`CustomRange`/`rangeBounds`/
   `shiftAnchor`/`shiftCustomRange`/`formatRangeLabel`/`RangePickerModal`) started out duplicated
   per-file (2 occurrences, not yet 3, per the no-premature-abstraction rule) but got extracted to
   `lib/date-range.ts` + `components/range-picker-modal.tsx` the same day, once Trends became a 3rd

@@ -25,7 +25,10 @@ import { BottomTabInset, CardRadius, CardShadow, MaxContentWidth, Spacing } from
 import { useTheme } from '@/hooks/use-theme';
 import { categoriesForType, getCategories, getCategory, type Category } from '@/lib/categories';
 import {
+  daysBetween,
   daysInMonth,
+  monthLabel,
+  MONTH_NAMES,
   rangeBounds,
   shiftAnchor,
   shiftCustomRange,
@@ -34,7 +37,7 @@ import {
   type CustomRange,
   type RangeType,
 } from '@/lib/date-range';
-import { getTransactions, transactionsForMonth, transactionsInRange, type Transaction, type TransactionType } from '@/lib/transactions';
+import { getTransactions, transactionsInRange, type Transaction, type TransactionType } from '@/lib/transactions';
 
 // Which transactions to show — 'all' (no type filter) plus an optional set
 // of category ids. An empty categoryIds list means "every category of
@@ -62,6 +65,11 @@ function dateHeaderLabel(dateStr: string) {
 
 // Also used by Calendar's own day-of-month grid below.
 const WEEKDAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+// A cell in CalendarView's day grid — either a real day (dateStr + display
+// number) or `null` for a leading blank in Month mode (Week mode never
+// needs blanks, since a week is always exactly 7 Sunday-start days).
+type DayGridCell = { dateStr: string; day: number };
 
 // Type + category filter, reached via the funnel button in the header.
 // Applies to both List and Calendar (the caller filters `transactions`
@@ -171,30 +179,43 @@ function FilterModal({
   );
 }
 
-// Day-of-month grid showing that day's total spend, plus a tap-to-expand
-// transaction list below it. Shares the outer range nav with the List page
-// rather than owning its own — this page is only ever reachable in month
-// mode (see TransactionsScreen), so `month` always matches the navigated
-// range exactly.
+// A day grid — a full month (with leading blanks) or a single week row (no
+// blanks, always Sunday-start-aligned) — showing each visible day's total
+// spend/income, plus a tap-to-expand transaction list below it. Generalized
+// 2026-09-01 from a month-only component to also serve Week mode: `cells` is
+// caller-built (see monthCells/weekCells in TransactionsScreen below) and
+// `periodKey` is whatever should reset the tapped-day selection when the
+// caller's navigated period changes (a month string for Month, the week's
+// start date for Week) — the component itself has no idea which mode
+// produced its cells.
 function CalendarView({
-  month,
+  periodKey,
+  cells,
   transactions,
   categories,
   bottomPadding,
 }: {
-  month: Date;
+  periodKey: string;
+  cells: (DayGridCell | null)[];
   transactions: Transaction[];
   categories: Category[];
   bottomPadding: number;
 }) {
   const theme = useTheme();
-  const monthStr = toMonthStr(month);
   const todayStr = toDateStr(new Date());
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
   useEffect(() => {
     setSelectedDay(null);
-  }, [monthStr]);
+  }, [periodKey]);
+
+  // The set of dates actually on the grid — a day filter here rather than a
+  // month filter, so the same code works whether `cells` came from a whole
+  // month or just one week.
+  const validDates = useMemo(
+    () => new Set(cells.filter((c): c is DayGridCell => c !== null).map((c) => c.dateStr)),
+    [cells]
+  );
 
   // Both sides of each day now, not just spend — expense in red, income in
   // green, same color convention as everywhere else a transaction's type
@@ -202,29 +223,20 @@ function CalendarView({
   // `transactions` has already been filtered by the caller.
   const expenseByDay = useMemo(() => {
     const totals = new Map<string, number>();
-    for (const t of transactionsForMonth(transactions, monthStr)) {
-      if (t.type !== 'expense') continue;
+    for (const t of transactions) {
+      if (t.type !== 'expense' || !validDates.has(t.date)) continue;
       totals.set(t.date, (totals.get(t.date) ?? 0) + t.amount);
     }
     return totals;
-  }, [transactions, monthStr]);
+  }, [transactions, validDates]);
   const incomeByDay = useMemo(() => {
     const totals = new Map<string, number>();
-    for (const t of transactionsForMonth(transactions, monthStr)) {
-      if (t.type !== 'income') continue;
+    for (const t of transactions) {
+      if (t.type !== 'income' || !validDates.has(t.date)) continue;
       totals.set(t.date, (totals.get(t.date) ?? 0) + t.amount);
     }
     return totals;
-  }, [transactions, monthStr]);
-
-  const year = month.getFullYear();
-  const monthIndex = month.getMonth();
-  const firstWeekday = new Date(year, monthIndex, 1).getDay();
-  const total = daysInMonth(year, monthIndex);
-  const cells: (number | null)[] = [
-    ...Array(firstWeekday).fill(null),
-    ...Array.from({ length: total }, (_, i) => i + 1),
-  ];
+  }, [transactions, validDates]);
 
   const selectedDayTransactions = selectedDay
     ? transactions.filter((t) => t.date === selectedDay).sort((a, b) => (a.id < b.id ? 1 : -1))
@@ -246,9 +258,9 @@ function CalendarView({
             ))}
           </View>
           <View style={styles.dayGrid}>
-            {cells.map((day, i) => {
-              if (day === null) return <View key={`empty-${i}`} style={styles.dayCell} />;
-              const dateStr = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            {cells.map((cell, i) => {
+              if (!cell) return <View key={`empty-${i}`} style={styles.dayCell} />;
+              const { dateStr, day } = cell;
               const expense = expenseByDay.get(dateStr) ?? 0;
               const income = incomeByDay.get(dateStr) ?? 0;
               const isToday = dateStr === todayStr;
@@ -328,6 +340,159 @@ function CalendarView({
   );
 }
 
+// Year mode's Calendar page — a 12-month grid showing each month's expense/
+// income totals. Tapping a month selects it (shows that month's transactions
+// below, the same "tap to expand" feel as a day in CalendarView above)
+// rather than drilling into a further day grid: a day-of-month grid for an
+// entire year would be 12 grids at once, more navigation than a quick
+// "what happened around when" glance calls for.
+function YearCalendarView({
+  year,
+  transactions,
+  categories,
+  bottomPadding,
+}: {
+  year: number;
+  transactions: Transaction[];
+  categories: Category[];
+  bottomPadding: number;
+}) {
+  const theme = useTheme();
+  const thisMonthStr = toMonthStr(new Date());
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSelectedMonth(null);
+  }, [year]);
+
+  const months = useMemo(
+    () => Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`),
+    [year]
+  );
+
+  const expenseByMonth = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const t of transactions) {
+      if (t.type !== 'expense' || !t.date.startsWith(String(year))) continue;
+      const m = t.date.slice(0, 7);
+      totals.set(m, (totals.get(m) ?? 0) + t.amount);
+    }
+    return totals;
+  }, [transactions, year]);
+  const incomeByMonth = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const t of transactions) {
+      if (t.type !== 'income' || !t.date.startsWith(String(year))) continue;
+      const m = t.date.slice(0, 7);
+      totals.set(m, (totals.get(m) ?? 0) + t.amount);
+    }
+    return totals;
+  }, [transactions, year]);
+
+  const monthRows = [months.slice(0, 4), months.slice(4, 8), months.slice(8, 12)];
+  const selectedMonthTransactions = selectedMonth
+    ? transactions.filter((t) => t.date.startsWith(selectedMonth)).sort((a, b) => (a.date < b.date ? 1 : -1))
+    : [];
+
+  return (
+    <View style={{ flex: 1 }}>
+      <View style={styles.content}>
+        <View style={[styles.calendarCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <View style={styles.yearMonthGrid}>
+            {monthRows.map((row) => (
+              <View key={row[0]} style={styles.yearMonthRow}>
+                {row.map((monthStr) => {
+                  const monthIndex = Number(monthStr.slice(5, 7)) - 1;
+                  const expense = expenseByMonth.get(monthStr) ?? 0;
+                  const income = incomeByMonth.get(monthStr) ?? 0;
+                  const isToday = monthStr === thisMonthStr;
+                  const isSelected = monthStr === selectedMonth;
+                  return (
+                    <Pressable
+                      key={monthStr}
+                      onPress={() => setSelectedMonth((m) => (m === monthStr ? null : monthStr))}
+                      style={styles.yearMonthCell}>
+                      <View
+                        style={[
+                          styles.yearMonthCellInner,
+                          { borderColor: theme.border },
+                          !isSelected && isToday && { borderColor: theme.accent, borderWidth: 1.5 },
+                          isSelected && { backgroundColor: theme.accent, borderColor: theme.accent },
+                        ]}>
+                        <ThemedText
+                          type="small"
+                          themeColor={isSelected ? undefined : 'textSecondary'}
+                          style={isSelected && styles.dayNumberSelected}>
+                          {MONTH_NAMES[monthIndex]}
+                        </ThemedText>
+                        {expense > 0 && (
+                          <ThemedText
+                            type="small"
+                            themeColor={isSelected ? 'text' : 'destructive'}
+                            style={[styles.daySpend, isSelected && styles.daySpendSelected]}
+                            numberOfLines={1}>
+                            -${expense >= 1000 ? `${Math.round(expense / 100) / 10}k` : Math.round(expense)}
+                          </ThemedText>
+                        )}
+                        {income > 0 && (
+                          <ThemedText
+                            type="small"
+                            themeColor={isSelected ? 'text' : 'success'}
+                            style={[styles.daySpend, isSelected && styles.daySpendSelected]}
+                            numberOfLines={1}>
+                            +${income >= 1000 ? `${Math.round(income / 100) / 10}k` : Math.round(income)}
+                          </ThemedText>
+                        )}
+                        {expense === 0 && income === 0 && (
+                          <ThemedText type="small" themeColor={isSelected ? 'text' : 'textTertiary'}>
+                            —
+                          </ThemedText>
+                        )}
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ))}
+          </View>
+        </View>
+      </View>
+
+      <ScrollView contentContainerStyle={[styles.content, { paddingTop: Spacing.four, paddingBottom: bottomPadding }]}>
+        {selectedMonth && (
+          <View style={styles.dateGroup}>
+            <ThemedText type="small" themeColor="textSecondary" style={styles.dateHeader}>
+              {monthLabel(new Date(`${selectedMonth}-01T00:00:00`)).toUpperCase()}
+            </ThemedText>
+            {selectedMonthTransactions.length === 0 ? (
+              <View style={[styles.group, styles.emptyGroup, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                <ThemedText type="small" themeColor="textSecondary">
+                  No transactions this month.
+                </ThemedText>
+              </View>
+            ) : (
+              <View style={[styles.group, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                {selectedMonthTransactions.map((t, i) => (
+                  <View key={t.id}>
+                    <TransactionRow
+                      transaction={t}
+                      category={getCategory(categories, t.categoryId)}
+                      onPress={() => router.push(`/add-transaction?id=${t.id}`)}
+                    />
+                    {i < selectedMonthTransactions.length - 1 && (
+                      <View style={[styles.divider, styles.rowDividerInset, { backgroundColor: theme.border }]} />
+                    )}
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+      </ScrollView>
+    </View>
+  );
+}
+
 export default function TransactionsScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -368,14 +533,14 @@ export default function TransactionsScreen() {
     if (customRange?.end) setPickerVisible(false);
   }, [customRange]);
 
-  // Calendar is inherently a month-grid view — there's no sensible
-  // calendar-page equivalent for a week or a year, so switching away from
-  // month mode drops back to List (same "monthly concept, falls back
-  // sensibly" precedent as Budgets and Home's own budget preview). Read via
-  // the functional setState form rather than depending on `view` directly,
-  // so this only ever fires off a `rangeType` change.
+  // Calendar has a real page for Month, Week, and Year now (see
+  // CalendarView/YearCalendarView above) — only Custom has no sensible
+  // single-grid shape for an arbitrary range, so switching to Custom is the
+  // only case that drops back to List. Read via the functional setState
+  // form rather than depending on `view` directly, so this only ever fires
+  // off a `rangeType` change.
   useEffect(() => {
-    if (rangeType === 'month') return;
+    if (rangeType !== 'custom') return;
     setView((v) => {
       if (v !== 'calendar') return v;
       pagerRef.current?.scrollTo({ x: 0, animated: false });
@@ -396,6 +561,28 @@ export default function TransactionsScreen() {
     }
     return Array.from(byDate.entries());
   }, [filteredTransactions, start, end]);
+
+  // Month mode's day-of-month grid (leading blanks + every day of the
+  // navigated month) and Week mode's single-row grid (no blanks — a week is
+  // always exactly 7 Sunday-start days) — both feed the same generalized
+  // CalendarView, see its own comment above for why.
+  const monthCells = useMemo<(DayGridCell | null)[]>(() => {
+    const year = anchor.getFullYear();
+    const monthIndex = anchor.getMonth();
+    const firstWeekday = new Date(year, monthIndex, 1).getDay();
+    const total = daysInMonth(year, monthIndex);
+    return [
+      ...Array(firstWeekday).fill(null),
+      ...Array.from({ length: total }, (_, i) => {
+        const day = i + 1;
+        return { dateStr: `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`, day };
+      }),
+    ];
+  }, [anchor]);
+  const weekCells = useMemo<DayGridCell[]>(
+    () => daysBetween(start, end).map((dateStr) => ({ dateStr, day: Number(dateStr.slice(-2)) })),
+    [start, end]
+  );
 
   function goToView(next: 'list' | 'calendar') {
     setView(next);
@@ -422,11 +609,11 @@ export default function TransactionsScreen() {
     rangeType === 'week' ? 'week' : rangeType === 'year' ? 'year' : rangeType === 'custom' ? 'range' : 'month';
   const emptyMessage = hasFilter ? `No matching transactions this ${rangeNoun}.` : `No transactions this ${rangeNoun}.`;
 
-  // Same SectionList either way — month mode nests it as the List page of
-  // the List/Calendar pager below, week/year mode renders it directly
+  // Same SectionList either way — month/week/year mode nests it as the List
+  // page of the List/Calendar pager below, custom mode renders it directly
   // full-bleed (there's no Calendar page to pair it with, see the rangeType
-  // effect above) — kept as one shared element rather than two copies of
-  // this JSX so the two can't drift out of sync.
+  // effect above) — kept as one shared element rather than several copies of
+  // this JSX so they can't drift out of sync.
   const transactionList = (
     <SectionList
       sections={sections}
@@ -464,6 +651,35 @@ export default function TransactionsScreen() {
       )}
     />
   );
+
+  // The pager's second page — its shape depends on rangeType. Custom never
+  // reaches this (it renders transactionList full-bleed instead, see the
+  // render below).
+  const calendarPage =
+    rangeType === 'week' ? (
+      <CalendarView
+        periodKey={start}
+        cells={weekCells}
+        transactions={filteredTransactions}
+        categories={categories}
+        bottomPadding={bottomPadding}
+      />
+    ) : rangeType === 'year' ? (
+      <YearCalendarView
+        year={anchor.getFullYear()}
+        transactions={filteredTransactions}
+        categories={categories}
+        bottomPadding={bottomPadding}
+      />
+    ) : (
+      <CalendarView
+        periodKey={toMonthStr(anchor)}
+        cells={monthCells}
+        transactions={filteredTransactions}
+        categories={categories}
+        bottomPadding={bottomPadding}
+      />
+    );
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -540,11 +756,10 @@ export default function TransactionsScreen() {
             })}
           </View>
 
-          {/* List/Calendar only makes sense in month mode (see the
-              rangeType effect above) — week/year modes show List alone,
-              full-bleed, with no toggle or page dots to switch away from
-              a Calendar page that isn't there. */}
-          {rangeType === 'month' && (
+          {/* List/Calendar toggle + page dots — shown for every rangeType
+              except Custom, which has no single-grid Calendar shape for an
+              arbitrary range (see the rangeType effect above). */}
+          {rangeType !== 'custom' && (
             <>
               <View style={[styles.segmented, { borderColor: theme.border }]}>
                 {(['list', 'calendar'] as const).map((v) => {
@@ -584,7 +799,7 @@ export default function TransactionsScreen() {
         </View>
       </View>
 
-      {rangeType === 'month' ? (
+      {rangeType !== 'custom' ? (
         <View style={{ flex: 1 }}>
           <ScrollView
             ref={pagerRef}
@@ -595,9 +810,7 @@ export default function TransactionsScreen() {
             style={{ flex: 1 }}>
             <View style={{ width: pageWidth, flex: 1 }}>{transactionList}</View>
 
-            <View style={{ width: pageWidth, flex: 1 }}>
-              <CalendarView month={anchor} transactions={filteredTransactions} categories={categories} bottomPadding={bottomPadding} />
-            </View>
+            <View style={{ width: pageWidth, flex: 1 }}>{calendarPage}</View>
           </ScrollView>
         </View>
       ) : (
@@ -818,6 +1031,26 @@ const styles = StyleSheet.create({
   },
   daySpendSelected: {
     color: '#ffffff',
+  },
+  // Year mode's 12-month grid (YearCalendarView) — same 3-row/4-column shape
+  // as budget-editor.tsx's own year grid, sized for this screen's card.
+  yearMonthGrid: {
+    gap: Spacing.two,
+  },
+  yearMonthRow: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+  },
+  yearMonthCell: {
+    flex: 1,
+  },
+  yearMonthCellInner: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+    paddingVertical: Spacing.three,
+    borderRadius: Spacing.two,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   modalBackdrop: {
     flex: 1,

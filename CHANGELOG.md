@@ -2,6 +2,24 @@
 
 Newest first.
 
+## 2026-09-01 — Transactions: Calendar for Week/Year too; grey restored to category palette
+
+- Transactions' Calendar page is no longer Month-only: `CalendarView` was generalized to take a
+  caller-built `cells`/`periodKey` pair instead of a `month: Date`, so the same day-grid rendering
+  now serves both Month (full month, leading blanks) and a new Week mode (a compact single 7-day row,
+  no blanks — a week is always exactly Sunday-start-aligned). A new `YearCalendarView` gives Year mode
+  its own Calendar shape: a 12-month grid (each cell showing that month's expense/income totals) —
+  tapping a month selects it and expands that month's transactions below, no further day-grid
+  drill-down. Only Custom still has no Calendar page (no single-grid shape fits an arbitrary range);
+  every other rangeType now shows the List/Calendar toggle and page-dot row. `MONTH_NAMES` (a
+  12-short-month-name array) was extracted to `lib/date-range.ts` once Year's month-grid became the
+  3rd near-identical copy (budgets.tsx and range-picker-modal.tsx each had their own). See CLAUDE.md's
+  "Transactions List/Calendar" convention bullet.
+- Reverted the 2026-08-31 "no grey" change to `CATEGORY_COLORS`: grey (`#8E8E93`) is back in the
+  swatch picker per explicit feedback, and the second magenta pink that had replaced it is dropped.
+  Subscriptions (the one seeded default category the 08-31 change had recolored) moved back to grey
+  too. See CLAUDE.md's `categories.ts` bullet.
+
 ## 2026-08-31 — Demo data now covers last year and income goals too
 
 - `generateYearToDateDemoData()` renamed to `generateDemoData()` and extended per feedback: it now

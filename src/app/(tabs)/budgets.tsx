@@ -22,6 +22,7 @@ import { BottomTabInset, CardRadius, CardShadow, MaxContentWidth, Spacing } from
 import { useTheme } from '@/hooks/use-theme';
 import { getBudgetProgress, getBudgets, type Budget } from '@/lib/budgets';
 import { categoriesForType, getCategories, type Category } from '@/lib/categories';
+import { MONTH_NAMES } from '@/lib/date-range';
 import { getTransactions, type Transaction } from '@/lib/transactions';
 
 function toMonthStr(date: Date) {
@@ -36,10 +37,6 @@ function monthLabel(monthStr: string) {
 function formatAmount(amount: number) {
   return amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
-
-const MONTH_NAMES = Array.from({ length: 12 }, (_, m) =>
-  new Date(2000, m, 1).toLocaleDateString(undefined, { month: 'short' })
-);
 
 // Same shape as Home/Transactions' own MonthYearPickerModal — duplicated
 // rather than shared per the no-premature-abstraction rule (this makes 3

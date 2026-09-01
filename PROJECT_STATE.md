@@ -1,11 +1,22 @@
 # Project State
 
-_Last updated: 2026-08-31_
+_Last updated: 2026-09-01_
 
 Snapshot of where the app stands. History: [CHANGELOG.md](CHANGELOG.md). Upcoming: [TODO.md](TODO.md).
 
 ## What's implemented
 
+- **Transactions Calendar extended to Week/Year, grey restored to category palette (2026-09-01)** —
+  `CalendarView` (Transactions' day-grid Calendar page) was generalized from Month-only to also serve
+  Week (a compact single 7-day row, no leading blanks) via a caller-built `cells`/`periodKey` pair
+  instead of a `month: Date`; a new `YearCalendarView` gives Year mode its own 12-month-grid Calendar
+  page (tap a month to expand its transactions, no day-grid drill-down). Only Custom still falls back
+  to List-only, full-bleed — every other rangeType now shows the List/Calendar toggle and page dots.
+  `MONTH_NAMES` was extracted to `lib/date-range.ts` (3rd near-identical copy, after budgets.tsx and
+  range-picker-modal.tsx). Separately, the 2026-08-31 "no grey" category-palette change was reverted
+  per explicit feedback — grey (`#8E8E93`) is back in `CATEGORY_COLORS`'s swatch picker, the extra
+  magenta pink dropped, Subscriptions' default color moved back to grey. See CLAUDE.md's "Transactions
+  List/Calendar" and `categories.ts` bullets.
 - **Trends reverted to a flat reference line, scrub/pager conflicts fixed, demo data extended
   (2026-08-31, same-session follow-up to the pace line below)** — the diagonal "paced" budget line
   (Expenses only) and its ahead/behind status band were reverted per feedback: `CumulativeTrendChart`
@@ -20,11 +31,6 @@ Snapshot of where the app stands. History: [CHANGELOG.md](CHANGELOG.md). Upcomin
   view shows real 2025 totals, Budgets' Income Goals section shows Salary/Freelance/Investments goals
   set. See CLAUDE.md's `cumulative-trend-chart.tsx`, "Trends tab", "No vertical scrolling", and
   "Settings + demo data" bullets.
-- **Grey removed from category palette (2026-08-31)** — `lib/categories.ts`'s `CATEGORY_COLORS`
-  swatch palette no longer offers grey — the old systemGray slot is now a second, more magenta pink
-  (`#FF2D95`), and the Subscriptions default category (the one seeded category that used that grey)
-  moved to it. `#98989D` ("Other"/"Other Income", not a palette slot) was left as its own deliberate
-  neutral-catch-all design call. See CLAUDE.md's `categories.ts` bullet.
 - **Custom date range + new Trends tab (2026-08-30)** — Home and Transactions' Week/Month/Year range
   nav gained a 4th "Custom" pill (tap two days on a calendar to set start/end; nav chevrons slide the
   whole window by its own length). That range-picker machinery (`rangeBounds`/`shiftAnchor`/
@@ -126,6 +132,17 @@ Snapshot of where the app stands. History: [CHANGELOG.md](CHANGELOG.md). Upcomin
 - **Local-only** — AsyncStorage, no accounts/sync (deliberate v1 scope, see TODO.md).
 - **Pinned to Expo SDK 54** (not the current 57) so the App Store build of Expo Go can run it —
   Apple's Expo Go approval has been stuck since SDK 55. See CLAUDE.md "Why SDK 54, not 57".
+
+## Open verification items (2026-09-01)
+
+- **Transactions Calendar for Week/Year + grey restored** — verified in the web preview with seeded
+  demo data: Week mode's Calendar page renders as a single Sunday-start 7-day row (today outlined,
+  Sep 1 confirmed showing both expense and income totals), tapping a day expands its transactions
+  below unchanged from Month's own behavior; Year mode's Calendar page renders a 12-month grid (Sep
+  outlined as the current month, Oct–Dec correctly showing "—" for no data yet), tapping a month
+  expands a "MAY 2026"-style header with that month's transactions below; Custom mode still falls back
+  to List-only with no toggle. `tsc --noEmit` and `expo lint` both clean. The category-editor color
+  grid shows grey back in its last swatch slot with no extra pink. Not yet given an on-device pass.
 
 ## Open verification items (2026-08-31)
 
