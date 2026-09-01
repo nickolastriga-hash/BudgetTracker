@@ -2,6 +2,38 @@
 
 Newest first.
 
+## 2026-08-31 — Demo data now covers last year and income goals too
+
+- `generateYearToDateDemoData()` renamed to `generateDemoData()` and extended per feedback: it now
+  backfills two ranges — this year's Jan 1 through today (as before) plus all of last year, Jan 1
+  through Dec 31 — so Trends' Year view and year-over-year comparisons have a prior period to compare
+  against. Also now sets a monthly goal on up to 3 income categories in addition to the existing
+  expense-category budgets (previously expense-only), both applied "onward" from the current year's
+  January so they cover both backfilled years. Settings' button/copy renamed to "Generate demo data"
+  to match. See CLAUDE.md's `demo-data.ts` and "Settings + demo data" bullets.
+
+## 2026-08-31 — Trends: dropped the diagonal pace line, fixed scrub-vs-swipe conflicts
+
+- Reverted the diagonal "paced" budget line (Expenses only, added earlier the same day) back to one
+  flat, dotted "Target" reference line for all three of Expense/Income/Net, per feedback — no more
+  per-type branching, no ahead/behind status band. `CumulativeTrendChart` lost its `paced` prop
+  entirely; the flat line, "Today" marker, gradient fill, and scrub callout (now always showing a
+  flat target + "vs target" delta) are unchanged. See CLAUDE.md's `cumulative-trend-chart.tsx` bullet.
+- Fixed two real bugs with dragging to scrub a chart: (1) it also swiped the outer Expense/Income/Net
+  pager to the next page, even though the chart's touch overlay claimed the JS responder on
+  touch-down — claiming the responder doesn't stop the pager, since its horizontal scroll is driven
+  by a native pan gesture recognizer that lives outside the JS responder system entirely and has no
+  idea a child view is "handling" the same touch. Fixed by having the chart call new
+  `onScrubStart`/`onScrubEnd` props on touch-down/touch-up; `trends.tsx` wires those to an
+  `isScrubbing` flag and passes `scrollEnabled={!isScrubbing}` to the pager `ScrollView`, actually
+  disabling it for the drag's duration. (2) The touch itself was unreliable to begin with — per
+  feedback, Trends' outer vertical `ScrollView` was a *second* native pan-gesture recognizer
+  competing for the same drag; switched it to a plain, non-scrolling `View` (this tab's one card fits
+  without scrolling). The chart's touch layer also now claims the responder on both the capture and
+  bubble variants of both start/move (`onStart/MoveShouldSetResponderCapture` added alongside the
+  existing non-capture handlers) for a faster, more reliable claim. See CLAUDE.md's Trends scrubbing
+  and "No vertical scrolling" bullets for the full explanation.
+
 ## 2026-08-30 — Custom date range + new Trends tab
 
 - Home and Transactions' Week/Month/Year range nav gained a 4th "Custom" option — two taps on a

@@ -54,8 +54,8 @@ system to show a profile for; opens `app/settings.tsx`, see its own bullet below
   see the screen's own convention bullet below), then an Expenses/Income/Net segmented toggle plus a
   page-dot row, same swipeable-pager pattern as Budgets' and Home's own pagers. Each page is a
   `CumulativeTrendChart` line — a running daily total of that type's actual transactions across the
-  navigated range — against a dashed budget/goal reference line (diagonal and "paced" for Expenses,
-  flat for Income/Net — see the component's own bullet below) at that period's total budgeted/goal
+  navigated range — against a flat, dashed budget/goal reference line (see the component's own bullet
+  below) at that period's total budgeted/goal
   amount (summed from whichever categories actually have a budget/goal set), plus an actual-vs-budget summary
   row above the chart (a colored total, the budget total, and a green/red over-or-under pill). Net's
   page derives its line from the other two (`income - expense`, index-for-index) rather than its own
@@ -173,9 +173,9 @@ src/
                           button) — no in-content title of its own, unlike
                           add-transaction/category-editor which follow the
                           same convention. One section so far: "Generate
-                          year-to-date data" (two-tap confirm, same pattern as
+                          demo data" (two-tap confirm, same pattern as
                           add-transaction's Delete), calls
-                          lib/demo-data.ts#generateYearToDateDemoData().
+                          lib/demo-data.ts#generateDemoData().
 
   lib/
     date-range.ts           Week/Month/Year/Custom range machinery (RangeType,
@@ -249,20 +249,37 @@ src/
                           briefly for a Bills management screen that was
                           removed 2026-08-26 (see TODO.md); re-add them if that
                           UI comes back.
-    demo-data.ts            generateYearToDateDemoData() (added 2026-08-26),
-                          called from settings.tsx. Backfills Jan 1 of the
-                          current year through today with random expense/
-                          income transactions (existing categories only,
-                          never creates new ones) plus a monthly limit on up
-                          to 6 expense categories via lib/budgets.ts's
-                          applyLimit. Purely additive — never reads existing
-                          transactions/budgets before writing, so it's safe to
-                          run against real data but will double up if run
-                          twice. Sequential `await addTransaction(...)` per
-                          generated row (same read-modify-write-per-call
-                          shape as generateDueTransactions above), not batched
-                          — fine at this data volume (~100-150 rows for a
-                          partial year), would need revisiting if the range or
+    demo-data.ts            generateDemoData() (added 2026-08-26 as
+                          generateYearToDateDemoData, renamed and extended
+                          2026-08-31), called from settings.tsx. Backfills two
+                          ranges with random expense/income transactions
+                          (existing categories only, never creates new ones):
+                          Jan 1 of the current year through today, plus (added
+                          2026-08-31, per feedback that Trends' Year view and
+                          year-over-year comparisons had nothing prior to
+                          compare against) all of last year, Jan 1 through
+                          Dec 31. Both ranges share one `backfillRange()`
+                          helper (walks whole months, capping the final
+                          month's last day at the range's own end — the
+                          current year's range ends "today", last year's ends
+                          its real Dec 31) which itself calls
+                          `generateMonthTransactions()` per month, rather than
+                          duplicating the month-walking loop per range. Also
+                          sets a monthly limit/goal via lib/budgets.ts's
+                          applyLimit on up to 6 expense categories (as
+                          before) and, since 2026-08-31, up to 3 income
+                          categories too (previously expense-only) — both
+                          applied "onward" from the current year's January, so
+                          the one recurring limit/goal covers both backfilled
+                          years' worth of actuals. Purely additive — never
+                          reads existing transactions/budgets before writing,
+                          so it's safe to run against real data but will
+                          double up if run twice. Sequential `await
+                          addTransaction(...)` per generated row (same
+                          read-modify-write-per-call shape as
+                          generateDueTransactions above), not batched — fine
+                          at this data volume (~200-300 rows across both
+                          years), would need revisiting if the range or
                           per-month density grew much larger.
 
   components/
@@ -280,91 +297,58 @@ src/
                           passes 'week', for instance).
     cumulative-trend-chart.tsx  CumulativeTrendChart (added 2026-08-30) for
                           Trends — a react-native-svg `Polyline` running-total
-                          line against a diagonal grey dotted budget-pace
-                          `Line` running from $0 on the period's first day to
-                          `budgetTotal` on its last (2026-08-31 fix — was a
-                          flat `Line` at budgetTotal's height until then,
-                          which read as a fixed ceiling instead of a pace to
-                          keep up with; `budgetTotal: null` still skips the
-                          line entirely rather than drawing it at $0). Takes
-                          `totalDays` (the full nominal period's day count)
-                          separately from `points` (capped at today by the
-                          caller — see the "Trends tab" convention bullet
+                          line against a flat, dashed grey "Target" `Line` at
+                          `budgetTotal`'s height (`budgetTotal: null` skips
+                          the line entirely rather than drawing it at $0).
+                          Takes `totalDays` (the full nominal period's day
+                          count) separately from `points` (capped at today by
+                          the caller — see the "Trends tab" convention bullet
                           below) as its x-axis domain, so a still-in-progress
                           period plots the actual line across only its
-                          elapsed fraction of the width while the pace line
-                          keeps running out to the period's real end — before
-                          this split, `points.length` alone sized the x-axis,
-                          which stretched a mid-month actual line to fill the
-                          whole chart and made pace impossible to read at a
-                          glance. Bucketed by day regardless of the caller's
-                          range type (Month/Year/Custom all resolve to a
-                          plain day list via lib/date-range's daysBetween
-                          before reaching here) — one rendering path instead
-                          of three.
-                          **`paced` prop (2026-08-31, same day, per follow-up
-                          feedback that a day-by-day pace line reads as
-                          misleading for Income and Net)**: the diagonal
-                          treatment only ever gets passed as `paced` for
-                          Expenses. A straight "spend evenly across the
-                          month" line makes sense for money going *out* on a
-                          roughly steady drip; income arrives in lumps
-                          (paychecks, not a daily trickle), so a diagonal
-                          pace there flipped the ahead/behind band red
-                          between paydays and green right after one — not a
-                          real signal. Income and Net (which inherits
-                          income's lumpiness through its `netPoints`
-                          derivation) pass `paced: false` and get a flat
-                          "Target" reference line at `budgetTotal`'s height
-                          instead — the pre-2026-08-31-fix flat shape, kept
-                          around as the deliberate choice for these two
-                          rather than reverted everywhere. `referenceAt(i,
-                          budget)` is the one function both shapes go
-                          through (proportional-to-`i` when `paced`, constant
-                          when not), so every consumer of "the reference
-                          value at day i" — the band, the scrub callout —
-                          automatically follows whichever shape the caller
-                          chose without a second code path.
-                          **Visibility pass (2026-08-31, same day as the
-                          diagonal fix, per follow-up feedback that the
-                          actual-vs-budget comparison itself was hard to
-                          read)**: an ahead/behind status band fills the area
-                          between the actual and reference lines when
-                          `paced` — green when that side of pace is the
-                          favorable one per `positiveIsGood` (under-budget
-                          for Expenses, at/over-goal for Income/Net — the
-                          same flip `ProgressBar`/the diff pill already use),
-                          red otherwise — built as one `Polygon` per
-                          contiguous same-verdict run of days rather than
-                          interpolating the exact crossing point (a pixel or
-                          two of slop right at a sign flip isn't worth the
-                          extra math). A flat (`paced: false`) target has no
-                          such band — "haven't hit the goal yet" would just
-                          repeat as the same non-signal every day until the
-                          period ends, so shading it would mislead in a
-                          different way than the diagonal did. Whenever
-                          there's no band to draw (no budget set, or `paced:
-                          false`), the actual line gets a plain soft
-                          `LinearGradient` fill under itself instead — never
-                          both at once. That gradient's `id` is namespaced
-                          with `useId()` rather than hardcoded, since
-                          react-native-svg renders a real `<svg>` on web and
-                          three of these charts (Expense/Income/Net) are
-                          mounted at once — a fixed id would've had the 2nd
-                          and 3rd panel silently reuse the 1st's gradient. A
-                          "Today" marker (a subtle dashed vertical `Line` +
-                          label) appears when the period is still in
-                          progress, at the same x where the actual line
-                          currently stops — its label is bottom-anchored, not
-                          top-anchored, because a cumulative sum trends
-                          upward, so the actual line's most recent point is
-                          usually already near the *top* of the chart and a
-                          top label collided with it constantly during
-                          testing. Press-and-hold-drag scrubbing (added
-                          2026-08-30, enhanced 2026-08-31 to also show the
-                          scrubbed day's reference value — "Pace" when
-                          `paced`, "Target" when not — and a colored "vs
-                          pace"/"vs target" delta, not just the flat period
+                          elapsed fraction of the width while the target line
+                          keeps running out to the period's real end.
+                          Bucketed by day regardless of the caller's range
+                          type (Month/Year/Custom all resolve to a plain day
+                          list via lib/date-range's daysBetween before
+                          reaching here) — one rendering path instead of
+                          three.
+                          **A diagonal "paced" variant (2026-08-31, Expenses
+                          only) came and went the same day.** It replaced the
+                          flat line with one running from $0 on the period's
+                          first day to `budgetTotal` on its last, plus an
+                          ahead/behind status band filling the area between
+                          the actual and pace lines (green/red per
+                          `positiveIsGood`). Reverted the same day per
+                          feedback: go back to one flat dotted reference line
+                          for all three of Expense/Income/Net — there's no
+                          `paced` prop, no band, and no per-type branching
+                          any more. If a pace-style feature comes back later,
+                          note it flipped the ahead/behind reading red/green
+                          between paydays for Income (which arrives in lumps,
+                          not a daily trickle) and Net inherited that same
+                          lumpiness — that's *why* it was Expenses-only
+                          before, not an oversight to fix by extending it to
+                          all three.
+                          **Visibility pass (2026-08-31, kept through the
+                          revert above)**: the actual line gets a soft
+                          `LinearGradient` fill under itself, namespaced with
+                          `useId()` rather than a hardcoded gradient id,
+                          since react-native-svg renders a real `<svg>` on
+                          web and three of these charts (Expense/Income/Net)
+                          are mounted at once — a fixed id would've had the
+                          2nd and 3rd panel silently reuse the 1st's
+                          gradient. A "Today" marker (a subtle dashed
+                          vertical `Line` + label) appears when the period is
+                          still in progress, at the same x where the actual
+                          line currently stops — its label is
+                          bottom-anchored, not top-anchored, because a
+                          cumulative sum trends upward, so the actual line's
+                          most recent point is usually already near the
+                          *top* of the chart and a top label collided with it
+                          constantly during testing. Press-and-hold-drag
+                          scrubbing (added 2026-08-30, enhanced 2026-08-31 to
+                          also show the scrubbed day's flat target value and
+                          a colored "vs target" delta, not just the actual
                           total) shows a per-day callout via a transparent
                           touch-responder
                           `View` overlaid as a sibling of the `<Svg>` (not a
@@ -377,21 +361,43 @@ src/
                           responder event's own `locationX` (proved
                           unreliable on web there, so this mirrors what
                           already worked instead of risking the same class
-                          of bug again). Claims the responder on press-down,
-                          not after a hold delay, so a press-and-drag reads
-                          as scrubbing immediately — the trade-off is that a
-                          swipe starting from inside the chart area won't
-                          also page the outer Expense/Income/Net pager; the
-                          segmented toggle and page dots above it are the way
-                          to switch pages from there. Non-callout numeric
-                          labels (axis start/end dates, "Pace"/"Target",
-                          "Today") are still drawn by the caller/component with
-                          ThemedText, not SVG text — same "SVG draws shapes,
-                          the screen draws text" split as CategoryRingChart's
-                          center content — but the callout itself is internal
-                          to this component (it needs the chart's own x/y
-                          scaling to position itself, unlike a caller-owned
-                          center label).
+                          of bug again). Claims the responder on both the
+                          start and move phases, and on both the capture and
+                          bubble variants (`onStart/MoveShouldSetResponder`
+                          plus their `...Capture` counterparts, added
+                          2026-08-31 for reliability), on press-down rather
+                          than after a hold delay, so a press-and-drag reads
+                          as scrubbing as early and as reliably as the JS
+                          responder system allows. Claiming the JS responder
+                          alone doesn't actually stop the drag from also
+                          paging the outer Expense/Income/Net pager, though —
+                          that pager's horizontal scroll is driven by its own
+                          native pan gesture recognizer, which lives outside
+                          the JS responder system and doesn't care that some
+                          child view "handled" the touch (found 2026-08-31:
+                          an earlier trade-off note that used to live here
+                          claimed swiping the chart wouldn't page the pager,
+                          but it did). Fixed by having the chart call
+                          `onScrubStart`/`onScrubEnd` props on touch-down/
+                          touch-up, which `trends.tsx` wires to
+                          `setIsScrubbing` and passes through as the pager
+                          ScrollView's own `scrollEnabled={!isScrubbing}` —
+                          actually disabling the pager for the drag's
+                          duration rather than hoping responder claims alone
+                          would keep it from noticing. The same day, Trends'
+                          own outer vertical `ScrollView` was also dropped
+                          for a plain non-scrolling `View` (see the "Trends
+                          tab" convention bullet below) — it was a second
+                          native pan-gesture recognizer competing for the
+                          same drag, on top of the horizontal pager above.
+                          Non-callout numeric labels (axis start/end dates,
+                          "Target", "Today") are still drawn by the
+                          caller/component with ThemedText, not SVG text —
+                          same "SVG draws shapes, the screen draws text"
+                          split as CategoryRingChart's center content — but
+                          the callout itself is internal to this component
+                          (it needs the chart's own x/y scaling to position
+                          itself, unlike a caller-owned center label).
     category-ring-chart.tsx  Donut/ring chart (added 2026-08-26) for Home's dashboard card — stacked
                           react-native-svg `Circle`s, one per segment, each showing only its own
                           slice via strokeDasharray/strokeDashoffset. Small segments (their dash
@@ -592,12 +598,15 @@ src/
   required dropping their `overflow: 'hidden'` (shadows get clipped by it) — the only cost is a
   square instead of rounded corner on the first/last row's press-highlight, not worth the
   wrapper-View complexity to avoid.
-- **Settings + demo data (added 2026-08-26)** — `app/settings.tsx`, reached via `SettingsButton` on
-  every tab. First (only, so far) feature is "Generate year-to-date data"
-  (`lib/demo-data.ts#generateYearToDateDemoData`), a two-tap-confirmed button that backfills random
-  transactions + a handful of category budgets from Jan 1 of the current year through today — for
-  demoing/testing without hand-entering months of data. Purely additive (never clears/dedupes), so
-  repeated taps pile up rather than reset; there's no companion "clear demo data" yet, see TODO.md.
+- **Settings + demo data (added 2026-08-26, extended 2026-08-31)** — `app/settings.tsx`, reached via
+  `SettingsButton` on every tab. First (only, so far) feature is "Generate demo data"
+  (`lib/demo-data.ts#generateDemoData`, renamed from `generateYearToDateDemoData`), a
+  two-tap-confirmed button that backfills random transactions across two ranges — this year's Jan 1
+  through today, plus (2026-08-31, per feedback that Trends' Year view had nothing prior to compare
+  against) all of last year — and sets a handful of both expense budgets *and* income goals
+  (2026-08-31; previously expense-only) — for demoing/testing without hand-entering months of data.
+  Purely additive (never clears/dedupes), so repeated taps pile up rather than reset; there's no
+  companion "clear demo data" yet, see TODO.md.
 - **Mutations to `transactions.ts`/`budgets.ts`/`recurring.ts` all go through the same
   promise-chain write-queue pattern** (`let writeQueue = Promise.resolve(); enqueue(fn)`) — copied
   across all three files rather than shared, per the no-premature-abstraction rule above, but keep
@@ -764,20 +773,17 @@ src/
     an unset category's actual spend/income still moves the cumulative line, it just doesn't move the
     reference line. A total of exactly 0 (no budgets of that type at all) renders as `budgetTotal:
     null` so `CumulativeTrendChart` skips the reference line entirely instead of drawing it at $0.
-    The reference line is diagonal, not flat, **for Expenses only** (2026-08-31 fix, per explicit
-    feedback that a budget should "increment daily to reach the total at the last day," not sit at
-    one constant height all month) — `totalDays` (`daysBetween(start, end).length`, the range's
-    *full* nominal length, computed once in this screen and passed to every panel) is what
-    `CumulativeTrendChart` draws that diagonal against, decoupled from how many actual data points
-    there are so the pace line keeps running to the period's true end even when `points` stops at
-    today. Income and Net pass `paced={false}` (same day, second follow-up) and keep the flat shape
-    instead — income arrives in lumps (paychecks), not a steady daily drip, so a linear pace line
-    there made the ahead/behind shading flip red between paydays and green right after one, which
-    isn't a real signal; Net inherits that same lumpiness since `netPoints` is derived from
-    `incomePoints`. See that component's own Folder Structure entry above for the full mechanics,
-    including the `paced` prop and the 2026-08-31
-    visibility pass (ahead/behind status band, today marker, scrub-callout pace delta) built on top
-    of this same `totalDays` domain the same day.
+    The reference line is flat, at `budgetTotal`'s height, for all three of Expense/Income/Net — a
+    diagonal "paced" version (Expenses only, ramping from $0 to `budgetTotal` across the period) had
+    a brief life on 2026-08-31 and was reverted the same day per feedback: back to one flat dotted
+    line everywhere, no per-type branching. `totalDays` (`daysBetween(start, end).length`, the
+    range's *full* nominal length, computed once in this screen and passed to every panel) still
+    matters even for the flat line — it's the x-axis domain, so a still-in-progress period plots the
+    actual line across only its elapsed fraction of the width while the flat target line keeps
+    running the full way to the period's real end. See that component's own Folder Structure entry
+    above for the full mechanics, including the 2026-08-31
+    visibility pass (today marker, scrub-callout target delta) built on top of this same `totalDays`
+    domain the same day.
   - **Net's own numbers are derived, not scanned**: `netPoints` is `incomePoints[i].actual -
     expensePoints[i].actual` per day (both arrays share the same day list so they line up
     index-for-index) rather than a third transaction pass, and `netBudgetTotal` is
@@ -788,3 +794,11 @@ src/
     (`toLocaleString`'s minus sign lands after the digits start, not before the `$`), so Trends has its
     own `formatSigned()` that moves the sign in front of the `$` instead — a bug caught and fixed
     during this feature's own build via the Browser-pane verification workflow, not by inspection.
+  - **No vertical scrolling (2026-08-31)**: unlike every other tab, the body below the pinned header
+    is a plain `View`, not a `ScrollView` — per explicit feedback that this tab shouldn't scroll
+    vertically, and because it was a second native pan-gesture recognizer competing with the chart's
+    own scrub touch layer for the same drag (on top of the horizontal Expense/Income/Net pager below,
+    which `onScrubStart`/`onScrubEnd` already handle — see `CumulativeTrendChart`'s own bullet above).
+    The one card (range summary + pager) fits without scrolling in practice; this was a deliberate
+    trade rather than an oversight, so don't reach for `ScrollView` here again without re-checking
+    that trade-off first.

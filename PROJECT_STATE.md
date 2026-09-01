@@ -6,27 +6,34 @@ Snapshot of where the app stands. History: [CHANGELOG.md](CHANGELOG.md). Upcomin
 
 ## What's implemented
 
-- **Trends pace line + visibility pass, grey removed from category palette (2026-08-31)** —
-  `CumulativeTrendChart`'s budget reference line is now diagonal ($0 → `budgetTotal` across the full
-  period, not flat) for **Expenses only**; Income/Net pass `paced={false}` and keep a flat "Target"
-  line, since income arrives in lumps (paychecks) and a linear daily pace there falsely flipped
-  ahead/behind. Added an ahead/behind status band (green/red fill between actual and pace, `paced`
-  only), a "Today" marker for in-progress periods, a soft gradient fill under the actual line when
-  there's no band to draw, and a scrub-callout "vs pace"/"vs target" delta. Separately,
-  `lib/categories.ts`'s `CATEGORY_COLORS` swatch palette no longer offers grey — the old systemGray
-  slot is now a second, more magenta pink (`#FF2D95`), and the Subscriptions default category (the
-  one seeded category that used that grey) moved to it. `#98989D` ("Other"/"Other Income", not a
-  palette slot) was left as its own deliberate neutral-catch-all design call. See CLAUDE.md's
-  `cumulative-trend-chart.tsx`/"Trends tab"/"Budget reference line" and `categories.ts` bullets.
+- **Trends reverted to a flat reference line, scrub/pager conflicts fixed, demo data extended
+  (2026-08-31, same-session follow-up to the pace line below)** — the diagonal "paced" budget line
+  (Expenses only) and its ahead/behind status band were reverted per feedback: `CumulativeTrendChart`
+  is back to one flat, dotted "Target" line for all three of Expense/Income/Net, no `paced` prop. Two
+  real bugs fixed along the way: dragging to scrub a chart also paged the outer Expense/Income/Net
+  pager (claiming the JS responder doesn't stop the pager's own native pan gesture recognizer — fixed
+  via new `onScrubStart`/`onScrubEnd` props that toggle the pager's `scrollEnabled`), and Trends' own
+  outer vertical `ScrollView` was a second competing native recognizer — switched to a plain
+  non-scrolling `View`. Separately, `lib/demo-data.ts`'s `generateDemoData()` (renamed from
+  `generateYearToDateDemoData`) now also backfills all of last year (not just this year to date) and
+  sets goals on up to 3 income categories (not just expense budgets) — verified live: Trends' Year
+  view shows real 2025 totals, Budgets' Income Goals section shows Salary/Freelance/Investments goals
+  set. See CLAUDE.md's `cumulative-trend-chart.tsx`, "Trends tab", "No vertical scrolling", and
+  "Settings + demo data" bullets.
+- **Grey removed from category palette (2026-08-31)** — `lib/categories.ts`'s `CATEGORY_COLORS`
+  swatch palette no longer offers grey — the old systemGray slot is now a second, more magenta pink
+  (`#FF2D95`), and the Subscriptions default category (the one seeded category that used that grey)
+  moved to it. `#98989D` ("Other"/"Other Income", not a palette slot) was left as its own deliberate
+  neutral-catch-all design call. See CLAUDE.md's `categories.ts` bullet.
 - **Custom date range + new Trends tab (2026-08-30)** — Home and Transactions' Week/Month/Year range
   nav gained a 4th "Custom" pill (tap two days on a calendar to set start/end; nav chevrons slide the
   whole window by its own length). That range-picker machinery (`rangeBounds`/`shiftAnchor`/
   `RangePickerModal`, previously duplicated per-file) was extracted to `lib/date-range.ts` +
   `components/range-picker-modal.tsx` once a 4th tab, **Trends**, became a 3rd near-identical
   consumer. Trends shows cumulative actual-vs-budget: a Month/Year/Custom nav, an Expenses/Income/Net
-  swipeable pager, each page a `CumulativeTrendChart` line (actual, capped at today) against a budget/
-  goal reference line (diagonal for Expenses, flat for Income/Net — see the 2026-08-31 entry above),
-  with press-and-hold-drag scrubbing for a per-day value callout. See CLAUDE.md's "Custom date range"
+  swipeable pager, each page a `CumulativeTrendChart` line (actual, capped at today) against a flat
+  budget/goal reference line (see the 2026-08-31 entry above), with press-and-hold-drag scrubbing for
+  a per-day value callout. See CLAUDE.md's "Custom date range"
   and "Trends tab" convention bullets for the mechanics.
 
 - **Budgets and Home both gained swipeable Expense/Income pagers (2026-08-29)** — Budgets replaced
@@ -110,11 +117,12 @@ Snapshot of where the app stands. History: [CHANGELOG.md](CHANGELOG.md). Upcomin
   redesigned the same day (bigger badge, no accent bar/arrow glyph, trailing chevron, `CardShadow`
   on the list containers) per feedback that the old look was dated. Elevated rounded-card list style
   (`CardRadius`/`CardShadow` in `constants/theme.ts`) across all tabs.
-- **Settings + demo data (2026-08-26)** — new `SettingsButton` (34px, top-right of every tab's
-  header, matches HabitTracker's ProfileButton placement/size) opens `app/settings.tsx`. One feature
-  so far: "Generate year-to-date data" — two-tap-confirmed, backfills random expense/income
-  transactions and a handful of category budgets from Jan 1 through today
-  (`lib/demo-data.ts#generateYearToDateDemoData`). Purely additive, no "clear" companion yet.
+- **Settings + demo data (2026-08-26, extended 2026-08-31)** — new `SettingsButton` (34px, top-right
+  of every tab's header, matches HabitTracker's ProfileButton placement/size) opens
+  `app/settings.tsx`. One feature so far: "Generate demo data" — two-tap-confirmed, backfills random
+  expense/income transactions across this year (Jan 1 through today) and all of last year, plus a
+  handful of expense budgets and income goals (`lib/demo-data.ts#generateDemoData`, renamed from
+  generateYearToDateDemoData). Purely additive, no "clear" companion yet.
 - **Local-only** — AsyncStorage, no accounts/sync (deliberate v1 scope, see TODO.md).
 - **Pinned to Expo SDK 54** (not the current 57) so the App Store build of Expo Go can run it —
   Apple's Expo Go approval has been stuck since SDK 55. See CLAUDE.md "Why SDK 54, not 57".

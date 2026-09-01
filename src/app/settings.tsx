@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { CardRadius, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { generateYearToDateDemoData } from '@/lib/demo-data';
+import { generateDemoData } from '@/lib/demo-data';
 
 function SettingsRow({
   icon,
@@ -61,9 +61,9 @@ export default function SettingsScreen() {
     setConfirming(false);
     setGenerating(true);
     setResult(null);
-    const { transactions, budgets } = await generateYearToDateDemoData();
+    const { transactions, budgets } = await generateDemoData();
     setGenerating(false);
-    setResult(`Added ${transactions} transactions and set ${budgets} category budgets.`);
+    setResult(`Added ${transactions} transactions and set ${budgets} budgets/goals.`);
   }
 
   return (
@@ -84,9 +84,9 @@ export default function SettingsScreen() {
                 ? 'Generating…'
                 : confirming
                   ? 'Tap again to generate'
-                  : 'Generate year-to-date data'
+                  : 'Generate demo data'
             }
-            subtitle="Adds random expense/income transactions and category budgets for Jan 1 through today. Doesn't touch or remove anything already there — safe to run more than once, but repeats will pile up."
+            subtitle="Adds random expense/income transactions for this year to date plus all of last year, and sets a handful of expense budgets and income goals. Doesn't touch or remove anything already there — safe to run more than once, but repeats will pile up."
             disabled={generating}
             onPress={handleGenerate}
           />

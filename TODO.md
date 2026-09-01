@@ -50,9 +50,9 @@ transactions, all local-only. Deliberately deferred:
 - ~~**Category icon colors forced to red/green**~~ — reverted 2026-08-26: `CategoryBadge` uses the
   category's own color again, with a small red/green corner dot as the type cue. See CLAUDE.md's
   "Category icon colors are custom again" convention.
-- ~~**Settings screen / demo data**~~ — done (2026-08-26): `app/settings.tsx`, reached via a
-  `SettingsButton` on every tab, with a "Generate year-to-date data" feature. See CLAUDE.md's
-  "Settings + demo data" convention.
-- **No "clear demo data" companion** — `generateYearToDateDemoData()` is purely additive; there's no
+- ~~**Settings screen / demo data**~~ — done (2026-08-26, extended 2026-08-31 to also cover last
+  year and income goals): `app/settings.tsx`, reached via a `SettingsButton` on every tab, with a
+  "Generate demo data" feature. See CLAUDE.md's "Settings + demo data" convention.
+- **No "clear demo data" companion** — `generateDemoData()` is purely additive; there's no
   button to remove what it added, or to wipe all transactions/budgets generally. Running it more
   than once just piles up more data rather than replacing the previous batch.

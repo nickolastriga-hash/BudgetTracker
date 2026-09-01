@@ -93,11 +93,12 @@ function TrendPanel({
   rangeStart,
   rangeEnd,
   budgetTotal,
-  paced,
   lineColor,
   positiveIsGood,
   width,
   onLayout,
+  onScrubStart,
+  onScrubEnd,
 }: {
   label: string;
   points: TrendPoint[];
@@ -105,11 +106,12 @@ function TrendPanel({
   rangeStart: string;
   rangeEnd: string;
   budgetTotal: number | null;
-  paced: boolean;
   lineColor: string;
   positiveIsGood: boolean;
   width: number;
   onLayout: (height: number) => void;
+  onScrubStart: () => void;
+  onScrubEnd: () => void;
 }) {
   const theme = useTheme();
   const actualTotal = points[points.length - 1]?.actual ?? 0;
@@ -151,13 +153,14 @@ function TrendPanel({
         points={points}
         totalDays={totalDays}
         budgetTotal={budgetTotal}
-        paced={paced}
         positiveIsGood={positiveIsGood}
         width={width}
         height={180}
         lineColor={lineColor}
         formatValue={formatSigned}
         formatDate={shortDateLabel}
+        onScrubStart={onScrubStart}
+        onScrubEnd={onScrubEnd}
       />
       {totalDays > 0 && (
         <View style={styles.axisLabelRow}>
@@ -193,6 +196,11 @@ export default function TrendsScreen() {
   const [incomeHeight, setIncomeHeight] = useState(0);
   const [netHeight, setNetHeight] = useState(0);
   const pagerRef = useRef<ScrollView>(null);
+  // Disables the pager's own scrollEnabled for the duration of a chart
+  // scrub — see CumulativeTrendChart's handleGrant comment for why claiming
+  // the JS responder there isn't enough on its own to stop the pager's
+  // native pan gesture from also picking up the same drag.
+  const [isScrubbing, setIsScrubbing] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -388,7 +396,15 @@ export default function TrendsScreen() {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={[styles.content, { paddingTop: Spacing.three, paddingBottom: bottomPadding }]}>
+      {/* A plain (non-scrolling) View, not a ScrollView — per feedback that
+          this tab shouldn't scroll vertically at all, both because the card
+          fits without it and because a vertical ScrollView here was a second
+          native pan-gesture recognizer competing with the chart's own scrub
+          touch layer for the same drag (on top of the horizontal
+          Expense/Income/Net pager below, which onScrubStart/onScrubEnd above
+          already handle) — one less competing recognizer for the OS to
+          arbitrate between. */}
+      <View style={[styles.content, { paddingTop: Spacing.three, paddingBottom: bottomPadding }]}>
         <View style={[styles.card, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
           <View style={styles.pagerWrap} onLayout={(e) => setPanelWidth(e.nativeEvent.layout.width)}>
             <ScrollView
@@ -397,6 +413,7 @@ export default function TrendsScreen() {
               pagingEnabled
               showsHorizontalScrollIndicator={false}
               onMomentumScrollEnd={onPagerScrollEnd}
+              scrollEnabled={!isScrubbing}
               style={{ height: panelHeight }}>
               <View style={{ width: panelWidth }}>
                 <TrendPanel
@@ -406,11 +423,12 @@ export default function TrendsScreen() {
                   rangeStart={start}
                   rangeEnd={end}
                   budgetTotal={expenseBudgetTotal > 0 ? expenseBudgetTotal : null}
-                  paced
                   lineColor={theme.destructive}
                   positiveIsGood={false}
                   width={panelWidth}
                   onLayout={setExpenseHeight}
+                  onScrubStart={() => setIsScrubbing(true)}
+                  onScrubEnd={() => setIsScrubbing(false)}
                 />
               </View>
               <View style={{ width: panelWidth }}>
@@ -421,11 +439,12 @@ export default function TrendsScreen() {
                   rangeStart={start}
                   rangeEnd={end}
                   budgetTotal={incomeBudgetTotal > 0 ? incomeBudgetTotal : null}
-                  paced={false}
                   lineColor={theme.success}
                   positiveIsGood={true}
                   width={panelWidth}
                   onLayout={setIncomeHeight}
+                  onScrubStart={() => setIsScrubbing(true)}
+                  onScrubEnd={() => setIsScrubbing(false)}
                 />
               </View>
               <View style={{ width: panelWidth }}>
@@ -436,17 +455,18 @@ export default function TrendsScreen() {
                   rangeStart={start}
                   rangeEnd={end}
                   budgetTotal={netBudgetTotal}
-                  paced={false}
                   lineColor={theme.accent}
                   positiveIsGood={true}
                   width={panelWidth}
                   onLayout={setNetHeight}
+                  onScrubStart={() => setIsScrubbing(true)}
+                  onScrubEnd={() => setIsScrubbing(false)}
                 />
               </View>
             </ScrollView>
           </View>
         </View>
-      </ScrollView>
+      </View>
 
       <RangePickerModal
         visible={pickerVisible}
