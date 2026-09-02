@@ -2,16 +2,29 @@
 
 Newest first.
 
+## 2026-09-01 — Week's Calendar redesigned to a whole-month grid with week-level selection
+
+- Follow-up to the same-day change below, per feedback: Week mode's Calendar page no longer collapses
+  to just the selected week's compact 7-day row — it now shows the whole month (same grid as Month's
+  own `CalendarView`), with the selectable/highlightable unit being a whole calendar week (one grid
+  row, wrapped in its own bounding rectangle) instead of a single day. The real current week gets a
+  blue outline by default; tapping any week selects it (fills it blue) and expands that week's
+  transactions below. Landed as a new `WeekCalendarView` component rather than a further-generalized
+  `CalendarView` — `CalendarView` itself reverted back to its simpler `month: Date` signature (its
+  sole caller again, once Week stopped needing a shared `cells`/`periodKey` abstraction that was only
+  a few hours old). See CLAUDE.md's "Transactions List/Calendar" convention bullet.
+- Month's own day-of-month grid cells (`dayCell`) are now slightly condensed vertically
+  (`aspectRatio: 1.3` instead of a plain square), per feedback that a 5-6-row month read taller than
+  it needed to.
+
 ## 2026-09-01 — Transactions: Calendar for Week/Year too; grey restored to category palette
 
-- Transactions' Calendar page is no longer Month-only: `CalendarView` was generalized to take a
-  caller-built `cells`/`periodKey` pair instead of a `month: Date`, so the same day-grid rendering
-  now serves both Month (full month, leading blanks) and a new Week mode (a compact single 7-day row,
-  no blanks — a week is always exactly Sunday-start-aligned). A new `YearCalendarView` gives Year mode
-  its own Calendar shape: a 12-month grid (each cell showing that month's expense/income totals) —
-  tapping a month selects it and expands that month's transactions below, no further day-grid
-  drill-down. Only Custom still has no Calendar page (no single-grid shape fits an arbitrary range);
-  every other rangeType now shows the List/Calendar toggle and page-dot row. `MONTH_NAMES` (a
+- Transactions' Calendar page is no longer Month-only: a new Week mode showed just the selected
+  week's 7 days (superseded the same day, see the entry above), and a new `YearCalendarView` gave
+  Year mode its own Calendar shape — a 12-month grid (each cell showing that month's expense/income
+  totals), tapping a month selects it and expands that month's transactions below, no further
+  day-grid drill-down. Only Custom still has no Calendar page (no single-grid shape fits an arbitrary
+  range); every other rangeType now shows the List/Calendar toggle and page-dot row. `MONTH_NAMES` (a
   12-short-month-name array) was extracted to `lib/date-range.ts` once Year's month-grid became the
   3rd near-identical copy (budgets.tsx and range-picker-modal.tsx each had their own). See CLAUDE.md's
   "Transactions List/Calendar" convention bullet.

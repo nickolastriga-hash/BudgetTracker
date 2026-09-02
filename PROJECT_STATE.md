@@ -7,16 +7,18 @@ Snapshot of where the app stands. History: [CHANGELOG.md](CHANGELOG.md). Upcomin
 ## What's implemented
 
 - **Transactions Calendar extended to Week/Year, grey restored to category palette (2026-09-01)** —
-  `CalendarView` (Transactions' day-grid Calendar page) was generalized from Month-only to also serve
-  Week (a compact single 7-day row, no leading blanks) via a caller-built `cells`/`periodKey` pair
-  instead of a `month: Date`; a new `YearCalendarView` gives Year mode its own 12-month-grid Calendar
-  page (tap a month to expand its transactions, no day-grid drill-down). Only Custom still falls back
-  to List-only, full-bleed — every other rangeType now shows the List/Calendar toggle and page dots.
-  `MONTH_NAMES` was extracted to `lib/date-range.ts` (3rd near-identical copy, after budgets.tsx and
-  range-picker-modal.tsx). Separately, the 2026-08-31 "no grey" category-palette change was reverted
-  per explicit feedback — grey (`#8E8E93`) is back in `CATEGORY_COLORS`'s swatch picker, the extra
-  magenta pink dropped, Subscriptions' default color moved back to grey. See CLAUDE.md's "Transactions
-  List/Calendar" and `categories.ts` bullets.
+  Transactions' Calendar page now works for every rangeType except Custom. Month: unchanged day grid
+  (`CalendarView`), cells now slightly condensed vertically per feedback. Week: a new
+  `WeekCalendarView` — the *whole month* stays visible (an earlier same-day version that collapsed to
+  just the selected week's 7 days was reverted per feedback), but the selectable/highlightable unit is
+  a whole calendar week (one grid row, its own bounding rectangle) rather than a single day — the real
+  current week is outlined blue by default, tapping any week fills it blue and expands that week's
+  transactions below. Year: a new `YearCalendarView`, a 12-month grid (tap a month to expand its
+  transactions, no further day-grid drill-down). `MONTH_NAMES` was extracted to `lib/date-range.ts`
+  (3rd near-identical copy, after budgets.tsx and range-picker-modal.tsx). Separately, the 2026-08-31
+  "no grey" category-palette change was reverted per explicit feedback — grey (`#8E8E93`) is back in
+  `CATEGORY_COLORS`'s swatch picker, the extra magenta pink dropped, Subscriptions' default color
+  moved back to grey. See CLAUDE.md's "Transactions List/Calendar" and `categories.ts` bullets.
 - **Trends reverted to a flat reference line, scrub/pager conflicts fixed, demo data extended
   (2026-08-31, same-session follow-up to the pace line below)** — the diagonal "paced" budget line
   (Expenses only) and its ahead/behind status band were reverted per feedback: `CumulativeTrendChart`
@@ -136,13 +138,17 @@ Snapshot of where the app stands. History: [CHANGELOG.md](CHANGELOG.md). Upcomin
 ## Open verification items (2026-09-01)
 
 - **Transactions Calendar for Week/Year + grey restored** — verified in the web preview with seeded
-  demo data: Week mode's Calendar page renders as a single Sunday-start 7-day row (today outlined,
-  Sep 1 confirmed showing both expense and income totals), tapping a day expands its transactions
-  below unchanged from Month's own behavior; Year mode's Calendar page renders a 12-month grid (Sep
-  outlined as the current month, Oct–Dec correctly showing "—" for no data yet), tapping a month
-  expands a "MAY 2026"-style header with that month's transactions below; Custom mode still falls back
-  to List-only with no toggle. `tsc --noEmit` and `expo lint` both clean. The category-editor color
-  grid shows grey back in its last swatch slot with no extra pink. Not yet given an on-device pass.
+  demo data, including the same-day Week redesign (whole-month grid, week-level selection): Month
+  mode's day cells confirmed visibly wider-than-tall after the `aspectRatio: 1.3` change; Week mode's
+  Calendar page renders the full month with each week as one bounding rectangle, the real current week
+  (Aug 30 – Sep 5) outlined blue on load, tapping a different week (Sep 13–19, then Aug 2–8 after
+  paging back a month) fills it blue independently of the still-outlined current week and expands a
+  `formatRangeLabel`'d header ("AUG 2 – 8, 2026") with that week's 4 transactions listed correctly
+  below; Year mode's Calendar page renders a 12-month grid (Sep outlined as the current month, Oct–Dec
+  correctly showing "—" for no data yet), tapping a month expands a "MAY 2026"-style header with that
+  month's transactions below; Custom mode still falls back to List-only with no toggle. `tsc --noEmit`
+  and `expo lint` both clean throughout. The category-editor color grid shows grey back in its last
+  swatch slot with no extra pink. Not yet given an on-device pass.
 
 ## Open verification items (2026-08-31)
 

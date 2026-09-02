@@ -25,13 +25,14 @@ import { BottomTabInset, CardRadius, CardShadow, MaxContentWidth, Spacing } from
 import { useTheme } from '@/hooks/use-theme';
 import { categoriesForType, getCategories, getCategory, type Category } from '@/lib/categories';
 import {
-  daysBetween,
   daysInMonth,
+  formatRangeLabel,
   monthLabel,
   MONTH_NAMES,
   rangeBounds,
   shiftAnchor,
   shiftCustomRange,
+  startOfWeek,
   toDateStr,
   toMonthStr,
   type CustomRange,
@@ -66,9 +67,9 @@ function dateHeaderLabel(dateStr: string) {
 // Also used by Calendar's own day-of-month grid below.
 const WEEKDAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
-// A cell in CalendarView's day grid — either a real day (dateStr + display
-// number) or `null` for a leading blank in Month mode (Week mode never
-// needs blanks, since a week is always exactly 7 Sunday-start days).
+// A cell in a day grid (CalendarView's and WeekCalendarView's own) — either
+// a real day (dateStr + display number) or `null` for a leading/trailing
+// blank.
 type DayGridCell = { dateStr: string; day: number };
 
 // Type + category filter, reached via the funnel button in the header.
@@ -179,43 +180,28 @@ function FilterModal({
   );
 }
 
-// A day grid — a full month (with leading blanks) or a single week row (no
-// blanks, always Sunday-start-aligned) — showing each visible day's total
-// spend/income, plus a tap-to-expand transaction list below it. Generalized
-// 2026-09-01 from a month-only component to also serve Week mode: `cells` is
-// caller-built (see monthCells/weekCells in TransactionsScreen below) and
-// `periodKey` is whatever should reset the tapped-day selection when the
-// caller's navigated period changes (a month string for Month, the week's
-// start date for Week) — the component itself has no idea which mode
-// produced its cells.
+// Month mode's Calendar page — a day-of-month grid (leading blanks + every
+// day of the navigated month) showing each day's total spend/income, plus a
+// tap-to-expand transaction list below it.
 function CalendarView({
-  periodKey,
-  cells,
+  month,
   transactions,
   categories,
   bottomPadding,
 }: {
-  periodKey: string;
-  cells: (DayGridCell | null)[];
+  month: Date;
   transactions: Transaction[];
   categories: Category[];
   bottomPadding: number;
 }) {
   const theme = useTheme();
+  const monthStr = toMonthStr(month);
   const todayStr = toDateStr(new Date());
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
   useEffect(() => {
     setSelectedDay(null);
-  }, [periodKey]);
-
-  // The set of dates actually on the grid — a day filter here rather than a
-  // month filter, so the same code works whether `cells` came from a whole
-  // month or just one week.
-  const validDates = useMemo(
-    () => new Set(cells.filter((c): c is DayGridCell => c !== null).map((c) => c.dateStr)),
-    [cells]
-  );
+  }, [monthStr]);
 
   // Both sides of each day now, not just spend — expense in red, income in
   // green, same color convention as everywhere else a transaction's type
@@ -224,19 +210,31 @@ function CalendarView({
   const expenseByDay = useMemo(() => {
     const totals = new Map<string, number>();
     for (const t of transactions) {
-      if (t.type !== 'expense' || !validDates.has(t.date)) continue;
+      if (t.type !== 'expense' || !t.date.startsWith(monthStr)) continue;
       totals.set(t.date, (totals.get(t.date) ?? 0) + t.amount);
     }
     return totals;
-  }, [transactions, validDates]);
+  }, [transactions, monthStr]);
   const incomeByDay = useMemo(() => {
     const totals = new Map<string, number>();
     for (const t of transactions) {
-      if (t.type !== 'income' || !validDates.has(t.date)) continue;
+      if (t.type !== 'income' || !t.date.startsWith(monthStr)) continue;
       totals.set(t.date, (totals.get(t.date) ?? 0) + t.amount);
     }
     return totals;
-  }, [transactions, validDates]);
+  }, [transactions, monthStr]);
+
+  const year = month.getFullYear();
+  const monthIndex = month.getMonth();
+  const firstWeekday = new Date(year, monthIndex, 1).getDay();
+  const total = daysInMonth(year, monthIndex);
+  const cells: (DayGridCell | null)[] = [
+    ...Array(firstWeekday).fill(null),
+    ...Array.from({ length: total }, (_, i) => {
+      const day = i + 1;
+      return { dateStr: `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`, day };
+    }),
+  ];
 
   const selectedDayTransactions = selectedDay
     ? transactions.filter((t) => t.date === selectedDay).sort((a, b) => (a.id < b.id ? 1 : -1))
@@ -327,6 +325,206 @@ function CalendarView({
                       onPress={() => router.push(`/add-transaction?id=${t.id}`)}
                     />
                     {i < selectedDayTransactions.length - 1 && (
+                      <View style={[styles.divider, styles.rowDividerInset, { backgroundColor: theme.border }]} />
+                    )}
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+      </ScrollView>
+    </View>
+  );
+}
+
+// Week mode's Calendar page (2026-09-01, replacing an earlier "just the
+// selected week's 7 days" compact row per follow-up feedback that the whole
+// month should stay visible) — the same day-of-month grid as CalendarView
+// above, but the selectable/highlightable unit is a whole calendar week (one
+// grid row), not a single day: each week is wrapped in its own bounding
+// rectangle instead of each day getting its own bordered cell, the real
+// current week's rectangle is outlined blue by default (the same "isToday"
+// idea CalendarView's day cells use, just for a week instead of a day), and
+// tapping any week's rectangle selects it — fills it blue and expands that
+// whole week's transactions below, same "tap to expand" feel as a day in
+// CalendarView. Not built as a mode of the generalized CalendarView above
+// since the selection unit itself differs (a week vs. a day), which would
+// have meant threading an extra "granularity" flag through nearly every
+// branch of that component instead of just writing a second one.
+function WeekCalendarView({
+  month,
+  transactions,
+  categories,
+  bottomPadding,
+}: {
+  month: Date;
+  transactions: Transaction[];
+  categories: Category[];
+  bottomPadding: number;
+}) {
+  const theme = useTheme();
+  const monthStr = toMonthStr(month);
+  const todayStr = toDateStr(new Date());
+  const todayWeekStart = toDateStr(startOfWeek(new Date()));
+  const [selectedWeekStart, setSelectedWeekStart] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSelectedWeekStart(null);
+  }, [monthStr]);
+
+  const year = month.getFullYear();
+  const monthIndex = month.getMonth();
+  const firstWeekday = new Date(year, monthIndex, 1).getDay();
+  const totalDays = daysInMonth(year, monthIndex);
+
+  // Every calendar-week row the month's grid needs, leading/trailing blanks
+  // padded so each row is a real, full 7-day week (needed to draw one
+  // bounding rectangle per row) — each row's own Sunday/Saturday bounds are
+  // computed directly off its grid position (works even though a row's
+  // leading cells can be null) rather than via startOfWeek on any one cell.
+  const weeks = useMemo(() => {
+    const flat: (DayGridCell | null)[] = [
+      ...Array(firstWeekday).fill(null),
+      ...Array.from({ length: totalDays }, (_, i) => {
+        const day = i + 1;
+        return {
+          dateStr: `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+          day,
+        };
+      }),
+    ];
+    while (flat.length % 7 !== 0) flat.push(null);
+    const rows: { weekStart: string; weekEnd: string; cells: (DayGridCell | null)[] }[] = [];
+    for (let i = 0; i < flat.length; i += 7) {
+      const weekStartDate = new Date(year, monthIndex, 1 - firstWeekday + i);
+      const weekEndDate = new Date(year, monthIndex, 1 - firstWeekday + i + 6);
+      rows.push({ weekStart: toDateStr(weekStartDate), weekEnd: toDateStr(weekEndDate), cells: flat.slice(i, i + 7) });
+    }
+    return rows;
+  }, [year, monthIndex, firstWeekday, totalDays]);
+
+  const expenseByDay = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const t of transactions) {
+      if (t.type !== 'expense' || !t.date.startsWith(monthStr)) continue;
+      totals.set(t.date, (totals.get(t.date) ?? 0) + t.amount);
+    }
+    return totals;
+  }, [transactions, monthStr]);
+  const incomeByDay = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const t of transactions) {
+      if (t.type !== 'income' || !t.date.startsWith(monthStr)) continue;
+      totals.set(t.date, (totals.get(t.date) ?? 0) + t.amount);
+    }
+    return totals;
+  }, [transactions, monthStr]);
+
+  const selectedWeek = weeks.find((w) => w.weekStart === selectedWeekStart) ?? null;
+  const selectedWeekTransactions = selectedWeek
+    ? transactions
+        .filter((t) => t.date >= selectedWeek.weekStart && t.date <= selectedWeek.weekEnd)
+        .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.id < b.id ? 1 : -1))
+    : [];
+
+  return (
+    <View style={{ flex: 1 }}>
+      <View style={styles.content}>
+        <View style={[styles.calendarCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <View style={styles.weekdayRow}>
+            {WEEKDAY_LABELS.map((w, i) => (
+              <ThemedText key={i} type="small" themeColor="textTertiary" style={styles.weekdayLabel}>
+                {w}
+              </ThemedText>
+            ))}
+          </View>
+          <View style={styles.weekGrid}>
+            {weeks.map((week) => {
+              const isCurrentWeek = week.weekStart === todayWeekStart;
+              const isSelected = week.weekStart === selectedWeekStart;
+              return (
+                <Pressable
+                  key={week.weekStart}
+                  onPress={() => setSelectedWeekStart((w) => (w === week.weekStart ? null : week.weekStart))}>
+                  <View
+                    style={[
+                      styles.weekRow,
+                      { borderColor: theme.border },
+                      !isSelected && isCurrentWeek && { borderColor: theme.accent, borderWidth: 1.5 },
+                      isSelected && { backgroundColor: theme.accent, borderColor: theme.accent },
+                    ]}>
+                    {week.cells.map((cell, i) => {
+                      if (!cell) return <View key={`empty-${i}`} style={styles.weekDayCell} />;
+                      const { dateStr, day } = cell;
+                      const expense = expenseByDay.get(dateStr) ?? 0;
+                      const income = incomeByDay.get(dateStr) ?? 0;
+                      const isRealToday = dateStr === todayStr;
+                      return (
+                        <View key={dateStr} style={styles.weekDayCell}>
+                          <ThemedText
+                            type="small"
+                            style={[
+                              styles.dayNumber,
+                              isSelected && styles.dayNumberSelected,
+                              isRealToday && !isSelected && { color: theme.accent, fontWeight: '700' },
+                            ]}>
+                            {day}
+                          </ThemedText>
+                          {expense > 0 && (
+                            <ThemedText
+                              type="small"
+                              themeColor={isSelected ? 'text' : 'destructive'}
+                              style={[styles.daySpend, isSelected && styles.daySpendSelected]}
+                              numberOfLines={1}>
+                              -${expense >= 1000 ? `${Math.round(expense / 100) / 10}k` : Math.round(expense)}
+                            </ThemedText>
+                          )}
+                          {income > 0 && (
+                            <ThemedText
+                              type="small"
+                              themeColor={isSelected ? 'text' : 'success'}
+                              style={[styles.daySpend, isSelected && styles.daySpendSelected]}
+                              numberOfLines={1}>
+                              +${income >= 1000 ? `${Math.round(income / 100) / 10}k` : Math.round(income)}
+                            </ThemedText>
+                          )}
+                        </View>
+                      );
+                    })}
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      </View>
+
+      <ScrollView contentContainerStyle={[styles.content, { paddingTop: Spacing.four, paddingBottom: bottomPadding }]}>
+        {selectedWeek && (
+          <View style={styles.dateGroup}>
+            <ThemedText type="small" themeColor="textSecondary" style={styles.dateHeader}>
+              {formatRangeLabel(
+                new Date(`${selectedWeek.weekStart}T00:00:00`),
+                new Date(`${selectedWeek.weekEnd}T00:00:00`)
+              ).toUpperCase()}
+            </ThemedText>
+            {selectedWeekTransactions.length === 0 ? (
+              <View style={[styles.group, styles.emptyGroup, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                <ThemedText type="small" themeColor="textSecondary">
+                  No transactions this week.
+                </ThemedText>
+              </View>
+            ) : (
+              <View style={[styles.group, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                {selectedWeekTransactions.map((t, i) => (
+                  <View key={t.id}>
+                    <TransactionRow
+                      transaction={t}
+                      category={getCategory(categories, t.categoryId)}
+                      onPress={() => router.push(`/add-transaction?id=${t.id}`)}
+                    />
+                    {i < selectedWeekTransactions.length - 1 && (
                       <View style={[styles.divider, styles.rowDividerInset, { backgroundColor: theme.border }]} />
                     )}
                   </View>
@@ -562,28 +760,6 @@ export default function TransactionsScreen() {
     return Array.from(byDate.entries());
   }, [filteredTransactions, start, end]);
 
-  // Month mode's day-of-month grid (leading blanks + every day of the
-  // navigated month) and Week mode's single-row grid (no blanks — a week is
-  // always exactly 7 Sunday-start days) — both feed the same generalized
-  // CalendarView, see its own comment above for why.
-  const monthCells = useMemo<(DayGridCell | null)[]>(() => {
-    const year = anchor.getFullYear();
-    const monthIndex = anchor.getMonth();
-    const firstWeekday = new Date(year, monthIndex, 1).getDay();
-    const total = daysInMonth(year, monthIndex);
-    return [
-      ...Array(firstWeekday).fill(null),
-      ...Array.from({ length: total }, (_, i) => {
-        const day = i + 1;
-        return { dateStr: `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`, day };
-      }),
-    ];
-  }, [anchor]);
-  const weekCells = useMemo<DayGridCell[]>(
-    () => daysBetween(start, end).map((dateStr) => ({ dateStr, day: Number(dateStr.slice(-2)) })),
-    [start, end]
-  );
-
   function goToView(next: 'list' | 'calendar') {
     setView(next);
     // animated: true silently no-ops on react-native-web here (scrollLeft
@@ -657,9 +833,8 @@ export default function TransactionsScreen() {
   // render below).
   const calendarPage =
     rangeType === 'week' ? (
-      <CalendarView
-        periodKey={start}
-        cells={weekCells}
+      <WeekCalendarView
+        month={anchor}
         transactions={filteredTransactions}
         categories={categories}
         bottomPadding={bottomPadding}
@@ -672,13 +847,7 @@ export default function TransactionsScreen() {
         bottomPadding={bottomPadding}
       />
     ) : (
-      <CalendarView
-        periodKey={toMonthStr(anchor)}
-        cells={monthCells}
-        transactions={filteredTransactions}
-        categories={categories}
-        bottomPadding={bottomPadding}
-      />
+      <CalendarView month={anchor} transactions={filteredTransactions} categories={categories} bottomPadding={bottomPadding} />
     );
 
   return (
@@ -1003,7 +1172,10 @@ const styles = StyleSheet.create({
   },
   dayCell: {
     flexBasis: '14.2857%',
-    aspectRatio: 1,
+    // Slightly condensed vertically (2026-09-01, per feedback) — a plain
+    // square (aspectRatio: 1) read as taller than it needed to be once every
+    // row is a full 7-day week; > 1 keeps cells wider than tall.
+    aspectRatio: 1.3,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 2,
@@ -1031,6 +1203,26 @@ const styles = StyleSheet.create({
   },
   daySpendSelected: {
     color: '#ffffff',
+  },
+  // Week mode's month grid with week-level selection (WeekCalendarView) —
+  // each week is one bounding rectangle (weekRow) around 7 plain day cells
+  // (weekDayCell, no individual border/background of their own, unlike
+  // CalendarView's dayCell/dayCellInner) rather than each day getting its
+  // own bordered cell.
+  weekGrid: {
+    gap: Spacing.two,
+  },
+  weekRow: {
+    flexDirection: 'row',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: Spacing.two,
+    paddingVertical: Spacing.two,
+  },
+  weekDayCell: {
+    flexBasis: '14.2857%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 1,
   },
   // Year mode's 12-month grid (YearCalendarView) — same 3-row/4-column shape
   // as budget-editor.tsx's own year grid, sized for this screen's card.

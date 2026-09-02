@@ -29,10 +29,13 @@ system to show a profile for; opens `app/settings.tsx`, see its own bullet below
   Custom — Week and Year gained their own Calendar shapes 2026-09-01, see the "Transactions
   List/Calendar" convention bullet below for all three). List: all of the navigated range's
   transactions grouped by date with sticky per-date headers, tapping a row opens the same modal in
-  edit mode. Calendar: a day-of-month grid in Month mode, a single 7-day row in Week mode (both pinned
-  above the day-detail scroll, showing that day's expense in red/income in green, tap a day to expand
-  its transactions below the grid), or a 12-month grid in Year mode (tap a month to expand that
-  month's transactions below instead of a day). List and Calendar are pages of one horizontal
+  edit mode. Calendar: a day-of-month grid in Month mode (pinned above the day-detail scroll, showing
+  that day's expense in red/income in green, tap a day to expand its transactions below the grid); the
+  same full month grid in Week mode but selectable/highlightable by whole calendar week instead of by
+  day (each week is its own bounding rectangle, the real current week outlined blue by default, tap a
+  week to select it — fills it blue and expands that week's transactions below); or a 12-month grid in
+  Year mode (tap a month to expand that month's transactions below instead of a day). List and
+  Calendar are pages of one horizontal
   `pagingEnabled` ScrollView for Month/Week/Year — swipe between them, or tap the toggle; Custom has
   no Calendar page (no single-grid shape fits an arbitrary range) and renders List alone, full-bleed.
   A funnel button next to `SettingsButton` (2026-08-29) opens a type/category filter that narrows
@@ -661,27 +664,45 @@ src/
   section per date, one data item per section — the whole day's transaction array — so the existing
   card-with-dividers look survives unchanged) with `stickySectionHeadersEnabled`, so each date header
   freezes at the top while its card scrolls underneath.
-  **Calendar (2026-09-01: generalized from a month-only component to a shared `CalendarView` that
-  also serves Week, plus a new `YearCalendarView` for Year)** — `CalendarView` takes `cells: (DayGridCell
-  | null)[]` (a `{ dateStr, day }` per real day, `null` for a leading blank) and a `periodKey` (resets
-  the tapped-day selection when it changes — a month string for Month, the week's start date for
-  Week) instead of a `month: Date`, so the same weekday-row/day-grid/day-detail-list rendering serves
-  both a full month (leading blanks + every day, built by `monthCells` in `TransactionsScreen`) and a
-  single week (no blanks — a week is always exactly 7 Sunday-start-aligned days, built by
-  `weekCells`); both still show expense (red) and income (green) per day via two `Map<dateStr,
-  number>`s, now built from a `validDates` Set derived from `cells` itself rather than a
-  month-string filter, so the same code has no idea whether it's showing a month or a week.
-  `YearCalendarView` is a separate component (Year's grid is month-cells, not day-cells, and taps a
-  month rather than a day) — a 3-row/4-column grid (same shape as `budget-editor.tsx`'s own year
-  grid) of that year's 12 months, each showing its expense/income totals via `Map<monthStr, number>`s
-  filtered on `t.date.startsWith(String(year))`; tapping a month selects it and expands that month's
-  transactions below (`MONTH_NAMES[monthIndex]` labels the cells — see its own Folder Structure entry
-  in `lib/date-range.ts` for why it's shared, not a new duplicate) — no further day-grid drill-down,
-  per explicit feedback that a day grid *per month* would be more navigation than a quick glance
-  calls for. Both calendar components' day/month grids are pinned above a separate inner `ScrollView`
-  holding only the selected day's/month's list (2026-08-27 for Month, carried through the 2026-09-01
-  generalization — "freeze panes", same "pin the date selector above a scrolling detail panel" shape
-  as HabitTracker's own calendar tab) rather than the whole page being one ScrollView. Chevrons are
+  **Calendar (extended to Week and Year 2026-09-01)** — three separate components, one per rangeType,
+  not one generalized component: an initial pass tried threading Week through the Month grid's own
+  `CalendarView` (a `cells`/`periodKey` prop pair instead of a bare `month: Date`) but got reverted
+  the same day, both because Week's actual design (below) turned out to need a different selection
+  *unit* than Month (a whole week vs. a single day, which would have meant a granularity flag through
+  nearly every branch of that component) and because generalizing a component for a caller that no
+  longer needs the generalization is exactly what the no-premature-abstraction rule warns against —
+  `CalendarView` is back to taking `month: Date` directly, its sole caller once more.
+  `CalendarView` (Month) — a day-of-month grid (leading blanks + every day of the navigated month),
+  `dayCell`/`dayCellInner` slightly condensed vertically (2026-09-01, `aspectRatio: 1.3` instead of a
+  plain square, per feedback) so a 5-6-row month doesn't read taller than it needs to. Tapping a day
+  selects it (fills its cell `theme.accent`, unselects any other) and expands that day's transactions
+  below the grid; the real "today" gets a blue outline when nothing is selected. `WeekCalendarView`
+  (Week) — per follow-up feedback that Week's Calendar page should keep the *whole month* visible
+  rather than collapsing to just the one selected week's 7 days (an earlier same-day version did just
+  that, reverted) — reuses the same day-of-month grid shape as `CalendarView`, but the
+  selectable/highlightable unit is a whole calendar week (one grid row) instead of a single day: every
+  row is padded to a full 7 cells (leading *and* trailing blanks, so a week is always drawable as one
+  rectangle) and wrapped in its own bounding `weekRow` View instead of each day getting its own
+  bordered `dayCellInner` — day cells inside are plain (no individual border/background) since the row
+  itself is the highlight surface. Each row's own Sunday/Saturday bounds are computed directly off its
+  grid position (`new Date(year, monthIndex, 1 - firstWeekday + rowIndex*7)` and `+6`) rather than via
+  `startOfWeek` on any one cell, since a row's leading cells can be `null`. The real current week (by
+  `lib/date-range`'s `startOfWeek(new Date())`, independent of wherever the outer nav's `anchor` has
+  been paged to — same "today" idea as a day cell, just for a week) gets the blue outline by default;
+  tapping any week's rectangle selects it — fills it `theme.accent` and expands that whole week's
+  transactions (`formatRangeLabel`'d header, e.g. "AUG 2 – 8, 2026") below the grid, same "tap to
+  expand" feel as a day in `CalendarView`. Selection resets when the visible month changes, same as
+  Month's own day selection. `YearCalendarView` (Year) — a 3-row/4-column grid (same shape as
+  `budget-editor.tsx`'s own year grid) of that year's 12 months, each showing its expense/income
+  totals via `Map<monthStr, number>`s filtered on `t.date.startsWith(String(year))`; tapping a month
+  selects it and expands that month's transactions below (`MONTH_NAMES[monthIndex]` labels the cells —
+  see its own Folder Structure entry in `lib/date-range.ts` for why it's shared, not a new duplicate)
+  — no further day-grid drill-down, per explicit feedback that a day grid *per month* would be more
+  navigation than a quick glance calls for. All three calendar components' grids are pinned above a
+  separate inner `ScrollView` holding only the selected day's/week's/month's list (2026-08-27 for
+  Month, carried through to Week and Year — "freeze panes", same "pin the date selector above a
+  scrolling detail panel" shape as HabitTracker's own calendar tab) rather than the whole page being
+  one ScrollView. Chevrons are
   `theme.accent`/blue and the range label is plain text/black (recolored 2026-08-27, per explicit
   feedback, to match HabitTracker's own arrows-blue/label-black scheme app-wide — this reverses the
   2026-08-26 "deliberate inversion" note that used to live here; there is no inversion anymore, both
