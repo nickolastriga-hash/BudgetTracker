@@ -241,100 +241,96 @@ function CalendarView({
     : [];
 
   return (
-    <View style={{ flex: 1 }}>
-      {/* Pinned above the ScrollView below (not inside it) so the day grid —
-          this page's own date selector — stays visible while scrolling a
-          long day-detail list, matching Home/Transactions' header treatment
-          and HabitTracker's own calendar page. */}
-      <View style={styles.content}>
-        <View style={[styles.calendarCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-          <View style={styles.weekdayRow}>
-            {WEEKDAY_LABELS.map((w, i) => (
-              <ThemedText key={i} type="small" themeColor="textTertiary" style={styles.weekdayLabel}>
-                {w}
-              </ThemedText>
-            ))}
-          </View>
-          <View style={styles.dayGrid}>
-            {cells.map((cell, i) => {
-              if (!cell) return <View key={`empty-${i}`} style={styles.dayCell} />;
-              const { dateStr, day } = cell;
-              const expense = expenseByDay.get(dateStr) ?? 0;
-              const income = incomeByDay.get(dateStr) ?? 0;
-              const isToday = dateStr === todayStr;
-              const isSelected = dateStr === selectedDay;
-              return (
-                <Pressable
-                  key={dateStr}
-                  onPress={() => setSelectedDay((d) => (d === dateStr ? null : dateStr))}
-                  style={styles.dayCell}>
-                  <View
-                    style={[
-                      styles.dayCellInner,
-                      isSelected && { backgroundColor: theme.accent },
-                      !isSelected && isToday && { borderColor: theme.accent, borderWidth: 1.5 },
-                    ]}>
-                    <ThemedText type="small" style={[styles.dayNumber, isSelected && styles.dayNumberSelected]}>
-                      {day}
+    // One ScrollView, grid included (2026-09-01, replacing an earlier
+    // "freeze panes" split — the grid pinned above a separate inner
+    // ScrollView for just the day-detail list) per feedback that scrolling
+    // should be able to carry the grid away too, not just the list below it.
+    <ScrollView contentContainerStyle={[styles.content, { paddingBottom: bottomPadding }]}>
+      <View style={[styles.calendarCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+        <View style={styles.weekdayRow}>
+          {WEEKDAY_LABELS.map((w, i) => (
+            <ThemedText key={i} type="small" themeColor="textTertiary" style={styles.weekdayLabel}>
+              {w}
+            </ThemedText>
+          ))}
+        </View>
+        <View style={styles.dayGrid}>
+          {cells.map((cell, i) => {
+            if (!cell) return <View key={`empty-${i}`} style={styles.dayCell} />;
+            const { dateStr, day } = cell;
+            const expense = expenseByDay.get(dateStr) ?? 0;
+            const income = incomeByDay.get(dateStr) ?? 0;
+            const isToday = dateStr === todayStr;
+            const isSelected = dateStr === selectedDay;
+            return (
+              <Pressable
+                key={dateStr}
+                onPress={() => setSelectedDay((d) => (d === dateStr ? null : dateStr))}
+                style={styles.dayCell}>
+                <View
+                  style={[
+                    styles.dayCellInner,
+                    isSelected && { backgroundColor: theme.accent },
+                    !isSelected && isToday && { borderColor: theme.accent, borderWidth: 1.5 },
+                  ]}>
+                  <ThemedText type="small" style={[styles.dayNumber, isSelected && styles.dayNumberSelected]}>
+                    {day}
+                  </ThemedText>
+                  {expense > 0 && (
+                    <ThemedText
+                      type="small"
+                      themeColor={isSelected ? 'text' : 'destructive'}
+                      style={[styles.daySpend, isSelected && styles.daySpendSelected]}
+                      numberOfLines={1}>
+                      -${expense >= 1000 ? `${Math.round(expense / 100) / 10}k` : Math.round(expense)}
                     </ThemedText>
-                    {expense > 0 && (
-                      <ThemedText
-                        type="small"
-                        themeColor={isSelected ? 'text' : 'destructive'}
-                        style={[styles.daySpend, isSelected && styles.daySpendSelected]}
-                        numberOfLines={1}>
-                        -${expense >= 1000 ? `${Math.round(expense / 100) / 10}k` : Math.round(expense)}
-                      </ThemedText>
-                    )}
-                    {income > 0 && (
-                      <ThemedText
-                        type="small"
-                        themeColor={isSelected ? 'text' : 'success'}
-                        style={[styles.daySpend, isSelected && styles.daySpendSelected]}
-                        numberOfLines={1}>
-                        +${income >= 1000 ? `${Math.round(income / 100) / 10}k` : Math.round(income)}
-                      </ThemedText>
-                    )}
-                  </View>
-                </Pressable>
-              );
-            })}
-          </View>
+                  )}
+                  {income > 0 && (
+                    <ThemedText
+                      type="small"
+                      themeColor={isSelected ? 'text' : 'success'}
+                      style={[styles.daySpend, isSelected && styles.daySpendSelected]}
+                      numberOfLines={1}>
+                      +${income >= 1000 ? `${Math.round(income / 100) / 10}k` : Math.round(income)}
+                    </ThemedText>
+                  )}
+                </View>
+              </Pressable>
+            );
+          })}
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={[styles.content, { paddingTop: Spacing.four, paddingBottom: bottomPadding }]}>
-        {selectedDay && (
-          <View style={styles.dateGroup}>
-            <ThemedText type="small" themeColor="textSecondary" style={styles.dateHeader}>
-              {dateHeaderLabel(selectedDay).toUpperCase()}
-            </ThemedText>
-            {selectedDayTransactions.length === 0 ? (
-              <View style={[styles.group, styles.emptyGroup, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                <ThemedText type="small" themeColor="textSecondary">
-                  No transactions this day.
-                </ThemedText>
-              </View>
-            ) : (
-              <View style={[styles.group, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                {selectedDayTransactions.map((t, i) => (
-                  <View key={t.id}>
-                    <TransactionRow
-                      transaction={t}
-                      category={getCategory(categories, t.categoryId)}
-                      onPress={() => router.push(`/add-transaction?id=${t.id}`)}
-                    />
-                    {i < selectedDayTransactions.length - 1 && (
-                      <View style={[styles.divider, styles.rowDividerInset, { backgroundColor: theme.border }]} />
-                    )}
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
-        )}
-      </ScrollView>
-    </View>
+      {selectedDay && (
+        <View style={styles.dateGroup}>
+          <ThemedText type="small" themeColor="textSecondary" style={styles.dateHeader}>
+            {dateHeaderLabel(selectedDay).toUpperCase()}
+          </ThemedText>
+          {selectedDayTransactions.length === 0 ? (
+            <View style={[styles.group, styles.emptyGroup, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              <ThemedText type="small" themeColor="textSecondary">
+                No transactions this day.
+              </ThemedText>
+            </View>
+          ) : (
+            <View style={[styles.group, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              {selectedDayTransactions.map((t, i) => (
+                <View key={t.id}>
+                  <TransactionRow
+                    transaction={t}
+                    category={getCategory(categories, t.categoryId)}
+                    onPress={() => router.push(`/add-transaction?id=${t.id}`)}
+                  />
+                  {i < selectedDayTransactions.length - 1 && (
+                    <View style={[styles.divider, styles.rowDividerInset, { backgroundColor: theme.border }]} />
+                  )}
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+      )}
+    </ScrollView>
   );
 }
 
@@ -429,112 +425,111 @@ function WeekCalendarView({
     : [];
 
   return (
-    <View style={{ flex: 1 }}>
-      <View style={styles.content}>
-        <View style={[styles.calendarCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-          <View style={styles.weekdayRow}>
-            {WEEKDAY_LABELS.map((w, i) => (
-              <ThemedText key={i} type="small" themeColor="textTertiary" style={styles.weekdayLabel}>
-                {w}
-              </ThemedText>
-            ))}
-          </View>
-          <View style={styles.weekGrid}>
-            {weeks.map((week) => {
-              const isCurrentWeek = week.weekStart === todayWeekStart;
-              const isSelected = week.weekStart === selectedWeekStart;
-              return (
-                <Pressable
-                  key={week.weekStart}
-                  onPress={() => setSelectedWeekStart((w) => (w === week.weekStart ? null : week.weekStart))}>
-                  <View
-                    style={[
-                      styles.weekRow,
-                      { borderColor: theme.border },
-                      !isSelected && isCurrentWeek && { borderColor: theme.accent, borderWidth: 1.5 },
-                      isSelected && { backgroundColor: theme.accent, borderColor: theme.accent },
-                    ]}>
-                    {week.cells.map((cell, i) => {
-                      if (!cell) return <View key={`empty-${i}`} style={styles.weekDayCell} />;
-                      const { dateStr, day } = cell;
-                      const expense = expenseByDay.get(dateStr) ?? 0;
-                      const income = incomeByDay.get(dateStr) ?? 0;
-                      const isRealToday = dateStr === todayStr;
-                      return (
-                        <View key={dateStr} style={styles.weekDayCell}>
+    // One ScrollView, grid included — same 2026-09-01 change as CalendarView
+    // above (see its own comment), so scrolling can carry the whole-month
+    // grid away too, not just the selected week's transaction list below it.
+    <ScrollView contentContainerStyle={[styles.content, { paddingBottom: bottomPadding }]}>
+      <View style={[styles.calendarCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+        <View style={styles.weekdayRow}>
+          {WEEKDAY_LABELS.map((w, i) => (
+            <ThemedText key={i} type="small" themeColor="textTertiary" style={styles.weekdayLabel}>
+              {w}
+            </ThemedText>
+          ))}
+        </View>
+        <View style={styles.weekGrid}>
+          {weeks.map((week) => {
+            const isCurrentWeek = week.weekStart === todayWeekStart;
+            const isSelected = week.weekStart === selectedWeekStart;
+            return (
+              <Pressable
+                key={week.weekStart}
+                onPress={() => setSelectedWeekStart((w) => (w === week.weekStart ? null : week.weekStart))}>
+                <View
+                  style={[
+                    styles.weekRow,
+                    { borderColor: theme.border },
+                    !isSelected && isCurrentWeek && { borderColor: theme.accent, borderWidth: 1.5 },
+                    isSelected && { backgroundColor: theme.accent, borderColor: theme.accent },
+                  ]}>
+                  {week.cells.map((cell, i) => {
+                    if (!cell) return <View key={`empty-${i}`} style={styles.weekDayCell} />;
+                    const { dateStr, day } = cell;
+                    const expense = expenseByDay.get(dateStr) ?? 0;
+                    const income = incomeByDay.get(dateStr) ?? 0;
+                    const isRealToday = dateStr === todayStr;
+                    return (
+                      <View key={dateStr} style={styles.weekDayCell}>
+                        <ThemedText
+                          type="small"
+                          style={[
+                            styles.dayNumber,
+                            isSelected && styles.dayNumberSelected,
+                            isRealToday && !isSelected && { color: theme.accent, fontWeight: '700' },
+                          ]}>
+                          {day}
+                        </ThemedText>
+                        {expense > 0 && (
                           <ThemedText
                             type="small"
-                            style={[
-                              styles.dayNumber,
-                              isSelected && styles.dayNumberSelected,
-                              isRealToday && !isSelected && { color: theme.accent, fontWeight: '700' },
-                            ]}>
-                            {day}
+                            themeColor={isSelected ? 'text' : 'destructive'}
+                            style={[styles.daySpend, isSelected && styles.daySpendSelected]}
+                            numberOfLines={1}>
+                            -${expense >= 1000 ? `${Math.round(expense / 100) / 10}k` : Math.round(expense)}
                           </ThemedText>
-                          {expense > 0 && (
-                            <ThemedText
-                              type="small"
-                              themeColor={isSelected ? 'text' : 'destructive'}
-                              style={[styles.daySpend, isSelected && styles.daySpendSelected]}
-                              numberOfLines={1}>
-                              -${expense >= 1000 ? `${Math.round(expense / 100) / 10}k` : Math.round(expense)}
-                            </ThemedText>
-                          )}
-                          {income > 0 && (
-                            <ThemedText
-                              type="small"
-                              themeColor={isSelected ? 'text' : 'success'}
-                              style={[styles.daySpend, isSelected && styles.daySpendSelected]}
-                              numberOfLines={1}>
-                              +${income >= 1000 ? `${Math.round(income / 100) / 10}k` : Math.round(income)}
-                            </ThemedText>
-                          )}
-                        </View>
-                      );
-                    })}
-                  </View>
-                </Pressable>
-              );
-            })}
-          </View>
+                        )}
+                        {income > 0 && (
+                          <ThemedText
+                            type="small"
+                            themeColor={isSelected ? 'text' : 'success'}
+                            style={[styles.daySpend, isSelected && styles.daySpendSelected]}
+                            numberOfLines={1}>
+                            +${income >= 1000 ? `${Math.round(income / 100) / 10}k` : Math.round(income)}
+                          </ThemedText>
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+              </Pressable>
+            );
+          })}
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={[styles.content, { paddingTop: Spacing.four, paddingBottom: bottomPadding }]}>
-        {selectedWeek && (
-          <View style={styles.dateGroup}>
-            <ThemedText type="small" themeColor="textSecondary" style={styles.dateHeader}>
-              {formatRangeLabel(
-                new Date(`${selectedWeek.weekStart}T00:00:00`),
-                new Date(`${selectedWeek.weekEnd}T00:00:00`)
-              ).toUpperCase()}
-            </ThemedText>
-            {selectedWeekTransactions.length === 0 ? (
-              <View style={[styles.group, styles.emptyGroup, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                <ThemedText type="small" themeColor="textSecondary">
-                  No transactions this week.
-                </ThemedText>
-              </View>
-            ) : (
-              <View style={[styles.group, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                {selectedWeekTransactions.map((t, i) => (
-                  <View key={t.id}>
-                    <TransactionRow
-                      transaction={t}
-                      category={getCategory(categories, t.categoryId)}
-                      onPress={() => router.push(`/add-transaction?id=${t.id}`)}
-                    />
-                    {i < selectedWeekTransactions.length - 1 && (
-                      <View style={[styles.divider, styles.rowDividerInset, { backgroundColor: theme.border }]} />
-                    )}
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
-        )}
-      </ScrollView>
-    </View>
+      {selectedWeek && (
+        <View style={styles.dateGroup}>
+          <ThemedText type="small" themeColor="textSecondary" style={styles.dateHeader}>
+            {formatRangeLabel(
+              new Date(`${selectedWeek.weekStart}T00:00:00`),
+              new Date(`${selectedWeek.weekEnd}T00:00:00`)
+            ).toUpperCase()}
+          </ThemedText>
+          {selectedWeekTransactions.length === 0 ? (
+            <View style={[styles.group, styles.emptyGroup, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              <ThemedText type="small" themeColor="textSecondary">
+                No transactions this week.
+              </ThemedText>
+            </View>
+          ) : (
+            <View style={[styles.group, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              {selectedWeekTransactions.map((t, i) => (
+                <View key={t.id}>
+                  <TransactionRow
+                    transaction={t}
+                    category={getCategory(categories, t.categoryId)}
+                    onPress={() => router.push(`/add-transaction?id=${t.id}`)}
+                  />
+                  {i < selectedWeekTransactions.length - 1 && (
+                    <View style={[styles.divider, styles.rowDividerInset, { backgroundColor: theme.border }]} />
+                  )}
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+      )}
+    </ScrollView>
   );
 }
 
@@ -593,101 +588,100 @@ function YearCalendarView({
     : [];
 
   return (
-    <View style={{ flex: 1 }}>
-      <View style={styles.content}>
-        <View style={[styles.calendarCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-          <View style={styles.yearMonthGrid}>
-            {monthRows.map((row) => (
-              <View key={row[0]} style={styles.yearMonthRow}>
-                {row.map((monthStr) => {
-                  const monthIndex = Number(monthStr.slice(5, 7)) - 1;
-                  const expense = expenseByMonth.get(monthStr) ?? 0;
-                  const income = incomeByMonth.get(monthStr) ?? 0;
-                  const isToday = monthStr === thisMonthStr;
-                  const isSelected = monthStr === selectedMonth;
-                  return (
-                    <Pressable
-                      key={monthStr}
-                      onPress={() => setSelectedMonth((m) => (m === monthStr ? null : monthStr))}
-                      style={styles.yearMonthCell}>
-                      <View
-                        style={[
-                          styles.yearMonthCellInner,
-                          { borderColor: theme.border },
-                          !isSelected && isToday && { borderColor: theme.accent, borderWidth: 1.5 },
-                          isSelected && { backgroundColor: theme.accent, borderColor: theme.accent },
-                        ]}>
+    // One ScrollView, grid included — same 2026-09-01 change as CalendarView
+    // above (see its own comment), so scrolling can carry the year grid away
+    // too, not just the selected month's transaction list below it.
+    <ScrollView contentContainerStyle={[styles.content, { paddingBottom: bottomPadding }]}>
+      <View style={[styles.calendarCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+        <View style={styles.yearMonthGrid}>
+          {monthRows.map((row) => (
+            <View key={row[0]} style={styles.yearMonthRow}>
+              {row.map((monthStr) => {
+                const monthIndex = Number(monthStr.slice(5, 7)) - 1;
+                const expense = expenseByMonth.get(monthStr) ?? 0;
+                const income = incomeByMonth.get(monthStr) ?? 0;
+                const isToday = monthStr === thisMonthStr;
+                const isSelected = monthStr === selectedMonth;
+                return (
+                  <Pressable
+                    key={monthStr}
+                    onPress={() => setSelectedMonth((m) => (m === monthStr ? null : monthStr))}
+                    style={styles.yearMonthCell}>
+                    <View
+                      style={[
+                        styles.yearMonthCellInner,
+                        { borderColor: theme.border },
+                        !isSelected && isToday && { borderColor: theme.accent, borderWidth: 1.5 },
+                        isSelected && { backgroundColor: theme.accent, borderColor: theme.accent },
+                      ]}>
+                      <ThemedText
+                        type="small"
+                        themeColor={isSelected ? undefined : 'textSecondary'}
+                        style={isSelected && styles.dayNumberSelected}>
+                        {MONTH_NAMES[monthIndex]}
+                      </ThemedText>
+                      {expense > 0 && (
                         <ThemedText
                           type="small"
-                          themeColor={isSelected ? undefined : 'textSecondary'}
-                          style={isSelected && styles.dayNumberSelected}>
-                          {MONTH_NAMES[monthIndex]}
+                          themeColor={isSelected ? 'text' : 'destructive'}
+                          style={[styles.daySpend, isSelected && styles.daySpendSelected]}
+                          numberOfLines={1}>
+                          -${expense >= 1000 ? `${Math.round(expense / 100) / 10}k` : Math.round(expense)}
                         </ThemedText>
-                        {expense > 0 && (
-                          <ThemedText
-                            type="small"
-                            themeColor={isSelected ? 'text' : 'destructive'}
-                            style={[styles.daySpend, isSelected && styles.daySpendSelected]}
-                            numberOfLines={1}>
-                            -${expense >= 1000 ? `${Math.round(expense / 100) / 10}k` : Math.round(expense)}
-                          </ThemedText>
-                        )}
-                        {income > 0 && (
-                          <ThemedText
-                            type="small"
-                            themeColor={isSelected ? 'text' : 'success'}
-                            style={[styles.daySpend, isSelected && styles.daySpendSelected]}
-                            numberOfLines={1}>
-                            +${income >= 1000 ? `${Math.round(income / 100) / 10}k` : Math.round(income)}
-                          </ThemedText>
-                        )}
-                        {expense === 0 && income === 0 && (
-                          <ThemedText type="small" themeColor={isSelected ? 'text' : 'textTertiary'}>
-                            —
-                          </ThemedText>
-                        )}
-                      </View>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            ))}
-          </View>
+                      )}
+                      {income > 0 && (
+                        <ThemedText
+                          type="small"
+                          themeColor={isSelected ? 'text' : 'success'}
+                          style={[styles.daySpend, isSelected && styles.daySpendSelected]}
+                          numberOfLines={1}>
+                          +${income >= 1000 ? `${Math.round(income / 100) / 10}k` : Math.round(income)}
+                        </ThemedText>
+                      )}
+                      {expense === 0 && income === 0 && (
+                        <ThemedText type="small" themeColor={isSelected ? 'text' : 'textTertiary'}>
+                          —
+                        </ThemedText>
+                      )}
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ))}
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={[styles.content, { paddingTop: Spacing.four, paddingBottom: bottomPadding }]}>
-        {selectedMonth && (
-          <View style={styles.dateGroup}>
-            <ThemedText type="small" themeColor="textSecondary" style={styles.dateHeader}>
-              {monthLabel(new Date(`${selectedMonth}-01T00:00:00`)).toUpperCase()}
-            </ThemedText>
-            {selectedMonthTransactions.length === 0 ? (
-              <View style={[styles.group, styles.emptyGroup, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                <ThemedText type="small" themeColor="textSecondary">
-                  No transactions this month.
-                </ThemedText>
-              </View>
-            ) : (
-              <View style={[styles.group, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                {selectedMonthTransactions.map((t, i) => (
-                  <View key={t.id}>
-                    <TransactionRow
-                      transaction={t}
-                      category={getCategory(categories, t.categoryId)}
-                      onPress={() => router.push(`/add-transaction?id=${t.id}`)}
-                    />
-                    {i < selectedMonthTransactions.length - 1 && (
-                      <View style={[styles.divider, styles.rowDividerInset, { backgroundColor: theme.border }]} />
-                    )}
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
-        )}
-      </ScrollView>
-    </View>
+      {selectedMonth && (
+        <View style={styles.dateGroup}>
+          <ThemedText type="small" themeColor="textSecondary" style={styles.dateHeader}>
+            {monthLabel(new Date(`${selectedMonth}-01T00:00:00`)).toUpperCase()}
+          </ThemedText>
+          {selectedMonthTransactions.length === 0 ? (
+            <View style={[styles.group, styles.emptyGroup, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              <ThemedText type="small" themeColor="textSecondary">
+                No transactions this month.
+              </ThemedText>
+            </View>
+          ) : (
+            <View style={[styles.group, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              {selectedMonthTransactions.map((t, i) => (
+                <View key={t.id}>
+                  <TransactionRow
+                    transaction={t}
+                    category={getCategory(categories, t.categoryId)}
+                    onPress={() => router.push(`/add-transaction?id=${t.id}`)}
+                  />
+                  {i < selectedMonthTransactions.length - 1 && (
+                    <View style={[styles.divider, styles.rowDividerInset, { backgroundColor: theme.border }]} />
+                  )}
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+      )}
+    </ScrollView>
   );
 }
 
@@ -1173,9 +1167,10 @@ const styles = StyleSheet.create({
   dayCell: {
     flexBasis: '14.2857%',
     // Slightly condensed vertically (2026-09-01, per feedback) — a plain
-    // square (aspectRatio: 1) read as taller than it needed to be once every
-    // row is a full 7-day week; > 1 keeps cells wider than tall.
-    aspectRatio: 1.3,
+    // square (aspectRatio: 1) read as taller than it needed to be. 1.3 (same
+    // day, follow-up feedback) overcorrected into looking squished; 1.15 is
+    // a milder condense.
+    aspectRatio: 1.15,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 2,

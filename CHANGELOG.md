@@ -2,6 +2,16 @@
 
 Newest first.
 
+## 2026-09-01 — Transactions Calendar: un-pinned the grid, milder Month cell condense
+
+- Per feedback, Month/Week/Year's Calendar page no longer pins its grid above a separate inner scroll
+  for the selected day's/week's/month's transaction list — that "freeze panes" split (added for Month
+  2026-08-27, carried through Week and Year's own additions earlier the same day) is reverted back to
+  one plain `ScrollView` per page (grid, then the list), so scrolling down now carries the grid away
+  too instead of leaving it pinned. See CLAUDE.md's "Transactions List/Calendar" bullet.
+- Dialed back Month's day-cell condense from the same day's earlier `aspectRatio: 1.3` (which read as
+  too squished per follow-up feedback) to `1.15`, a milder version of the same fix.
+
 ## 2026-09-01 — Fixed uneven row heights in Week/Year Calendar grids
 
 - `WeekCalendarView`'s `weekDayCell` and `YearCalendarView`'s `yearMonthCellInner` were sized off

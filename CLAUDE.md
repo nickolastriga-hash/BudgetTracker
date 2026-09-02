@@ -698,11 +698,13 @@ src/
   selects it and expands that month's transactions below (`MONTH_NAMES[monthIndex]` labels the cells —
   see its own Folder Structure entry in `lib/date-range.ts` for why it's shared, not a new duplicate)
   — no further day-grid drill-down, per explicit feedback that a day grid *per month* would be more
-  navigation than a quick glance calls for. All three calendar components' grids are pinned above a
-  separate inner `ScrollView` holding only the selected day's/week's/month's list (2026-08-27 for
-  Month, carried through to Week and Year — "freeze panes", same "pin the date selector above a
-  scrolling detail panel" shape as HabitTracker's own calendar tab) rather than the whole page being
-  one ScrollView. Chevrons are
+  navigation than a quick glance calls for. All three calendar components originally pinned their
+  grid above a separate inner `ScrollView` holding just the selected day's/week's/month's list
+  (2026-08-27 for Month, carried through to Week and Year — "freeze panes", the "pin the date selector
+  above a scrolling detail panel" shape HabitTracker's own calendar tab still uses) — reverted the
+  same day (2026-09-01) per feedback that scrolling should be able to carry the grid away too, not
+  just the list below it: each is now one plain `ScrollView` (grid, then the selected list) instead of
+  a pinned grid plus a second inner scroll. Chevrons are
   `theme.accent`/blue and the range label is plain text/black (recolored 2026-08-27, per explicit
   feedback, to match HabitTracker's own arrows-blue/label-black scheme app-wide — this reverses the
   2026-08-26 "deliberate inversion" note that used to live here; there is no inversion anymore, both
@@ -780,7 +782,9 @@ src/
   label + `+` button living in the pinned area itself, above a horizontal pager — so there's no
   `stickyHeaderIndices` on Budgets anymore, each page's own `ScrollView` is a plain single-section
   scroll. See the Transactions bullet above for that tab's own version of the pinned-header idea
-  (`SectionList` sticky headers on List, a pinned day-grid on Calendar).
+  (`SectionList` sticky headers on List; Calendar's own day/week/month grid was pinned above a second
+  inner scroll too until 2026-09-01, when that got reverted back to one plain scroll per the
+  "Transactions List/Calendar" bullet's own note).
 - **`react-native-draggable-flatlist`/reanimated-heavy list interactions have not been needed
   yet** — there's no drag-and-drop anywhere in this app. If one gets added, read HabitTracker's
   `CLAUDE.md` "Home habit reordering" bullet first; it documents a real, hard-won lesson about

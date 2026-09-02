@@ -8,17 +8,20 @@ Snapshot of where the app stands. History: [CHANGELOG.md](CHANGELOG.md). Upcomin
 
 - **Transactions Calendar extended to Week/Year, grey restored to category palette (2026-09-01)** —
   Transactions' Calendar page now works for every rangeType except Custom. Month: unchanged day grid
-  (`CalendarView`), cells now slightly condensed vertically per feedback. Week: a new
-  `WeekCalendarView` — the *whole month* stays visible (an earlier same-day version that collapsed to
-  just the selected week's 7 days was reverted per feedback), but the selectable/highlightable unit is
-  a whole calendar week (one grid row, its own bounding rectangle) rather than a single day — the real
-  current week is outlined blue by default, tapping any week fills it blue and expands that week's
-  transactions below. Year: a new `YearCalendarView`, a 12-month grid (tap a month to expand its
-  transactions, no further day-grid drill-down). `MONTH_NAMES` was extracted to `lib/date-range.ts`
-  (3rd near-identical copy, after budgets.tsx and range-picker-modal.tsx). Separately, the 2026-08-31
-  "no grey" category-palette change was reverted per explicit feedback — grey (`#8E8E93`) is back in
-  `CATEGORY_COLORS`'s swatch picker, the extra magenta pink dropped, Subscriptions' default color
-  moved back to grey. See CLAUDE.md's "Transactions List/Calendar" and `categories.ts` bullets.
+  (`CalendarView`), cells condensed vertically per feedback (`aspectRatio: 1.15`, dialed back same day
+  from an initial `1.3` that read as too squished). Week: a new `WeekCalendarView` — the *whole month*
+  stays visible (an earlier same-day version that collapsed to just the selected week's 7 days was
+  reverted per feedback), but the selectable/highlightable unit is a whole calendar week (one grid
+  row, its own bounding rectangle) rather than a single day — the real current week is outlined blue
+  by default, tapping any week fills it blue and expands that week's transactions below. Year: a new
+  `YearCalendarView`, a 12-month grid (tap a month to expand its transactions, no further day-grid
+  drill-down). All three grids also dropped their original "pinned above a second inner scroll" split
+  the same day, per feedback that scrolling should carry the grid away too — each page is now one
+  plain `ScrollView`. `MONTH_NAMES` was extracted to `lib/date-range.ts` (3rd near-identical copy,
+  after budgets.tsx and range-picker-modal.tsx). Separately, the 2026-08-31 "no grey" category-palette
+  change was reverted per explicit feedback — grey (`#8E8E93`) is back in `CATEGORY_COLORS`'s swatch
+  picker, the extra magenta pink dropped, Subscriptions' default color moved back to grey. See
+  CLAUDE.md's "Transactions List/Calendar" and `categories.ts` bullets.
 - **Trends reverted to a flat reference line, scrub/pager conflicts fixed, demo data extended
   (2026-08-31, same-session follow-up to the pace line below)** — the diagonal "paced" budget line
   (Expenses only) and its ahead/behind status band were reverted per feedback: `CumulativeTrendChart`
