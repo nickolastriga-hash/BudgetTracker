@@ -1220,6 +1220,14 @@ const styles = StyleSheet.create({
   },
   weekDayCell: {
     flexBasis: '14.2857%',
+    // Fixed, not content-driven (2026-09-01, per feedback) — a plain
+    // content-sized cell made a row with a 2-line (expense + income) day
+    // taller than a row where every day shows at most one line or none,
+    // since a flex row's cross-axis default is to stretch every cell to the
+    // row's tallest one. Height covers dayNumber + two daySpend lines at
+    // their own line-heights (14 + 1 + 11 + 1 + 11) with a little slack, so
+    // every week row is the same height regardless of how much data it has.
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 1,
@@ -1237,6 +1245,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   yearMonthCellInner: {
+    // Fixed, not content-driven (2026-09-01, per feedback, same fix as
+    // weekDayCell below) — a plain content-sized cell made a row with a
+    // 2-line (expense + income) month taller than a row where every month
+    // shows at most one line or the "—" placeholder, since a flex row's
+    // cross-axis default is to stretch every cell to the row's tallest one.
+    height: 78,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 2,

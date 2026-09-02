@@ -2,6 +2,17 @@
 
 Newest first.
 
+## 2026-09-01 — Fixed uneven row heights in Week/Year Calendar grids
+
+- `WeekCalendarView`'s `weekDayCell` and `YearCalendarView`'s `yearMonthCellInner` were sized off
+  their own content (day number alone vs. + expense vs. + expense and income, 1-3 lines) rather than
+  a fixed height — since a flex row's cross-axis default is to stretch every cell to its row's
+  tallest one, a week/row with more data-dense days rendered visibly taller than a sparser one,
+  making the grid look jagged. Both now use a fixed `height` (40 for week-grid day cells, 78 for
+  year-grid month cells) sized to fit the max content (day/month label + two amount lines) instead of
+  growing with it, so every row is the same height regardless of how much data it has. Month's own
+  day cells (`dayCell`) were already unaffected — `aspectRatio` there is geometric, not content-driven.
+
 ## 2026-09-01 — Week's Calendar redesigned to a whole-month grid with week-level selection
 
 - Follow-up to the same-day change below, per feedback: Week mode's Calendar page no longer collapses
