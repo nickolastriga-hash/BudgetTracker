@@ -283,7 +283,9 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     gap: 2,
-    paddingVertical: Spacing.two,
+    // Slightly extended vertically (2026-09-01, per feedback that the month
+    // grid still read as squished) — up from Spacing.two.
+    paddingVertical: Spacing.three,
     borderRadius: Spacing.two,
     borderWidth: StyleSheet.hairlineWidth,
   },

@@ -134,7 +134,12 @@ function BreakdownPanel({
             <View style={[styles.otherBadge, { backgroundColor: theme.textTertiary + '26' }]}>
               <MaterialIcons name="more-horiz" size={22} color={theme.textTertiary} />
             </View>
-            <ThemedText type="title" style={styles.ringAmount}>
+            <ThemedText
+              type="title"
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.6}
+              style={styles.ringAmount}>
               ${formatAmount(selectedOther.amount)}
             </ThemedText>
             <ThemedText
@@ -151,7 +156,12 @@ function BreakdownPanel({
         ) : selectedCategory ? (
           <>
             <CategoryBadge category={selectedCategory.category!} size={40} />
-            <ThemedText type="title" style={styles.ringAmount}>
+            <ThemedText
+              type="title"
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.6}
+              style={styles.ringAmount}>
               ${formatAmount(selectedCategory.amount)}
             </ThemedText>
             <ThemedText
@@ -180,7 +190,12 @@ function BreakdownPanel({
                 color={type === 'expense' ? theme.destructive : theme.success}
               />
             </View>
-            <ThemedText type="title" style={styles.ringAmount}>
+            <ThemedText
+              type="title"
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.6}
+              style={styles.ringAmount}>
               ${formatAmount(breakdownTotal)}
             </ThemedText>
             <ThemedText
@@ -794,12 +809,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.three,
   },
+  // maxWidth bounds this the same way ringLabel below is bounded — without
+  // it, a large total (e.g. a full year's income, "$101,062.96") had
+  // nothing to shrink against and could overflow past the ring's own safe
+  // interior instead of shrinking to fit inside it (paired with
+  // numberOfLines/adjustsFontSizeToFit on the Text itself, added alongside).
   ringAmount: {
     fontSize: 24,
     lineHeight: 28,
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
     marginTop: 8,
+    maxWidth: 132,
   },
   // maxWidth bounds the center label so numberOfLines/adjustsFontSizeToFit
   // above have something to shrink or ellipsize against — a long category

@@ -6,6 +6,17 @@ Snapshot of where the app stands. History: [CHANGELOG.md](CHANGELOG.md). Upcomin
 
 ## What's implemented
 
+- **Ring chart stray-dot bug fixed, ring center auto-shrinks, budget month grid taller (2026-09-01)**
+  — `CategoryRingChart`: a segment computing to `dash: 0` (e.g. a grouped "Other" wedge left with
+  under 1% once one category dominates, like a 99% Salary / 1% "Other" income split) wasn't actually
+  invisible — `strokeLinecap="round"` paints a round dot at a zero-length dash's position. Fixed by
+  skipping that segment's circles entirely, and by closing the dominant segment into a full circle
+  whenever it's the only one that will actually render, not just when there's truly one segment.
+  Diagnosed live in the Browser pane (DOM inspection + reading actual `stroke-dasharray` values — a
+  synthetic re-render gave a false negative, so this needed the real page). Home's ring center total
+  (`ringAmount`) now shrinks to fit (`adjustsFontSizeToFit`/`maxWidth`) instead of overflowing on a
+  large total. `budget-editor.tsx`'s month-grid cells got more vertical padding (still read squished
+  after an earlier pass). See CLAUDE.md's `category-ring-chart.tsx` and Home dashboard bullets.
 - **Transactions Calendar extended to Week/Year, grey restored to category palette (2026-09-01)** —
   Transactions' Calendar page now works for every rangeType except Custom. Month: unchanged day grid
   (`CalendarView`), cells condensed vertically per feedback (`aspectRatio: 1.15`, dialed back same day

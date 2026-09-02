@@ -134,6 +134,21 @@ export function CategoryRingChart({
     return { ...s, rawDash, start };
   });
 
+  // How many segments will actually paint a visible sliver once trimmed —
+  // a segment whose rawDash doesn't clear margin*2 renders with dash: 0
+  // regardless (see the per-segment dash formula below), so it shouldn't
+  // count toward "is this really more than one segment on screen". Fixes a
+  // real bug: `groupRingSegments` can hand back an "Other" bucket whose
+  // share is itself too small to clear that floor (e.g. one category at
+  // 99% of the total, "Other" left with the remaining ~1%) — `laidOut`
+  // still has 2 entries then, so the single-segment full-circle case below
+  // never triggered, and the dominant segment got its normal margin trim
+  // on both ends even though nothing sits on the other side of that gap to
+  // justify it, leaving a stray notch. `bigEnoughCount` catches that case
+  // so the one segment that actually renders still closes into a full,
+  // seamless circle.
+  const bigEnoughCount = laidOut.filter((s) => s.rawDash > margin * 2).length;
+
   // A dedicated transparent overlay handles taps — as a sibling of the SVG,
   // not a Pressable wrapping it, since react-native-svg's own shapes carry
   // their own (legacy) touch-responder wiring regardless of whether they're
@@ -182,9 +197,27 @@ export function CategoryRingChart({
             laidOut.map((s) => {
               // Single-segment special case (see comment above): no
               // trimming, no offset shift — one unbroken circle rather than
-              // a pill with its two round caps butted together.
-              const dash = laidOut.length > 1 ? Math.max(0, s.rawDash - margin * 2) : circumference;
-              const offset = laidOut.length > 1 ? -(s.start + margin) : 0;
+              // a pill with its two round caps butted together. Applies
+              // whenever there's truly only one real segment (`laidOut.length
+              // === 1`) *or* only one segment is big enough to render at all
+              // (`bigEnoughCount <= 1`, see its own comment above) — the
+              // other, invisible segments still fall through to the normal
+              // trimmed formula, which already computes `dash: 0` for them,
+              // so this only changes anything for the one segment that's
+              // actually on screen.
+              const solo = laidOut.length === 1 || (bigEnoughCount <= 1 && s.rawDash > margin * 2);
+              const dash = solo ? circumference : Math.max(0, s.rawDash - margin * 2);
+              // A `dash: 0` segment isn't actually invisible — `strokeDasharray="0 X"`
+              // combined with `strokeLinecap="round"` still paints a round dot at
+              // the dash's position (a zero-length "on" still gets its round cap
+              // drawn), rather than rendering nothing the way a `butt` cap would.
+              // Verified live: a grouped "Other" wedge too small to clear the
+              // margin (e.g. one category at 99%+ of the total, "Other" left with
+              // the rest) rendered as a stray dot at its offset even though its
+              // own math said dash: 0. Skipping the segment's circles entirely
+              // once it has nothing to draw sidesteps the round-cap-dot quirk.
+              if (!solo && dash <= 0) return null;
+              const offset = solo ? 0 : -(s.start + margin);
               const dashArray = `${dash} ${circumference - dash}`;
               const isSelected = s.key === selectedKey;
               // Emphasis is relative: nothing dims until something is

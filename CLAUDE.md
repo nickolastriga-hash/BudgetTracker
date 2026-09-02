@@ -173,6 +173,8 @@ src/
                           12-month calendar grid (tap a square to set the
                           "starting on" month for the buttons below — see the
                           `applyLimit` convention bullet), and Reset-to-default.
+                          `monthCell`'s `paddingVertical` bumped `Spacing.two`→`Spacing.three`
+                          (2026-09-01, per feedback it still read squished).
     settings.tsx           Settings modal (added 2026-08-26), reached from any
                           tab's SettingsButton. `headerShown: true` in
                           _layout.tsx (native title "Settings", auto back
@@ -414,6 +416,21 @@ src/
                           landed in "Other" and can build a matching center callout. The legend below
                           the ring is unrelated — it lists real per-category breakdown with its own
                           "+N more" cutoff.
+                          **Stray-dot bug fixed (2026-09-01)**: a segment whose `dash` computes to 0
+                          (too small to draw after margin trim — e.g. a grouped "Other" wedge left
+                          with under 1% once one category dominates) isn't actually invisible: SVG's
+                          `strokeLinecap="round"` still paints a round dot at a zero-length dash's
+                          position instead of nothing. Fixed by skipping that segment's `<Circle>`s
+                          entirely once `dash <= 0`. Same fix also closes the *dominant* segment into
+                          a full untrimmed circle whenever it's the only one that will actually
+                          render (`bigEnoughCount <= 1`), not just when `laidOut.length === 1` —
+                          previously a 99%/1%-style split still trimmed the big segment's margin for
+                          a neighbor that wasn't really there, leaving a gap. Found by reproducing in
+                          the Browser pane and reading the live SVG's own `stroke-dasharray` values
+                          (a synthetic re-render via `XMLSerializer`+`<img>`+canvas rasterization gave
+                          a false-negative here — the dot only reproduces in the live inline SVG, not
+                          a detached re-render — so trust the DOM over a synthetic repro when the two
+                          disagree).
                           Tapping a segment (2026-08-27) selects it: a transparent `Pressable`
                           overlay (a sibling of the `<Svg>`, not a wrapper — react-native-svg's shapes
                           carry their own legacy touch-responder wiring, and a `Pressable` ancestor of
@@ -623,7 +640,11 @@ src/
   rather than `toMonthStr(new Date())`. The ring's center defaults to the month's total expense
   (2026-08-27; was the top category before) with a "No expenses yet" empty state when there's none,
   and shows the tapped category (or the merged "Other" wedge) while one is selected — see
-  `category-ring-chart.tsx`'s own bullet above for the tap-to-select mechanics. A legend sits between
+  `category-ring-chart.tsx`'s own bullet above for the tap-to-select mechanics. The center total's own
+  Text (`ringAmount`, all three variants) gained `numberOfLines`/`adjustsFontSizeToFit`/`maxWidth`
+  (2026-09-01, per feedback — a large total like a full year's income had nothing to shrink against
+  and could overflow the ring's safe interior instead of shrinking to fit, unlike the label below it
+  which already had this treatment). A legend sits between
   the ring and the income/expense/net
   row — a two-column wrap of up to 6 categories (color dot, name, % share of `totals.expense`), with
   a "+N more" line if there are more than that; defined inline in `index.tsx`, not a shared
