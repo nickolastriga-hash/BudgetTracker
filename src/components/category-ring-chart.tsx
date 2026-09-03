@@ -125,14 +125,17 @@ export function CategoryRingChart({
   // Each segment's full proportional slice along the path (0 at the 3
   // o'clock start, before the -90deg display rotation), used both to
   // position the trimmed/gapped dash for drawing and, more generously
-  // (the untrimmed rawDash/start), to hit-test taps below.
-  let cursor = 0;
-  const laidOut = segments.map((s) => {
+  // (the untrimmed rawDash/start), to hit-test taps below. Built via an
+  // immutable reduce (each step spreads the accumulator rather than mutating
+  // a shared running-total variable across iterations) — a plain running
+  // `cursor` variable closed over by .map() is exactly the kind of impurity
+  // React Compiler now flags and refuses to memoize around.
+  const laidOut = segments.reduce<(RingSegment & { rawDash: number; start: number })[]>((acc, s) => {
     const rawDash = total > 0 ? (s.amount / total) * circumference : 0;
-    const start = cursor;
-    cursor += rawDash;
-    return { ...s, rawDash, start };
-  });
+    const prev = acc[acc.length - 1];
+    const start = prev ? prev.start + prev.rawDash : 0;
+    return [...acc, { ...s, rawDash, start }];
+  }, []);
 
   // How many segments will actually paint a visible sliver once trimmed —
   // a segment whose rawDash doesn't clear margin*2 renders with dash: 0

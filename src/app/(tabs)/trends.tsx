@@ -1,6 +1,6 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { NativeScrollEvent, NativeSyntheticEvent, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -243,12 +243,17 @@ export default function TrendsScreen() {
   const totalDays = useMemo(() => daysBetween(start, end).length, [start, end]);
 
   // Closes the picker the instant a custom range is completed (its second
-  // tap sets `end`) — reference-equal no-op the rest of the time, so
-  // reopening the modal to edit an already-complete range doesn't re-fire
-  // this and immediately close it again. Same pattern as Home/Transactions.
-  useEffect(() => {
+  // tap sets `end`) — value-keyed no-op the rest of the time (adjusted
+  // during render rather than in a useEffect — see index.tsx's own rangeKey
+  // comment), so reopening the modal to edit an already-complete range
+  // doesn't re-fire this and immediately close it again. Same pattern as
+  // Home/Transactions.
+  const customRangeKey = customRange ? `${customRange.start}|${customRange.end ?? ''}` : '';
+  const [prevCustomRangeKey, setPrevCustomRangeKey] = useState(customRangeKey);
+  if (prevCustomRangeKey !== customRangeKey) {
+    setPrevCustomRangeKey(customRangeKey);
     if (customRange?.end) setPickerVisible(false);
-  }, [customRange]);
+  }
 
   const expensePoints = useMemo(
     () => cumulativePoints(transactions, 'expense', start, actualEnd),

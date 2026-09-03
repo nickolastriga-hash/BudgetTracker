@@ -1,5 +1,5 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -60,10 +60,18 @@ export function RangePickerModal({
   // wherever it was left after a previous open.
   const [cursor, setCursor] = useState(anchor);
 
-  useEffect(() => {
-    if (!visible) return;
-    setCursor(rangeType === 'custom' && customRange ? new Date(`${customRange.start}T00:00:00`) : anchor);
-  }, [visible, anchor, rangeType, customRange]);
+  // Adjusted during render against a tracked previous key rather than in a
+  // useEffect (same reasoning as elsewhere in this pass, see index.tsx's
+  // rangeKey comment) — fires whenever any of these actually change value,
+  // not just whenever the parent re-renders.
+  const cursorSyncKey = `${visible}|${anchor.getTime()}|${rangeType}|${customRange?.start ?? ''}|${customRange?.end ?? ''}`;
+  const [prevCursorSyncKey, setPrevCursorSyncKey] = useState(cursorSyncKey);
+  if (prevCursorSyncKey !== cursorSyncKey) {
+    setPrevCursorSyncKey(cursorSyncKey);
+    if (visible) {
+      setCursor(rangeType === 'custom' && customRange ? new Date(`${customRange.start}T00:00:00`) : anchor);
+    }
+  }
 
   let header: ReactNode;
   let body: ReactNode;
@@ -248,6 +256,23 @@ export function RangePickerModal({
           onPress={() => {}}>
           <View style={styles.pickerHeader}>{header}</View>
           {body}
+          {/* Jumps straight to whatever period contains today, regardless of
+              how far the header's been paged — month/year mode via the same
+              onSelect a grid cell tap uses, week mode the same way (today's
+              own week). Not offered in custom mode: "today" as a two-tap
+              start/end range is ambiguous (a single day? today as the start,
+              awaiting an end?), so custom mode is left to its existing
+              tap-a-start-then-an-end flow instead of guessing. */}
+          {rangeType !== 'custom' && (
+            <Pressable
+              hitSlop={8}
+              onPress={() => onSelect(new Date())}
+              style={[styles.todayButton, { borderTopColor: theme.border }]}>
+              <ThemedText type="smallBold" themeColor="accent">
+                Today
+              </ThemedText>
+            </Pressable>
+          )}
         </Pressable>
       </Pressable>
     </Modal>
@@ -288,6 +313,11 @@ const styles = StyleSheet.create({
   },
   pickerCellTextSelected: {
     color: '#ffffff',
+  },
+  todayButton: {
+    alignItems: 'center',
+    paddingTop: Spacing.three,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   // The custom-range day grid's own instruction line, above its weekday row.
   customHint: {

@@ -1,5 +1,11 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
+// DarkTheme/DefaultTheme/ThemeProvider come from 'expo-router' itself, not
+// '@react-navigation/native' directly — SDK 56+ stopped supporting that as a
+// direct dependency (a hard Metro build error), which is exactly why this
+// project was pinned to SDK 54 until now (see CLAUDE.md's "Why SDK 54, not
+// 57" — resolved by the 2026-09-04 SDK 57 upgrade). expo-router re-exports
+// the same theme objects/component from its own vendored fork, so this is a
+// straight import-source swap, no behavior change.
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
@@ -40,6 +46,7 @@ export default function RootLayout() {
         />
         <Stack.Screen name="budget-editor" options={{ headerShown: false, presentation: 'modal' }} />
         <Stack.Screen name="settings" options={{ headerShown: true, presentation: 'modal', title: 'Settings' }} />
+        <Stack.Screen name="recurring" options={{ headerShown: true, presentation: 'modal', title: 'Recurring' }} />
       </Stack>
     </ThemeProvider>
   );

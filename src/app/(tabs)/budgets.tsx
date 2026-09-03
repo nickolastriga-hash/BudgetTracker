@@ -1,6 +1,6 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   Modal,
   NativeScrollEvent,
@@ -59,9 +59,16 @@ function MonthYearPickerModal({
   const theme = useTheme();
   const [pickerYear, setPickerYear] = useState(year);
 
-  useEffect(() => {
+  // Re-syncs pickerYear to the outer year whenever the modal opens (or year
+  // changes while already open) — adjusted during render against a tracked
+  // previous key rather than in a useEffect, same reasoning as elsewhere in
+  // this pass (see index.tsx's own rangeKey comment).
+  const syncKey = `${visible}|${year}`;
+  const [prevSyncKey, setPrevSyncKey] = useState(syncKey);
+  if (prevSyncKey !== syncKey) {
+    setPrevSyncKey(syncKey);
     if (visible) setPickerYear(year);
-  }, [visible, year]);
+  }
 
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
@@ -94,6 +101,21 @@ function MonthYearPickerModal({
               );
             })}
           </View>
+
+          {/* Jumps straight to the current month regardless of how far the
+              year pager's been paged — same shortcut as the shared
+              RangePickerModal's own Today button. */}
+          <Pressable
+            hitSlop={8}
+            onPress={() => {
+              const today = new Date();
+              onSelect(today.getFullYear(), today.getMonth());
+            }}
+            style={[styles.todayButton, { borderTopColor: theme.border }]}>
+            <ThemedText type="smallBold" themeColor="accent">
+              Today
+            </ThemedText>
+          </Pressable>
         </Pressable>
       </Pressable>
     </Modal>
@@ -588,5 +610,10 @@ const styles = StyleSheet.create({
   },
   pickerCellTextSelected: {
     color: '#ffffff',
+  },
+  todayButton: {
+    alignItems: 'center',
+    paddingTop: Spacing.three,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
 });
