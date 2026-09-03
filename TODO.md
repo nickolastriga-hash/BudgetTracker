@@ -18,8 +18,11 @@ transactions, all local-only. Deliberately deferred:
   in Budgets or `+` to add new) and AsyncStorage-backed (`lib/categories.ts`), but there's still no
   delete. Deleting needs a decision about what happens to a deleted category's existing
   transactions/budget (reassign to "Other" is the obvious default) — not built yet.
-- **Weekly/biweekly recurring transactions** — `lib/recurring.ts` only supports monthly. The
-  `RecurringTransaction` shape would need a discriminated union on frequency.
+- ~~**Weekly/biweekly recurring transactions**~~ — done (2026-09-03): `RecurringTransaction` is now
+  a discriminated union on `frequency` (`monthly` | `weekly` | `biweekly`); add-transaction.tsx's
+  checkbox became "Repeat" plus a Weekly/Biweekly/Monthly segmented toggle (Monthly still the
+  default). See CLAUDE.md's `lib/recurring.ts` bullet for the full mechanics, including how existing
+  monthly-only records migrate on read.
 - **Per-month budget history** — a `Budget` is currently a single flat limit (plus at most one
   override and one scheduled future change, see `lib/budgets.ts`), not a full per-month history.
   Budgets gained its own month nav (2026-08-29) so a past/future month's spent-vs-limit can be
@@ -29,12 +32,11 @@ transactions, all local-only. Deliberately deferred:
 - **Light/Dark/Auto override** — currently always follows the OS color scheme
   (`react-native`'s `useColorScheme`), no in-app theme preference like HabitTracker has.
 - **Export / CSV** — no data export yet.
-- **Editing a recurring series** — `RecurringTransaction`s can only be created (via the "Repeat
-  monthly" checkbox when adding a transaction) or implicitly stopped (`lib/recurring.ts#deleteRecurring`,
-  not wired to any UI). A standalone Bills tab briefly existed (2026-08-25 – 2026-08-26, listing every
-  recurring item with add/edit/cancel) but was removed to make room for a dashboard-style redesign
-  instead — revisit recurring-series management as part of that, rather than as its own tab. See
-  CLAUDE.md's `lib/recurring.ts` bullet.
+- ~~**No standalone Recurring management screen**~~ — done (2026-09-03): `app/recurring.tsx`, a
+  modal reached via a "RECURRING" section in Settings (not its own tab — the earlier Bills tab was
+  deliberately removed 2026-08-26, see CLAUDE.md), lists every active series soonest-due-first with a
+  two-tap "Stop" per row. **Still not covered**: editing a series' amount/day/category after
+  creation — only stop it entirely and set up a new one. See CLAUDE.md's `recurring.tsx` bullet.
 - ~~**Dashboard**~~ — done (2026-08-26): Home's old plain summary card was replaced with a donut-ring
   category breakdown + compact income/expense/net row + 6-month trend mini chart. See CLAUDE.md's
   "Home's dashboard card" bullet.

@@ -1,5 +1,6 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -7,6 +8,7 @@ import { ThemedText } from '@/components/themed-text';
 import { CardRadius, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { generateDemoData } from '@/lib/demo-data';
+import { getRecurring } from '@/lib/recurring';
 
 function SettingsRow({
   icon,
@@ -52,6 +54,13 @@ export default function SettingsScreen() {
   const [confirming, setConfirming] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  const [recurringCount, setRecurringCount] = useState(0);
+
+  useFocusEffect(
+    useCallback(() => {
+      getRecurring().then((items) => setRecurringCount(items.length));
+    }, [])
+  );
 
   async function handleGenerate() {
     if (!confirming) {
@@ -73,6 +82,22 @@ export default function SettingsScreen() {
           styles.content,
           { paddingTop: insets.top + Spacing.three, paddingBottom: insets.bottom + Spacing.six },
         ]}>
+        <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+          RECURRING
+        </ThemedText>
+        <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <SettingsRow
+            icon="event-repeat"
+            label="Manage recurring transactions"
+            subtitle={
+              recurringCount === 0
+                ? 'None set up yet'
+                : `${recurringCount} active — subscriptions, rent, salary, and anything else on repeat`
+            }
+            onPress={() => router.push('/recurring')}
+          />
+        </View>
+
         <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
           DEMO DATA
         </ThemedText>

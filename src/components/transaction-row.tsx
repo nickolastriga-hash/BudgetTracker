@@ -6,6 +6,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import type { Category } from '@/lib/categories';
+import { shortDateLabel } from '@/lib/date-range';
 import type { Transaction } from '@/lib/transactions';
 
 function formatAmount(amount: number) {
@@ -22,10 +23,17 @@ export function TransactionRow({
   transaction,
   category,
   onPress,
+  showDate,
 }: {
   transaction: Transaction;
   category: Category | undefined;
   onPress?: () => void;
+  // Off by default — Transactions' own List (date-grouped under sticky
+  // headers) and Calendar day-detail lists already say what date a row's in
+  // via their surrounding context, so a per-row date there would just repeat
+  // it. Home's recent-transactions list is the one caller that spans several
+  // days at once with no such grouping, so it turns this on.
+  showDate?: boolean;
 }) {
   const theme = useTheme();
   const isExpense = transaction.type === 'expense';
@@ -33,6 +41,13 @@ export function TransactionRow({
   // success (green) here — a transaction has one unambiguous type, so the
   // badge itself carries that color rather than the category's own.
   const typeColor = isExpense ? theme.destructive : theme.success;
+  // Manual y/m/d parse, not `new Date(transaction.date)` — the latter parses
+  // "YYYY-MM-DD" as UTC midnight, which shortDateLabel's local-timezone
+  // formatting can then roll back a day (same reasoning as this app's other
+  // date-string handling, see CLAUDE.md).
+  const [dy, dm, dd] = transaction.date.split('-').map(Number);
+  const dateLabel = shortDateLabel(new Date(dy, dm - 1, dd));
+  const subtitle = showDate ? (transaction.note ? `${dateLabel} · ${transaction.note}` : dateLabel) : transaction.note;
 
   return (
     <Pressable
@@ -43,9 +58,9 @@ export function TransactionRow({
         <ThemedText type="default" style={styles.categoryName} numberOfLines={1}>
           {category?.name ?? 'Other'}
         </ThemedText>
-        {transaction.note ? (
+        {subtitle ? (
           <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-            {transaction.note}
+            {subtitle}
           </ThemedText>
         ) : null}
       </View>

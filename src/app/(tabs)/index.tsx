@@ -1,6 +1,6 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -14,16 +14,9 @@ import { ThemedText } from '@/components/themed-text';
 import { TransactionRow } from '@/components/transaction-row';
 import { BottomTabInset, CardRadius, CardShadow, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { getBudgetProgress, type Budget, getBudgets } from '@/lib/budgets';
+import { effectiveLimit, getBudgetProgress, getBudgets, type Budget, type BudgetProgress } from '@/lib/budgets';
 import { getCategories, getCategory, type Category } from '@/lib/categories';
-import {
-  rangeBounds,
-  shiftAnchor,
-  shiftCustomRange,
-  toMonthStr,
-  type CustomRange,
-  type RangeType,
-} from '@/lib/date-range';
+import { monthsBetween, rangeBounds, shiftAnchor, toMonthStr, type RangeType } from '@/lib/date-range';
 import {
   byCategoryTotalsInRange,
   getTransactions,
@@ -38,7 +31,7 @@ function formatAmount(amount: number) {
 }
 
 // Compares this period's figure against the equivalent previous period
-// (previous week/month/year, per whatever shiftAnchor(-1) resolves to).
+// (previous month/year, per whatever shiftAnchor(-1) resolves to).
 // `goodDirection` decides which way is "positive" — up for income/net, down
 // for expenses (spending less is the good outcome there). No prior-period
 // data (previous === 0) reads as "New" rather than a meaningless ±∞%, and no
@@ -56,6 +49,34 @@ function computeDelta(
   const arrow = diff > 0 ? '▲' : '▼';
   const tone: 'positive' | 'negative' = (goodDirection === 'up') === (diff > 0) ? 'positive' : 'negative';
   return { label: `${arrow} ${pct}%`, tone };
+}
+
+// Year mode's budget preview: each budget's limit is summed across every
+// month the year touches (lib/date-range's monthsBetween, same approach as
+// Trends' own budgetTotalForRange) rather than read off a single month —
+// effectiveLimit already resolves overrides/scheduledChange per month, so a
+// budget that only started partway through the year (monthlyLimit: 0 before
+// its scheduledChange's startMonth) naturally sums to just the months it was
+// actually in effect for, and a budget scheduled to *drop* to 0 partway
+// through sums to just the months before that. Actuals are pulled from the
+// same start/end range rather than "this month", so spent/earned lines up
+// with whatever the limit is summing over.
+function budgetProgressForRange(
+  budgets: Budget[],
+  transactions: Transaction[],
+  categories: Category[],
+  start: string,
+  end: string
+): BudgetProgress[] {
+  const months = monthsBetween(start, end);
+  const spentByCategory = byCategoryTotalsInRange(transactions, start, end, 'expense');
+  const earnedByCategory = byCategoryTotalsInRange(transactions, start, end, 'income');
+  return budgets.map((b) => {
+    const type = getCategory(categories, b.categoryId)?.type ?? 'expense';
+    const spent = (type === 'income' ? earnedByCategory : spentByCategory)[b.categoryId] ?? 0;
+    const limit = months.reduce((sum, m) => sum + effectiveLimit(b, m), 0);
+    return { categoryId: b.categoryId, type, limit, spent, percent: limit > 0 ? spent / limit : 0 };
+  });
 }
 
 // Shared by both breakdown panels below (expense and income each call this
@@ -262,9 +283,11 @@ function BreakdownPanel({
 export default function HomeScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  // No 'custom' or 'week' option here (unlike Transactions'/Trends' own
+  // range navs) — both removed per feedback; Home's range nav is Month/Year
+  // only.
   const [rangeType, setRangeType] = useState<RangeType>('month');
   const [anchor, setAnchor] = useState(() => new Date());
-  const [customRange, setCustomRange] = useState<CustomRange | null>(null);
   // Which page of the Expense/Income breakdown pager is active — drives the
   // segmented toggle, the page dots, and where goToBreakdown scrolls to; the
   // pager itself always keeps both pages mounted (see BreakdownPanel above)
@@ -303,22 +326,21 @@ export default function HomeScreen() {
     }, [])
   );
 
-  const { start, end, label } = rangeBounds(rangeType, anchor, customRange);
+  const { start, end, label } = rangeBounds(rangeType, anchor, null);
   // The set of tappable categories changes whenever the navigated
   // range/period does — clear both pages' selections rather than let one
-  // point at a category with nothing to show now.
-  useEffect(() => {
+  // point at a category with nothing to show now. Adjusted during render
+  // (comparing against a tracked previous key) rather than in a
+  // useEffect — the recommended React pattern for "reset state when a
+  // computed value changes" (avoids an extra render pass, and SDK 57's
+  // stricter lint now flags setState-in-effect for this exact shape).
+  const rangeKey = `${start}|${end}`;
+  const [prevRangeKey, setPrevRangeKey] = useState(rangeKey);
+  if (prevRangeKey !== rangeKey) {
+    setPrevRangeKey(rangeKey);
     setSelectedExpenseKey(null);
     setSelectedIncomeKey(null);
-  }, [start, end]);
-
-  // Closes the picker the instant a custom range is completed (its second
-  // tap sets `end`) — reference-equal no-op the rest of the time, so
-  // reopening the modal to edit an already-complete range doesn't re-fire
-  // this and immediately close it again.
-  useEffect(() => {
-    if (customRange?.end) setPickerVisible(false);
-  }, [customRange]);
+  }
 
   function goToBreakdown(next: TransactionType) {
     setBreakdownType(next);
@@ -335,77 +357,79 @@ export default function HomeScreen() {
   }
 
   const totals = rangeTotals(transactions, start, end);
-  const rangeTransactions = transactionsInRange(transactions, start, end).sort((a, b) => (a.date < b.date ? 1 : -1));
+  // .slice() before .sort() — transactionsInRange already returns a fresh
+  // array (Array.filter), but sorting it in place still chains a mutating
+  // call directly onto that return value. An explicit copy removes any
+  // ambiguity about whether this could reach back into the original
+  // `transactions` array, for both a static analyzer and a human reader.
+  const rangeTransactions = transactionsInRange(transactions, start, end)
+    .slice()
+    .sort((a, b) => (a.date < b.date ? 1 : -1));
   const recent = rangeTransactions.slice(0, 8);
   // Budgets are an inherently monthly concept (a flat per-category limit —
-  // see lib/budgets.ts), so the preview below doesn't follow the week/year
-  // range selector the way the rest of this card does: in month mode it
-  // still follows the navigated month exactly as before, and in week/year
-  // mode it falls back to the real current month rather than guessing which
-  // month a whole year (or a week straddling two months) should map to.
-  const budgetProgressMonth = rangeType === 'month' ? toMonthStr(anchor) : toMonthStr(new Date());
-  // Computed unsliced so the "over budget" count below can see every budget,
-  // not just the 3 shown in the preview list further down.
-  const allBudgetProgress = getBudgetProgress(budgets, transactions, budgetProgressMonth, categories);
-  const budgetProgress = allBudgetProgress.slice(0, 3);
-  // Only expense budgets count as "at risk" — an income budget at/over its
-  // goal is the goal being reached, not a problem (see ProgressBar's own
-  // type-flipped semantics).
-  const overBudgetCount = allBudgetProgress.filter((bp) => bp.type === 'expense' && bp.percent >= 1).length;
+  // see lib/budgets.ts), so month mode reads a single month's
+  // getBudgetProgress exactly as before; year mode instead sums each
+  // budget's effectiveLimit across the navigated year's 12 months (and
+  // pulls actuals from that same Jan-Dec range) via budgetProgressForRange
+  // above, rather than guessing which single month a whole year should map
+  // to. Shows every budgeted category, not just a capped preview — there's
+  // no "see all" link elsewhere to reach the rest, so cutting the list short
+  // just hid data with no way to get to it.
+  const budgetProgress =
+    rangeType === 'year'
+      ? budgetProgressForRange(budgets, transactions, categories, start, end)
+      : getBudgetProgress(budgets, transactions, toMonthStr(anchor), categories);
+  // Split into Expense Budgets / Income Goals, same two-group split as the
+  // Budgets tab itself (just stacked here instead of paged, since this is
+  // one card in Home's existing vertical scroll, not a full screen) — an
+  // over-100% expense budget and an at/over-100% income goal mean opposite
+  // things (see ProgressBar's own type-flipped semantics), so they're
+  // called out with separate pills rather than one combined count.
+  const expenseBudgetProgress = budgetProgress.filter((bp) => bp.type === 'expense');
+  const incomeBudgetProgress = budgetProgress.filter((bp) => bp.type === 'income');
+  const overBudgetCount = expenseBudgetProgress.filter((bp) => bp.percent >= 1).length;
+  const goalsReachedCount = incomeBudgetProgress.filter((bp) => bp.percent >= 1).length;
   const netPositive = totals.net >= 0;
   const savingsRate = totals.income > 0 ? Math.round((totals.net / totals.income) * 100) : null;
-  const rangeNoun =
-    rangeType === 'week' ? 'week' : rangeType === 'year' ? 'year' : rangeType === 'custom' ? 'range' : 'month';
+  const rangeNoun = rangeType === 'year' ? 'year' : 'month';
 
   // Same range-type/length, one period back — shiftAnchor(-1) plus the same
-  // rangeBounds resolution the nav itself uses, so a week compares to the
-  // previous 7 days, a month to the previous calendar month, a year to the
-  // previous calendar year. Custom mode needs a complete range before there's
-  // anything to shift, so `previous` is null (no comparison shown) until one
-  // is picked, then shiftCustomRange steps back by the range's own length.
-  const previous =
-    rangeType === 'custom'
-      ? customRange?.end
-        ? rangeBounds('custom', anchor, shiftCustomRange(customRange, -1))
-        : null
-      : rangeBounds(rangeType, shiftAnchor(rangeType, anchor, -1), null);
-  const previousTotals = previous ? rangeTotals(transactions, previous.start, previous.end) : { income: 0, expense: 0, net: 0 };
-  const incomeDelta = previous ? computeDelta(totals.income, previousTotals.income, 'up') : null;
-  const expenseDelta = previous ? computeDelta(totals.expense, previousTotals.expense, 'down') : null;
-  const netDelta = previous ? computeDelta(totals.net, previousTotals.net, 'up') : null;
+  // rangeBounds resolution the nav itself uses, so a month compares to the
+  // previous calendar month, a year to the previous calendar year.
+  const previous = rangeBounds(rangeType, shiftAnchor(rangeType, anchor, -1), null);
+  const previousTotals = rangeTotals(transactions, previous.start, previous.end);
+  const incomeDelta = computeDelta(totals.income, previousTotals.income, 'up');
+  const expenseDelta = computeDelta(totals.expense, previousTotals.expense, 'down');
+  const netDelta = computeDelta(totals.net, previousTotals.net, 'up');
 
   // Expense and income are totaled/broken-down independently (a transaction
   // is one or the other, never both) — both sides are computed unconditionally
   // now rather than just whichever the toggle is on, since the pager below
-  // keeps both pages mounted for the swipe gesture.
-  const expenseBreakdown = useMemo(
-    () => categoryBreakdown(transactions, categories, start, end, 'expense'),
-    [transactions, categories, start, end]
-  );
-  const incomeBreakdown = useMemo(
-    () => categoryBreakdown(transactions, categories, start, end, 'income'),
-    [transactions, categories, start, end]
-  );
+  // keeps both pages mounted for the swipe gesture. No manual useMemo here —
+  // React Compiler is enabled project-wide (app.json's experiments.reactCompiler)
+  // and auto-memoizes plain expressions like this; a hand-written useMemo
+  // wrapper actually fights the compiler's own analysis (it couldn't prove
+  // the hand-written deps array stayed in sync with what it infers, so it
+  // skipped optimizing the component at all rather than risk it — see
+  // react-hooks/preserve-manual-memoization). Removing the wrapper lets the
+  // compiler memoize this itself instead of trying to preserve ours.
+  const expenseBreakdown = categoryBreakdown(transactions, categories, start, end, 'expense');
+  const incomeBreakdown = categoryBreakdown(transactions, categories, start, end, 'income');
 
   // Small categories collapse into one grey "Other" wedge in the ring
   // itself (groupRingSegments, see category-ring-chart.tsx) — computed here
   // rather than inside the chart so this screen knows exactly what landed
   // in "Other" and can build a matching center callout when it's tapped.
-  const expenseRingSegments = useMemo(
-    () =>
-      groupRingSegments(
-        expenseBreakdown.map((e) => ({ key: e.categoryId, amount: e.amount, color: e.category!.color })),
-        { otherColor: theme.textTertiary }
-      ),
-    [expenseBreakdown, theme.textTertiary]
+  // No manual useMemo here either — same reasoning as expenseBreakdown/
+  // incomeBreakdown above, and these depend on those, so a hand-written memo
+  // boundary here couldn't be preserved regardless once that one was removed.
+  const expenseRingSegments = groupRingSegments(
+    expenseBreakdown.map((e) => ({ key: e.categoryId, amount: e.amount, color: e.category!.color })),
+    { otherColor: theme.textTertiary }
   );
-  const incomeRingSegments = useMemo(
-    () =>
-      groupRingSegments(
-        incomeBreakdown.map((e) => ({ key: e.categoryId, amount: e.amount, color: e.category!.color })),
-        { otherColor: theme.textTertiary }
-      ),
-    [incomeBreakdown, theme.textTertiary]
+  const incomeRingSegments = groupRingSegments(
+    incomeBreakdown.map((e) => ({ key: e.categoryId, amount: e.amount, color: e.category!.color })),
+    { otherColor: theme.textTertiary }
   );
   const breakdownPanelHeight = Math.max(expensePanelHeight, incomePanelHeight) || undefined;
 
@@ -421,13 +445,7 @@ export default function HomeScreen() {
           <View style={styles.monthNav}>
             <Pressable
               hitSlop={12}
-              onPress={() => {
-                if (rangeType === 'custom') {
-                  setCustomRange((r) => (r && r.end ? shiftCustomRange(r, -1) : r));
-                } else {
-                  setAnchor((a) => shiftAnchor(rangeType, a, -1));
-                }
-              }}>
+              onPress={() => setAnchor((a) => shiftAnchor(rangeType, a, -1))}>
               <MaterialIcons name="chevron-left" size={26} color={theme.accent} />
             </Pressable>
             <Pressable hitSlop={12} onPress={() => setPickerVisible(true)}>
@@ -437,33 +455,24 @@ export default function HomeScreen() {
             </Pressable>
             <Pressable
               hitSlop={12}
-              onPress={() => {
-                if (rangeType === 'custom') {
-                  setCustomRange((r) => (r && r.end ? shiftCustomRange(r, 1) : r));
-                } else {
-                  setAnchor((a) => shiftAnchor(rangeType, a, 1));
-                }
-              }}>
+              onPress={() => setAnchor((a) => shiftAnchor(rangeType, a, 1))}>
               <MaterialIcons name="chevron-right" size={26} color={theme.accent} />
             </Pressable>
           </View>
 
-          <View style={[styles.segmented, styles.rangeToggle, { borderColor: theme.border }]}>
-            {(['week', 'month', 'year', 'custom'] as const).map((rt) => {
+          <View style={[styles.segmented, { borderColor: theme.border }]}>
+            {(['month', 'year'] as const).map((rt) => {
               const isSelected = rangeType === rt;
               return (
                 <Pressable
                   key={rt}
-                  onPress={() => {
-                    setRangeType(rt);
-                    if (rt === 'custom' && !customRange) setPickerVisible(true);
-                  }}
+                  onPress={() => setRangeType(rt)}
                   style={[styles.segment, isSelected && { backgroundColor: theme.accent }]}>
                   <ThemedText
                     type="smallBold"
                     themeColor={isSelected ? 'text' : 'textSecondary'}
                     style={isSelected && { color: '#ffffff' }}>
-                    {rt === 'week' ? 'Week' : rt === 'month' ? 'Month' : rt === 'year' ? 'Year' : 'Custom'}
+                    {rt === 'month' ? 'Month' : 'Year'}
                   </ThemedText>
                 </Pressable>
               );
@@ -615,11 +624,11 @@ export default function HomeScreen() {
           )}
         </View>
 
-        {budgetProgress.length > 0 && (
+        {expenseBudgetProgress.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionTitleRow}>
               <ThemedText type="small" themeColor="textSecondary" style={[styles.sectionTitle, styles.sectionTitleInRow]}>
-                BUDGETS
+                EXPENSE BUDGETS
               </ThemedText>
               {overBudgetCount > 0 && (
                 <View style={[styles.overBudgetPill, { backgroundColor: theme.destructive + '1a' }]}>
@@ -631,7 +640,7 @@ export default function HomeScreen() {
               )}
             </View>
             <View style={[styles.group, { backgroundColor: theme.card, borderColor: theme.border }]}>
-              {budgetProgress.map((bp, i) => {
+              {expenseBudgetProgress.map((bp, i) => {
                 const category = getCategory(categories, bp.categoryId);
                 if (!category) return null;
                 return (
@@ -645,7 +654,47 @@ export default function HomeScreen() {
                       </View>
                       <ProgressBar percent={bp.percent} color={category.color} type={bp.type} />
                     </View>
-                    {i < budgetProgress.length - 1 && (
+                    {i < expenseBudgetProgress.length - 1 && (
+                      <View style={[styles.divider, { backgroundColor: theme.border }]} />
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        )}
+
+        {incomeBudgetProgress.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionTitleRow}>
+              <ThemedText type="small" themeColor="textSecondary" style={[styles.sectionTitle, styles.sectionTitleInRow]}>
+                INCOME GOALS
+              </ThemedText>
+              {goalsReachedCount > 0 && (
+                <View style={[styles.overBudgetPill, { backgroundColor: theme.success + '1a' }]}>
+                  <MaterialIcons name="check-circle-outline" size={12} color={theme.success} />
+                  <ThemedText type="small" themeColor="success" style={styles.overBudgetPillText}>
+                    {goalsReachedCount} {goalsReachedCount === 1 ? 'goal' : 'goals'} reached
+                  </ThemedText>
+                </View>
+              )}
+            </View>
+            <View style={[styles.group, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              {incomeBudgetProgress.map((bp, i) => {
+                const category = getCategory(categories, bp.categoryId);
+                if (!category) return null;
+                return (
+                  <View key={bp.categoryId}>
+                    <View style={styles.budgetRow}>
+                      <View style={styles.budgetHeader}>
+                        <ThemedText type="small">{category.name}</ThemedText>
+                        <ThemedText type="small" themeColor="textSecondary">
+                          ${formatAmount(bp.spent)} / ${formatAmount(bp.limit)}
+                        </ThemedText>
+                      </View>
+                      <ProgressBar percent={bp.percent} color={category.color} type={bp.type} />
+                    </View>
+                    {i < incomeBudgetProgress.length - 1 && (
                       <View style={[styles.divider, { backgroundColor: theme.border }]} />
                     )}
                   </View>
@@ -674,6 +723,7 @@ export default function HomeScreen() {
                     transaction={t}
                     category={getCategory(categories, t.categoryId)}
                     onPress={() => router.push(`/add-transaction?id=${t.id}`)}
+                    showDate
                   />
                   {i < recent.length - 1 && (
                     <View style={[styles.divider, styles.rowDividerInset, { backgroundColor: theme.border }]} />
@@ -694,27 +744,22 @@ export default function HomeScreen() {
         <MaterialIcons name="add" size={28} color="#ffffff" />
       </Pressable>
 
+      {/* customRange is always null and onSelectCustomDay is a no-op here —
+          rangeType never reaches 'custom' on this screen (see the rangeType
+          state above), so the modal's custom-day-picker branch never
+          renders; both props are still required since the modal is shared
+          with Transactions'/Trends' own custom-capable range navs. */}
       <RangePickerModal
         visible={pickerVisible}
         rangeType={rangeType}
         anchor={anchor}
-        customRange={customRange}
+        customRange={null}
         onSelect={(date) => {
           setAnchor(date);
           setPickerVisible(false);
         }}
-        onSelectCustomDay={(dateStr) => {
-          setCustomRange((r) => {
-            if (!r || r.end !== null) return { start: dateStr, end: null };
-            return dateStr >= r.start ? { start: r.start, end: dateStr } : { start: dateStr, end: r.start };
-          });
-        }}
-        onClose={() => {
-          setPickerVisible(false);
-          // Abandoning a pending pick (start tapped, no end yet) clears it
-          // rather than leaving the range stuck showing "Select end date".
-          setCustomRange((r) => (r && r.end === null ? null : r));
-        }}
+        onSelectCustomDay={() => {}}
+        onClose={() => setPickerVisible(false)}
       />
     </View>
   );
@@ -744,11 +789,6 @@ const styles = StyleSheet.create({
     minWidth: 132,
     textAlign: 'center',
   },
-  // Wider than the plain segmented cap below — this toggle has a 4th
-  // ("Custom") option the Expense/Income toggle further down doesn't.
-  rangeToggle: {
-    maxWidth: 320,
-  },
   // Same shape as Transactions' own List/Calendar toggle.
   segmented: {
     flexDirection: 'row',
@@ -768,8 +808,8 @@ const styles = StyleSheet.create({
     borderRadius: Spacing.two - 2,
     alignItems: 'center',
   },
-  // Narrower than the 3-way week/month/year toggle above the fold — just
-  // the two options, so the full 280 maxWidth reads as oversized.
+  // Narrower than the month/year toggle above the fold — just the
+  // Expenses/Income pair, so the full 280 maxWidth reads as oversized.
   breakdownToggle: {
     maxWidth: 200,
   },

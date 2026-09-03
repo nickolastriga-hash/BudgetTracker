@@ -18,9 +18,10 @@ system to show a profile for; opens `app/settings.tsx`, see its own bullet below
   below), a month nav (same blue-chevrons/black-tappable-label/picker-modal shape as Transactions'
   below, added 2026-08-26, recolored 2026-08-27), a dashboard card (a donut ring of the navigated
   month's expense-by-category breakdown, center showing the top category's icon/amount/name; a
-  compact income/expenses/net row; a 6-month income-vs-expense mini trend chart), a preview of up to
-  3 budget categories' progress, and the month's most recent transactions. FAB opens the
-  add-transaction modal.
+  compact income/expenses/net row; a 6-month income-vs-expense mini trend chart), every budgeted
+  category's progress (2026-09-02; was capped at a 3-category preview with no way to see the rest,
+  removed per feedback), and the month's most recent transactions. FAB opens the add-transaction
+  modal.
 - **Transactions** — "Transactions" header (a filter button — see below — plus `SettingsButton` in
   its top-right corner) pinned above the scroll, a Week/Month/Year/Custom range nav (2026-08-29, same
   chevrons-blue/label-black-tappable shape as Home's own, replacing an earlier month-only nav — see
@@ -73,36 +74,55 @@ decision, not an oversight; see [TODO.md](TODO.md) for what's intentionally defe
 
 ## Tech Stack
 
-- **Expo SDK 54** (deliberately pinned below the current SDK 57 — see "Why SDK 54, not 57" below),
-  React Native 0.81, React 19, React Compiler enabled (`experiments.reactCompiler` in `app.json`)
-- **expo-router 6**, file-based routing under `src/app` (the `@/` path alias maps to `src/`, set in
-  `tsconfig.json`). `NativeTabs` (`expo-router/unstable-native-tabs`) powers the tab bar, using the
-  top-level `Icon`/`Label`/`VectorIcon` exports (`<NativeTabs.Trigger><Icon .../><Label>...</Label></NativeTabs.Trigger>`,
-  `androidSrc` prop for the Android/web icon) — this is SDK 54's shape; SDK 56+ moved to a
-  `NativeTabs.Trigger.Icon`/`.Label`/`.VectorIcon` dot-notation API instead, so don't copy examples
-  from current Expo docs without checking which SDK they're for. There's a separate
-  `_layout.web.tsx` fallback (`expo-router/ui`'s `Tabs`/`TabList`/`TabTrigger`/`TabSlot`) since
-  `NativeTabs` doesn't render on web — same platform-file-override pattern used elsewhere (e.g.
+- **Expo SDK 57** (upgraded 2026-09-04 from SDK 54 — see "SDK 54 → 57 upgrade" below), React Native
+  0.86, React 19.2, React Compiler enabled (`experiments.reactCompiler` in `app.json`) — the compiler
+  auto-memoizes plain expressions project-wide, so **don't wrap a value in `useMemo`/`useCallback`
+  "for performance"** the way pre-compiler React code would; a hand-written memo the compiler can't
+  prove matches its own analysis makes it skip optimizing the component entirely rather than risk it
+  (`react-hooks/preserve-manual-memoization` — see the upgrade bullet below for a real instance of
+  this biting Home's dashboard card).
+- **expo-router 7**, file-based routing under `src/app` (the `@/` path alias maps to `src/`, set in
+  `tsconfig.json`). `NativeTabs` (`expo-router/unstable-native-tabs`) powers the tab bar using the
+  **dot-notation compound API** — `NativeTabs.Trigger.Icon`/`.Label`/`.VectorIcon` (not top-level
+  `Icon`/`Label`/`VectorIcon` exports, which stopped existing as of SDK 55+ and don't typecheck here
+  — see the upgrade bullet below if old examples turn up online). The icon prop is `src` paired with
+  `sf` (`sf` wins on iOS, `src` wins on Android/web) — there's no `androidSrc` prop any more. There's
+  a separate `_layout.web.tsx` fallback (`expo-router/ui`'s `Tabs`/`TabList`/`TabTrigger`/`TabSlot`,
+  a different and more stable API that didn't need any upgrade changes) since `NativeTabs` doesn't
+  render on web — same platform-file-override pattern used elsewhere (e.g.
   `hooks/use-color-scheme.web.ts`).
-- **`ThemeProvider`/`DarkTheme`/`DefaultTheme` come from `@react-navigation/native`**, imported
-  directly (`src/app/_layout.tsx`) — safe at SDK 54. **This becomes a hard Metro build error as of
-  SDK 56+**, where expo-router stopped supporting `@react-navigation/native` as a direct dependency
-  at all (even just for `useFocusEffect`) — if this project is ever upgraded past SDK 55, that
-  import needs to move to whatever expo-router re-exports instead (`useFocusEffect`/`useIsFocused`
-  already come from `'expo-router'` here, which works at both SDK 54 and 56+, so those don't need
-  to change).
+- **`ThemeProvider`/`DarkTheme`/`DefaultTheme` come from `'expo-router'` itself** (`src/app/_layout.tsx`),
+  not `@react-navigation/native` — that package isn't even a direct dependency any more (removed
+  2026-09-04; expo-router vendors its own fork and re-exports the same objects/component from it).
+  Importing them from `@react-navigation/native` directly is a hard Metro build error as of SDK 56+,
+  which is exactly why this project was pinned to SDK 54 for a while — see the upgrade bullet below.
+  (`useFocusEffect`/`useIsFocused` already came from `'expo-router'` before this upgrade and needed
+  no change.)
 
-### Why SDK 54, not 57
+### SDK 54 → 57 upgrade (2026-09-04)
 
-`create-expo-app` scaffolded this project on SDK 57 originally. It was downgraded the same day
-after discovering Apple's App Store build of Expo Go is frozen at SDK 54 — SDK 55+ has sat in
-Apple's review queue without approval for months (confirmed via
-[Expo's own changelog](https://expo.dev/changelog/expo-go-and-app-store-may-2026)), so a physical
-iPhone running the App Store Expo Go app can't load anything newer. Options at the time were:
-downgrade to SDK 54 (done — free, works immediately, matches HabitTracker's own pin), a self-signed
-build via `sign.expo.dev` (works with SDK 57 but the provisioning profile expires ~weekly), or
-`eas go` + TestFlight (needs a paid Apple Developer account). Revisit this pin once Apple approves
-a newer Expo Go build, or if a dev-client build ever becomes the workflow instead of Expo Go.
+`create-expo-app` originally scaffolded this project on SDK 57, but it was downgraded to SDK 54 the
+same day (2026-08-xx) after discovering Apple's App Store build of Expo Go was frozen at SDK 54 —
+see git history / the old TODO note for that reasoning if it's still useful context. That pin was
+lifted 2026-09-04 once Apple approved a newer Expo Go build (confirmed the hard way: a physical
+device running the updated App Store Expo Go app refused to open this project at SDK 54 with "Project
+is incompatible... installed version of Expo Go is for SDK 57.0.0"). Upgrade mechanics:
+`npx expo install expo@^57.0.0` then `npx expo install --fix` to bring every other Expo/RN package
+along to its SDK-57-compatible version (`expo-doctor` — 21/21 checks — confirms the result); manual
+follow-up fixes were: (1) `(tabs)/_layout.tsx`'s `NativeTabs` icon/label JSX moved to the dot-notation
+API described above; (2) `_layout.tsx`'s theme imports moved off `@react-navigation/native` (removed
+from `package.json` entirely once nothing else referenced it) onto `'expo-router'`; (3) the newer
+`eslint-config-expo` brought React Compiler's stricter lint rules along with it, which surfaced real
+(if inconsequential) issues across the existing codebase — nine `useEffect(() => setState(...), [dep])`
+"reset on change" call sites were rewritten to the render-time-adjustment pattern React's own docs
+recommend instead (`if (prevKey !== key) { setPrevKey(key); setState(...); }`, called directly in the
+render body, not in an effect); `use-color-scheme.web.ts`'s mount-only hydration-flag effect was
+rewritten as a `useSyncExternalStore` (cleaner than a workaround either way — no hydration-flicker
+render pass); `category-ring-chart.tsx`'s `laidOut` computation swapped a `let cursor` variable
+mutated across a `.map()` for an immutable `.reduce()`; and Home's `expenseBreakdown`/
+`incomeBreakdown`/`expenseRingSegments`/`incomeRingSegments` had their manual `useMemo` wrappers
+removed outright (see the tech-stack bullet above — with React Compiler on, they were actively
+fighting the compiler's own memoization rather than helping).
 - **TypeScript, strict**, project has zero `tsc --noEmit` errors — keep it that way.
 - **react-native-svg** for Home's dashboard card (`CategoryRingChart`) and Trends' own
   `CumulativeTrendChart` (added 2026-08-30).
@@ -147,10 +167,36 @@ src/
     add-transaction.tsx   Add/edit modal — type toggle, amount, category grid,
                           a self-contained calendar-panel date picker (capped at
                           today), optional note, and (new transactions only) a
-                          "Repeat monthly" checkbox that also creates a
-                          RecurringTransaction. Edit mode adds a Delete button
-                          that requires two taps (no Alert.alert dependency —
-                          it doesn't behave consistently across web/native).
+                          "Repeat" checkbox (renamed from "Repeat monthly"
+                          2026-09-03 once it stopped being monthly-only) that
+                          reveals a Weekly/Biweekly/Monthly segmented toggle
+                          (defaults to Monthly, the prior behavior) and
+                          creates a RecurringTransaction of that frequency
+                          (the checkbox's own seed transaction carries that
+                          series' id via `recurringId`, added 2026-09-02 —
+                          previously only the *later*, auto-generated
+                          occurrences did, so editing the very first
+                          transaction of a new series couldn't find its way
+                          back to it). Edit mode adds a Delete button that
+                          requires two taps (no Alert.alert dependency — it
+                          doesn't behave consistently across web/native), and
+                          (2026-09-02), when the transaction being edited
+                          still belongs to an active recurring series
+                          (cross-referenced against `getRecurring()`, not
+                          just a truthy `recurringId` — a series already
+                          stopped leaves that id on its past transactions as
+                          a harmless marker, not something to re-offer
+                          stopping for), a same-style two-tap "Repeats
+                          {frequency} — stop repeating" row — a second place
+                          (alongside the dedicated recurring.tsx screen, see
+                          its own bullet above) a recurring series can be
+                          found and canceled, useful when you're already
+                          looking at one of its transactions rather than
+                          hunting for it in the full list. Stopping only
+                          clears the `RecurringTransaction` record going
+                          forward; it doesn't touch transactions the series
+                          already generated, same as canceling a
+                          subscription doesn't refund what was already paid.
     category-editor.tsx   Add/edit-category modal, reached from Budgets (a `+`
                           button in each of the two section headers to add,
                           long-press a row to edit that category's
@@ -180,10 +226,51 @@ src/
                           _layout.tsx (native title "Settings", auto back
                           button) — no in-content title of its own, unlike
                           add-transaction/category-editor which follow the
-                          same convention. One section so far: "Generate
+                          same convention. Two sections: "RECURRING" (added
+                          2026-09-03), a single row opening recurring.tsx,
+                          its subtitle showing a live count ("N active — …"
+                          or "None set up yet", refreshed via
+                          `useFocusEffect` so returning from recurring.tsx
+                          after stopping a series updates it) — and "Generate
                           demo data" (two-tap confirm, same pattern as
                           add-transaction's Delete), calls
                           lib/demo-data.ts#generateDemoData().
+    recurring.tsx           Recurring management screen (added 2026-09-03),
+                          reached via Settings' "RECURRING" row —
+                          deliberately not a tab (a standalone Bills tab
+                          existed briefly in 2026-08-25/26 and was removed
+                          for a dashboard-style redesign; TODO.md flagged
+                          revisiting list/edit as part of that rather than
+                          its own tab, and this is that revisit).
+                          `headerShown: true` in _layout.tsx (native title
+                          "Recurring"), same shape as settings.tsx. Lists
+                          every `RecurringTransaction` from `getRecurring()`
+                          — active series only, since a stopped one no
+                          longer exists in storage — sorted soonest-due
+                          first via `lib/recurring.ts#nextDueDate` (re-added
+                          for this screen; it existed briefly for the old
+                          Bills screen and was removed alongside it, per
+                          CLAUDE.md's own `lib/recurring.ts` bullet). Each
+                          row: `CategoryBadge` with `color={typeColor}` (not
+                          a `type` dot — the amount right next to it already
+                          carries the red/green cue, same reasoning as
+                          transaction-row.tsx), category name, a frequency
+                          label ("Monthly · 3rd" / "Weekly" / "Every 2
+                          weeks") plus "— next {date}", the signed colored
+                          amount, and a self-contained two-tap "Stop" text
+                          button (local `confirming` state per row, not
+                          lifted to the screen — avoids tracking "which row"
+                          in parent state) wired to
+                          `lib/recurring.ts#deleteRecurring`. Stopping
+                          updates local state directly (filters the stopped
+                          id out) rather than refetching, so the row
+                          disappears immediately. Scope is deliberately
+                          view-and-cancel only, same as add-transaction.tsx's
+                          own per-transaction "Stop repeating" row — editing
+                          a series' amount/day/category/frequency after
+                          creation still isn't supported anywhere (TODO.md).
+                          Empty state: a card with an icon and a hint to
+                          check "Repeat" when adding a transaction.
 
   lib/
     date-range.ts           Week/Month/Year/Custom range machinery (RangeType,
@@ -246,16 +333,57 @@ src/
                           "AI" in the picker UI means this offline heuristic,
                           not a live model.
     recurring.ts            RecurringTransaction CRUD + generateDueTransactions(),
-                          called once from the root layout. Monthly-only in v1
-                          (dayOfMonth, clamped to each month's real length).
-                          Materializes any owed months' transactions lazily on
-                          launch rather than being scheduled ahead of time —
-                          there's no OS-level scheduler involved. Only
-                          add/get/delete + generateDueTransactions are
-                          exported — `updateRecurring`/`nextDueDate` existed
-                          briefly for a Bills management screen that was
-                          removed 2026-08-26 (see TODO.md); re-add them if that
-                          UI comes back.
+                          called once from the root layout. Materializes any
+                          owed occurrences lazily on launch rather than being
+                          scheduled ahead of time — there's no OS-level
+                          scheduler involved (this is an offline Expo Go app
+                          with no background execution; "auto-logged on
+                          schedule" means "materialized the next time the app
+                          opens," not real-time while closed — see
+                          add-transaction.tsx's own bullet below for where
+                          that series is also manageable per-transaction, and
+                          recurring.tsx's own bullet above for the dedicated
+                          screen). `updateRecurring` existed briefly for the
+                          old Bills management screen removed 2026-08-26 (see
+                          TODO.md) and is still not back — there's still no
+                          way to edit a series' amount/day/category/frequency
+                          after creation, only add/stop. `nextDueDate` did
+                          come back (2026-09-03, read-only: the next date a
+                          series is due, without materializing anything —
+                          mirrors generateDueTransactions' own first-cursor
+                          math per frequency) now that recurring.tsx needs it
+                          to sort/label its list.
+                          `RecurringTransaction` is a discriminated union on
+                          `frequency` (2026-09-03, was monthly-only before —
+                          `dayOfMonth` was a bare field on one flat shape):
+                          `'monthly'` keeps `dayOfMonth` (1-28, clamped to
+                          each month's real length) and walks
+                          `lastGeneratedMonth` forward a whole month at a
+                          time, unchanged from before; `'weekly'`/`'biweekly'`
+                          have no day-of-month concept of their own — the
+                          recurring weekday is just whichever day `startDate`
+                          falls on — and walk `lastGeneratedDate` forward 7 or
+                          14 real days at a time instead. `getRecurring()`
+                          migrates old stored records with no `frequency`
+                          field to `'monthly'` lazily on read (no batch
+                          migration pass — same "lazy, on-read" spirit as
+                          `generateDueTransactions` itself), so pre-2026-09-03
+                          data keeps working untouched. `addRecurring`'s
+                          param type is a *distributive* `Omit` over that
+                          union (a plain `Omit` collapses the union and would
+                          let a `'weekly'` input carry a stray `dayOfMonth`
+                          without tsc complaining). It also gained an
+                          optional `lastGeneratedMonth`/`lastGeneratedDate`
+                          (2026-09-02, was previously always
+                          omitted/undefined) — a caller that already manually
+                          created the first occurrence's own transaction
+                          (add-transaction.tsx's "Repeat" checkbox does
+                          exactly this) passes it so generateDueTransactions'
+                          cursor starts at the *next* occurrence instead of
+                          re-generating the one that's already there; fixed a
+                          real double-log bug where reopening the app later
+                          the same period a recurring transaction was created
+                          would materialize a second copy of it.
     demo-data.ts            generateDemoData() (added 2026-08-26 as
                           generateYearToDateDemoData, renamed and extended
                           2026-08-31), called from settings.tsx. Backfills two
@@ -534,10 +662,14 @@ src/
   `${y}-${pad(m)}` formatting rather than `toISOString()` in most places, since `Date`'s local
   getters (`getFullYear`/`getMonth`) are what the calendar picker and month nav actually need —
   `toISOString()` shifts to UTC and can land on the wrong local day.
-- **Recurring transactions only support monthly frequency.** `RecurringTransaction.dayOfMonth` is
-  clamped to each month's real last day (so a "31st" recurs on the 28th/29th/30th in shorter
-  months). Weekly/biweekly would need a new discriminated union member — don't bolt it onto
-  `dayOfMonth`.
+- **Recurring transactions support monthly, weekly, and biweekly frequency** (weekly/biweekly added
+  2026-09-03) — `RecurringTransaction` is a discriminated union on `frequency`. Monthly's
+  `dayOfMonth` is clamped to each month's real last day (so a "31st" recurs on the 28th/29th/30th in
+  shorter months); weekly/biweekly have no `dayOfMonth` at all — their recurring weekday is implicit
+  in `startDate`, and they walk `lastGeneratedDate` by 7/14 real days instead of `lastGeneratedMonth`
+  by a calendar month. See `lib/recurring.ts`'s own Folder Structure bullet for the full mechanics
+  (including how pre-2026-09-03 monthly-only records migrate on read). A further frequency (e.g.
+  daily, or a custom N-day interval) would be a new union member, same pattern.
 - **Categories are AsyncStorage-backed and user-editable** (`lib/categories.ts`) — name/icon/color
   can be changed for any category, including the seeded defaults, via `category-editor.tsx` (Budgets'
   `+` button to add, long-press a row to edit). `type` is deliberately not editable through that
@@ -595,9 +727,15 @@ src/
   and swaps its text/handler off the `view` state, rather than living inside each page's own scroll.
 - **A standalone Bills tab (added 2026-08-25) was removed again 2026-08-26** — it listed every
   `RecurringTransaction` with add/edit/cancel, but got pulled to make room for a dashboard-style
-  redesign instead (see TODO.md). The "Repeat monthly" checkbox in add-transaction.tsx is
-  unaffected and remains the only way to create a `RecurringTransaction`; `lib/recurring.ts`'s core
-  CRUD + `generateDueTransactions()` is untouched, only the Bills-only exports were removed.
+  redesign instead (see TODO.md). The "Repeat" checkbox in add-transaction.tsx (renamed from
+  "Repeat monthly" 2026-09-03 once weekly/biweekly frequencies were added) is unaffected and remains
+  the only way to create a `RecurringTransaction`; `lib/recurring.ts`'s core CRUD +
+  `generateDueTransactions()` is untouched, only the Bills-only exports were removed.
+  Recurring series went from completely unmanageable after creation (2026-09-02: cancelable
+  per-transaction, see add-transaction.tsx's own bullet above) to a full "see every series in one
+  place" screen (2026-09-03: recurring.tsx, reached from Settings — see its own Folder Structure
+  bullet), all without reviving a dedicated tab, per this bullet's own history. Still not built:
+  editing a series after creation (amount/day/category/frequency) — only add and stop, per TODO.md.
 - **Category icon colors: custom per-category, except in transaction rows (settled 2026-08-26 after
   two reversals)** — `6da13da` forced every `CategoryBadge` to destructive-red/success-green via a
   `color` override; that was undone the same day (`type: CategoryType` prop instead, drawing a small
@@ -620,15 +758,17 @@ src/
   required dropping their `overflow: 'hidden'` (shadows get clipped by it) — the only cost is a
   square instead of rounded corner on the first/last row's press-highlight, not worth the
   wrapper-View complexity to avoid.
-- **Settings + demo data (added 2026-08-26, extended 2026-08-31)** — `app/settings.tsx`, reached via
-  `SettingsButton` on every tab. First (only, so far) feature is "Generate demo data"
+- **Settings + demo data (added 2026-08-26, extended 2026-08-31 and 2026-09-03)** — `app/settings.tsx`,
+  reached via `SettingsButton` on every tab. "Generate demo data"
   (`lib/demo-data.ts#generateDemoData`, renamed from `generateYearToDateDemoData`), a
   two-tap-confirmed button that backfills random transactions across two ranges — this year's Jan 1
   through today, plus (2026-08-31, per feedback that Trends' Year view had nothing prior to compare
   against) all of last year — and sets a handful of both expense budgets *and* income goals
   (2026-08-31; previously expense-only) — for demoing/testing without hand-entering months of data.
   Purely additive (never clears/dedupes), so repeated taps pile up rather than reset; there's no
-  companion "clear demo data" yet, see TODO.md.
+  companion "clear demo data" yet, see TODO.md. A second section, "RECURRING" (2026-09-03), sits
+  above it — a single row opening the new recurring.tsx (see its own Folder Structure bullet), its
+  subtitle a live "N active" count kept fresh via `useFocusEffect` rather than a static description.
 - **Mutations to `transactions.ts`/`budgets.ts`/`recurring.ts` all go through the same
   promise-chain write-queue pattern** (`let writeQueue = Promise.resolve(); enqueue(fn)`) — copied
   across all three files rather than shared, per the no-premature-abstraction rule above, but keep

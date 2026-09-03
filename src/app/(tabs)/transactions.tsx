@@ -199,9 +199,15 @@ function CalendarView({
   const todayStr = toDateStr(new Date());
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
-  useEffect(() => {
+  // Adjusted during render against a tracked previous month rather than in a
+  // useEffect (same reasoning throughout this pass, see index.tsx's own
+  // rangeKey comment) — the visible month changed, so whatever day was
+  // selected no longer applies.
+  const [prevMonthStr, setPrevMonthStr] = useState(monthStr);
+  if (prevMonthStr !== monthStr) {
+    setPrevMonthStr(monthStr);
     setSelectedDay(null);
-  }, [monthStr]);
+  }
 
   // Both sides of each day now, not just spend — expense in red, income in
   // green, same color convention as everywhere else a transaction's type
@@ -365,9 +371,12 @@ function WeekCalendarView({
   const todayWeekStart = toDateStr(startOfWeek(new Date()));
   const [selectedWeekStart, setSelectedWeekStart] = useState<string | null>(null);
 
-  useEffect(() => {
+  // Same render-time adjustment as CalendarView's own selectedDay above.
+  const [prevMonthStr, setPrevMonthStr] = useState(monthStr);
+  if (prevMonthStr !== monthStr) {
+    setPrevMonthStr(monthStr);
     setSelectedWeekStart(null);
-  }, [monthStr]);
+  }
 
   const year = month.getFullYear();
   const monthIndex = month.getMonth();
@@ -554,9 +563,12 @@ function YearCalendarView({
   const thisMonthStr = toMonthStr(new Date());
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
 
-  useEffect(() => {
+  // Same render-time adjustment as CalendarView's own selectedDay above.
+  const [prevYear, setPrevYear] = useState(year);
+  if (prevYear !== year) {
+    setPrevYear(year);
     setSelectedMonth(null);
-  }, [year]);
+  }
 
   const months = useMemo(
     () => Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`),
@@ -718,12 +730,16 @@ export default function TransactionsScreen() {
   const { start, end, label } = rangeBounds(rangeType, anchor, customRange);
 
   // Closes the picker the instant a custom range is completed (its second
-  // tap sets `end`) — reference-equal no-op the rest of the time, so
-  // reopening the modal to edit an already-complete range doesn't re-fire
-  // this and immediately close it again.
-  useEffect(() => {
+  // tap sets `end`) — value-keyed no-op the rest of the time (adjusted
+  // during render, same reasoning throughout this pass — see index.tsx's
+  // own rangeKey comment), so reopening the modal to edit an already-complete
+  // range doesn't re-fire this and immediately close it again.
+  const customRangeKey = customRange ? `${customRange.start}|${customRange.end ?? ''}` : '';
+  const [prevCustomRangeKey, setPrevCustomRangeKey] = useState(customRangeKey);
+  if (prevCustomRangeKey !== customRangeKey) {
+    setPrevCustomRangeKey(customRangeKey);
     if (customRange?.end) setPickerVisible(false);
-  }, [customRange]);
+  }
 
   // Calendar has a real page for Month, Week, and Year now (see
   // CalendarView/YearCalendarView above) — only Custom has no sensible
