@@ -55,9 +55,16 @@ export function TransactionRow({
       style={({ pressed }) => [styles.row, { backgroundColor: pressed ? theme.backgroundElement : 'transparent' }]}>
       {category && <CategoryBadge category={category} color={typeColor} size={42} />}
       <View style={styles.middle}>
-        <ThemedText type="default" style={styles.categoryName} numberOfLines={1}>
-          {category?.name ?? 'Other'}
-        </ThemedText>
+        <View style={styles.nameRow}>
+          <ThemedText type="default" style={styles.categoryName} numberOfLines={1}>
+            {category?.name ?? 'Other'}
+          </ThemedText>
+          {/* Marks a transaction that came from a recurring series (2026-09-10).
+              Keyed off recurringId alone — a series stopped later leaves the
+              id on what it already generated, and "this came from a series"
+              stays true of those rows. */}
+          {transaction.recurringId && <MaterialIcons name="event-repeat" size={14} color={theme.textTertiary} />}
+        </View>
         {subtitle ? (
           <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
             {subtitle}
@@ -84,8 +91,14 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
   },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
   categoryName: {
     fontWeight: '600',
+    flexShrink: 1,
   },
   amount: {
     fontVariant: ['tabular-nums'],

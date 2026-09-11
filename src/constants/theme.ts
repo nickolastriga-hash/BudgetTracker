@@ -21,6 +21,10 @@ export const Colors = {
     success: '#34C759',
     destructive: '#FF3B30',
     warning: '#FF9500',
+    // SegmentedControl's selected-thumb fill — reads as raised against
+    // backgroundElement in both schemes (plain `card` would be darker than
+    // the track in dark mode).
+    segmentThumb: '#ffffff',
   },
   dark: {
     text: '#ffffff',
@@ -35,6 +39,7 @@ export const Colors = {
     success: '#32D74B',
     destructive: '#FF453A',
     warning: '#FF9F0A',
+    segmentThumb: '#3A3A3C',
   },
 } as const;
 
@@ -75,7 +80,17 @@ export const Spacing = {
   six: 64,
 } as const;
 
-export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
+// Lifts a screen's FAB clear of whichever tab bar is showing. iOS/Android
+// values are rough real tab-bar heights for those platforms; `web` (added
+// 2026-09-10, found while adding Bills' own FAB) is the measured height of
+// _layout.web.tsx's own floating pill tab bar — before this, BottomTabInset
+// fell through Platform.select's `?? 0` on web, so every tab's FAB (Home's
+// existing one included, not just Bills' new one) sat at the very bottom of
+// the screen with nothing accounting for that pill's real height, and ended
+// up entirely covered by it (same stacking order as any two overlapping
+// `position: absolute` siblings — the tab bar paints after the screen
+// content, so it wins) rather than floating above it.
+export const BottomTabInset = Platform.select({ ios: 50, android: 80, web: 76 }) ?? 0;
 export const MaxContentWidth = 800;
 
 // Modern elevated-card look, shared by every card/list-row across the app

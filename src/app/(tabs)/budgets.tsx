@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CategoryBadge } from '@/components/category-badge';
 import { ProgressBar } from '@/components/progress-bar';
 import { ScreenHeader } from '@/components/screen-header';
+import { SegmentedControl } from '@/components/segmented-control';
 import { SettingsButton } from '@/components/settings-button';
 import { ThemedText } from '@/components/themed-text';
 import { BottomTabInset, CardRadius, CardShadow, MaxContentWidth, Spacing } from '@/constants/theme';
@@ -212,30 +213,14 @@ export default function BudgetsScreen() {
           {/* Expense/Income segmented toggle — same red/green fill-on-select
               convention as add-transaction.tsx's own type toggle, so the
               color itself (not just the label) says which page is active. */}
-          <View style={[styles.segmented, { borderColor: theme.border }]}>
-            {(['expense', 'income'] as const).map((v) => {
-              const segmentColor = v === 'expense' ? theme.destructive : theme.success;
-              const isSelected = view === v;
-              return (
-                <Pressable
-                  key={v}
-                  onPress={() => goToView(v)}
-                  style={[styles.segment, isSelected && { backgroundColor: segmentColor }]}>
-                  <MaterialIcons
-                    name={v === 'expense' ? 'arrow-downward' : 'arrow-upward'}
-                    size={14}
-                    color={isSelected ? '#ffffff' : theme.textSecondary}
-                  />
-                  <ThemedText
-                    type="smallBold"
-                    themeColor={isSelected ? 'text' : 'textSecondary'}
-                    style={isSelected && { color: '#ffffff' }}>
-                    {v === 'expense' ? 'Expense' : 'Income'}
-                  </ThemedText>
-                </Pressable>
-              );
-            })}
-          </View>
+          <SegmentedControl
+            options={[
+              { value: 'expense', label: 'Expense', icon: 'arrow-downward', color: theme.destructive },
+              { value: 'income', label: 'Income', icon: 'arrow-upward', color: theme.success },
+            ]}
+            value={view}
+            onChange={goToView}
+          />
 
           {/* Page dots — same 6px/16px-active shape as Transactions' own
               swipe-page indicator, tinted to match each page's segment
@@ -478,25 +463,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: Spacing.four,
-  },
-  segmented: {
-    flexDirection: 'row',
-    alignSelf: 'center',
-    borderRadius: Spacing.two,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 3,
-    gap: 3,
-    width: '100%',
-    maxWidth: 280,
-  },
-  segment: {
-    flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: Spacing.two - 2,
-    borderRadius: Spacing.two - 2,
-    alignItems: 'center',
   },
   // Same shape as Transactions' own swipe-page dots.
   pageDots: {

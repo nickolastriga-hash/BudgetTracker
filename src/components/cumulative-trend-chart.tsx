@@ -252,7 +252,21 @@ export function CumulativeTrendChart({
       {budgetTotal !== null && (
         <View
           pointerEvents="none"
-          style={[styles.targetLabel, { top: Math.min(Math.max(yFor(budgetTotal) - 15, 0), height - 15) }]}>
+          style={[
+            styles.targetLabel,
+            {
+              // Prefer sitting just above the dashed line, same as before —
+              // but when the line is close enough to the chart's top edge
+              // that "above" has no room (the old code just clamped to 0
+              // here, which pinned the label right on top of the line
+              // instead of leaving it in the empty space below), flip to
+              // just below the line instead so the two never overlap.
+              top:
+                yFor(budgetTotal) - PADDING_Y < 15
+                  ? Math.min(yFor(budgetTotal) + 4, height - 12)
+                  : yFor(budgetTotal) - 15,
+            },
+          ]}>
           <ThemedText type="small" themeColor="textTertiary" style={styles.miniLabel}>
             Target
           </ThemedText>

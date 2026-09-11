@@ -7,8 +7,9 @@
 A single-user, offline-first budget tracking app built with Expo Router. Users log expense/income
 transactions against a fixed set of categories, set optional monthly spending limits per category,
 and can mark a transaction as recurring monthly (e.g. rent, subscriptions) so it's regenerated
-automatically each month. Four tabs (Home/Transactions/Budgets/Trends — Trends added 2026-08-30, see
-its own bullet below), each opening with a `ScreenHeader` title (added 2026-08-26,
+automatically each month. Five tabs (Home/Transactions/Calendar/Budgets/Trends — Trends added
+2026-08-30, Calendar split out of Transactions 2026-09-10, see their own bullets below), each opening
+with a `ScreenHeader` title (added 2026-08-26,
 `components/screen-header.tsx` — 28/700, matching HabitTracker's own per-tab header sizing) plus a
 `SettingsButton` in the header's top-right corner (also 2026-08-26, matching HabitTracker's
 ProfileButton size/placement — a gear glyph instead of a profile avatar, since there's no accounts
@@ -25,22 +26,27 @@ system to show a profile for; opens `app/settings.tsx`, see its own bullet below
 - **Transactions** — "Transactions" header (a filter button — see below — plus `SettingsButton` in
   its top-right corner) pinned above the scroll, a Week/Month/Year/Custom range nav (2026-08-29, same
   chevrons-blue/label-black-tappable shape as Home's own, replacing an earlier month-only nav — see
-  the "Transactions range selector" convention bullet below) above a List/Calendar segmented toggle
-  plus a page-dot row (added 2026-08-26, dots added 2026-08-27; shown for every rangeType except
-  Custom — Week and Year gained their own Calendar shapes 2026-09-01, see the "Transactions
-  List/Calendar" convention bullet below for all three). List: all of the navigated range's
-  transactions grouped by date with sticky per-date headers, tapping a row opens the same modal in
-  edit mode. Calendar: a day-of-month grid in Month mode (pinned above the day-detail scroll, showing
-  that day's expense in red/income in green, tap a day to expand its transactions below the grid); the
-  same full month grid in Week mode but selectable/highlightable by whole calendar week instead of by
-  day (each week is its own bounding rectangle, the real current week outlined blue by default, tap a
-  week to select it — fills it blue and expands that week's transactions below); or a 12-month grid in
-  Year mode (tap a month to expand that month's transactions below instead of a day). List and
-  Calendar are pages of one horizontal
-  `pagingEnabled` ScrollView for Month/Week/Year — swipe between them, or tap the toggle; Custom has
-  no Calendar page (no single-grid shape fits an arbitrary range) and renders List alone, full-bleed.
-  A funnel button next to `SettingsButton` (2026-08-29) opens a type/category filter that narrows
-  every page at once — see the "Transactions filter" convention bullet below.
+  the "Transactions range selector" convention bullet below) above a List/Recurring segmented toggle
+  plus a page-dot row (toggle added 2026-08-26 as List/Calendar, dots 2026-08-27; Calendar moved to
+  its own tab and Recurring joined 2026-09-10 — see the "Transactions List/Calendar" and "A
+  standalone Bills tab" convention bullets below). List: all of the navigated range's transactions
+  grouped by date with sticky per-date headers, tapping a row opens the same modal in edit mode.
+  Recurring: every active `RecurringTransaction` series soonest-due-first with a two-tap Stop — not
+  period-scoped, so the range nav hides (opacity 0, layout kept) while it's showing, and the tab's
+  FAB opens the add-transaction modal with `?repeat=1` from there. The two are pages of one
+  horizontal `pagingEnabled` ScrollView — swipe between them, or tap the toggle. A funnel button
+  next to `SettingsButton` (2026-08-29) opens a type/category filter that narrows both pages at once
+  — see the "Transactions filter" convention bullet below.
+- **Calendar** (split out of Transactions 2026-09-10, per feedback that it should be its own tab) —
+  "Calendar" header, a Week/Month/Year range nav (no Custom — no single-grid shape fits an arbitrary
+  range, which is the same reason Custom never had a Calendar page back when this lived inside
+  Transactions), then the grid for that range: a day-of-month grid in Month mode (that day's expense
+  in red/income in green, tap a day to expand its transactions below the grid); the same full month
+  grid in Week mode but selectable/highlightable by whole calendar week instead of by day (each week
+  is its own bounding rectangle, the real current week outlined blue by default, tap a week to select
+  it — fills it blue and expands that week's transactions below); or a 12-month grid in Year mode
+  (tap a month to expand that month's transactions below instead of a day). No type/category filter
+  here, unlike Transactions. FAB opens the add-transaction modal.
 - **Budgets** — "Budgets" header, a month nav (same shape as Transactions'), then an Expense/Income
   segmented toggle plus a page-dot row (2026-08-29, replacing two stacked sections with two pages of
   one horizontal `pagingEnabled` ScrollView — swipe between them, or tap the toggle, same pattern as
@@ -68,7 +74,6 @@ system to show a profile for; opens `app/settings.tsx`, see its own bullet below
   page derives its line from the other two (`income - expense`, index-for-index) rather than its own
   transaction scan, and its "budgeted" reference is `incomeBudgetTotal - expenseBudgetTotal`. See the
   screen's own convention bullet below for the full mechanics.
-
 All data is local — `AsyncStorage` only, no accounts, no sync. That's a deliberate v1 scope
 decision, not an oversight; see [TODO.md](TODO.md) for what's intentionally deferred.
 
@@ -157,42 +162,70 @@ src/
       _layout.tsx         NativeTabs bar (native)
       _layout.web.tsx     Web fallback tab bar (expo-router/ui)
       index.tsx           Home
-      transactions.tsx    Transactions — List/Calendar swipeable pages (added
-                          2026-08-26), see the "Transactions List/Calendar"
-                          convention bullet below.
+      transactions.tsx    Transactions — List/Recurring swipeable pages
+                          (List/Calendar 2026-08-26; Recurring joined and
+                          Calendar left for its own tab 2026-09-10), see the
+                          "Transactions List/Calendar" convention bullet
+                          below. The Recurring page
+                          (`RecurringView`/`RecurringRow`, local) lists every
+                          active `RecurringTransaction` soonest-due-first via
+                          `lib/recurring.ts#nextDueDate`, with a two-tap Stop
+                          per row (local `confirming` state, not lifted);
+                          `applyTransactionFilter` is generic over anything
+                          with a type + categoryId so the header's filter
+                          narrows this page too. The tab's FAB opens
+                          `/add-transaction?repeat=1` from this page (plain
+                          `/add-transaction` elsewhere) — creation logic
+                          lives entirely in add-transaction.tsx, nothing is
+                          duplicated here.
+      calendar.tsx        Calendar (2026-09-10) — the CalendarView (Month) /
+                          WeekCalendarView (Week) / YearCalendarView (Year)
+                          grids, moved verbatim out of transactions.tsx
+                          where they'd been the Calendar page of its pager
+                          since 2026-08-26 (see the "Transactions
+                          List/Calendar" convention bullet for their
+                          mechanics — still accurate, just a different
+                          file). Own Week/Month/Year range nav
+                          (`CalendarRange`, an Extract of RangeType — never
+                          'custom'), a FAB, and a RangePickerModal driven
+                          the same way Home's is (customRange always null).
+                          No filter; loads transactions/categories itself on
+                          focus, same as every other tab.
       budgets.tsx         Budgets
       trends.tsx           Trends (added 2026-08-30) — Expense/Income/Net
                           swipeable pager of CumulativeTrendChart lines, see
                           the "Trends tab" convention bullet below.
     add-transaction.tsx   Add/edit modal — type toggle, amount, category grid,
                           a self-contained calendar-panel date picker (capped at
-                          today), optional note, and (new transactions only) a
-                          "Repeat" checkbox (renamed from "Repeat monthly"
-                          2026-09-03 once it stopped being monthly-only) that
-                          reveals a Weekly/Biweekly/Monthly segmented toggle
-                          (defaults to Monthly, the prior behavior) and
-                          creates a RecurringTransaction of that frequency
-                          (the checkbox's own seed transaction carries that
-                          series' id via `recurringId`, added 2026-09-02 —
-                          previously only the *later*, auto-generated
-                          occurrences did, so editing the very first
-                          transaction of a new series couldn't find its way
-                          back to it). Edit mode adds a Delete button that
-                          requires two taps (no Alert.alert dependency — it
-                          doesn't behave consistently across web/native), and
-                          (2026-09-02), when the transaction being edited
-                          still belongs to an active recurring series
+                          today), optional note, and a Repeat card (new
+                          transactions) or a Repeats/Stop card (editing one
+                          that belongs to an active series) — see the
+                          "Repeat card redesign" convention bullet below for
+                          the full shape; both start pre-checked/opened when
+                          reached as `?repeat=1` (added 2026-09-10 for
+                          Transactions' FAB on its Recurring page) doesn't
+                          apply to the edit-mode card, only the new-
+                          transaction Switch. Creates a RecurringTransaction
+                          of the chosen frequency (the seed transaction
+                          carries that series' id via `recurringId`, added
+                          2026-09-02 — previously only the *later*,
+                          auto-generated occurrences did, so editing the
+                          very first transaction of a new series couldn't
+                          find its way back to it). Edit mode adds a Delete
+                          button that requires two taps (no Alert.alert
+                          dependency — it doesn't behave consistently across
+                          web/native), and, when the transaction being
+                          edited still belongs to an active recurring series
                           (cross-referenced against `getRecurring()`, not
                           just a truthy `recurringId` — a series already
                           stopped leaves that id on its past transactions as
                           a harmless marker, not something to re-offer
-                          stopping for), a same-style two-tap "Repeats
-                          {frequency} — stop repeating" row — a second place
-                          (alongside the dedicated recurring.tsx screen, see
-                          its own bullet above) a recurring series can be
-                          found and canceled, useful when you're already
-                          looking at one of its transactions rather than
-                          hunting for it in the full list. Stopping only
+                          stopping for), the Repeats card's own two-tap Stop
+                          — a second place (alongside Transactions' Recurring
+                          page, see its own bullet above) a recurring series
+                          can be found and canceled, useful when you're
+                          already looking at one of its transactions rather
+                          than hunting for it in the full list. Stopping only
                           clears the `RecurringTransaction` record going
                           forward; it doesn't touch transactions the series
                           already generated, same as canceling a
@@ -226,51 +259,16 @@ src/
                           _layout.tsx (native title "Settings", auto back
                           button) — no in-content title of its own, unlike
                           add-transaction/category-editor which follow the
-                          same convention. Two sections: "RECURRING" (added
-                          2026-09-03), a single row opening recurring.tsx,
-                          its subtitle showing a live count ("N active — …"
-                          or "None set up yet", refreshed via
-                          `useFocusEffect` so returning from recurring.tsx
-                          after stopping a series updates it) — and "Generate
-                          demo data" (two-tap confirm, same pattern as
-                          add-transaction's Delete), calls
-                          lib/demo-data.ts#generateDemoData().
-    recurring.tsx           Recurring management screen (added 2026-09-03),
-                          reached via Settings' "RECURRING" row —
-                          deliberately not a tab (a standalone Bills tab
-                          existed briefly in 2026-08-25/26 and was removed
-                          for a dashboard-style redesign; TODO.md flagged
-                          revisiting list/edit as part of that rather than
-                          its own tab, and this is that revisit).
-                          `headerShown: true` in _layout.tsx (native title
-                          "Recurring"), same shape as settings.tsx. Lists
-                          every `RecurringTransaction` from `getRecurring()`
-                          — active series only, since a stopped one no
-                          longer exists in storage — sorted soonest-due
-                          first via `lib/recurring.ts#nextDueDate` (re-added
-                          for this screen; it existed briefly for the old
-                          Bills screen and was removed alongside it, per
-                          CLAUDE.md's own `lib/recurring.ts` bullet). Each
-                          row: `CategoryBadge` with `color={typeColor}` (not
-                          a `type` dot — the amount right next to it already
-                          carries the red/green cue, same reasoning as
-                          transaction-row.tsx), category name, a frequency
-                          label ("Monthly · 3rd" / "Weekly" / "Every 2
-                          weeks") plus "— next {date}", the signed colored
-                          amount, and a self-contained two-tap "Stop" text
-                          button (local `confirming` state per row, not
-                          lifted to the screen — avoids tracking "which row"
-                          in parent state) wired to
-                          `lib/recurring.ts#deleteRecurring`. Stopping
-                          updates local state directly (filters the stopped
-                          id out) rather than refetching, so the row
-                          disappears immediately. Scope is deliberately
-                          view-and-cancel only, same as add-transaction.tsx's
-                          own per-transaction "Stop repeating" row — editing
-                          a series' amount/day/category/frequency after
-                          creation still isn't supported anywhere (TODO.md).
-                          Empty state: a card with an icon and a hint to
-                          check "Repeat" when adding a transaction.
+                          same convention. One section, "Generate demo data"
+                          (two-tap confirm, same pattern as add-transaction's
+                          Delete), calls lib/demo-data.ts#generateDemoData().
+                          Used to also carry a "RECURRING" section (a single
+                          row into a recurring-management modal) — removed
+                          2026-09-10 once that modal's content moved into
+                          the Transactions tab's Recurring page (see
+                          (tabs)/transactions.tsx above and the "A standalone
+                          Bills tab" convention bullet below); nothing in
+                          Settings duplicates it any more.
 
   lib/
     date-range.ts           Week/Month/Year/Custom range machinery (RangeType,
@@ -342,17 +340,23 @@ src/
                           opens," not real-time while closed — see
                           add-transaction.tsx's own bullet below for where
                           that series is also manageable per-transaction, and
-                          recurring.tsx's own bullet above for the dedicated
-                          screen). `updateRecurring` existed briefly for the
-                          old Bills management screen removed 2026-08-26 (see
-                          TODO.md) and is still not back — there's still no
+                          (tabs)/transactions.tsx's own bullet above for its
+                          Recurring page). `updateRecurring` existed briefly
+                          for the old Bills management screen removed
+                          2026-08-26 (see TODO.md) and is still not back —
+                          there's still no
                           way to edit a series' amount/day/category/frequency
                           after creation, only add/stop. `nextDueDate` did
                           come back (2026-09-03, read-only: the next date a
                           series is due, without materializing anything —
                           mirrors generateDueTransactions' own first-cursor
-                          math per frequency) now that recurring.tsx needs it
-                          to sort/label its list.
+                          math per frequency) for the recurring-management
+                          screen this function was originally re-added for
+                          (2026-09-03's app/recurring.tsx, since folded into
+                          the Transactions tab's Recurring page — see the "A
+                          standalone Bills tab" convention bullet) and still
+                          used by transactions.tsx's RecurringView today to
+                          sort/label its list.
                           `RecurringTransaction` is a discriminated union on
                           `frequency` (2026-09-03, was monthly-only before —
                           `dayOfMonth` was a bare field on one flat shape):
@@ -614,6 +618,36 @@ src/
                           `type` is ignored if `color` is also set. See the
                           "Category icon colors" convention bullet below for
                           the full back-and-forth on this.
+    segmented-control.tsx    SegmentedControl({options, value, onChange,
+                          style?}) (added 2026-09-10) — the one segmented
+                          toggle, replacing nine per-file copies (Home ×2,
+                          Transactions ×3, Budgets, Trends ×2,
+                          add-transaction ×2) of an outlined rounded-rect
+                          with a solid accent-filled segment, per feedback
+                          that the outlined block looked dated. A borderless
+                          pill track in `backgroundElement`; the selected
+                          option is a raised thumb (`theme.segmentThumb`, a
+                          dedicated token — plain `card` is darker than the
+                          track in dark mode and read as recessed) with a
+                          subtle shadow, its text/icon tinted by the option's
+                          own `color` (red/green for the Expense/Income
+                          toggles, so the color still says which side is
+                          active — see the "Budgets Expense/Income pages"
+                          bullet; accent otherwise). The thumb is one
+                          absolutely-positioned `Animated.View` that
+                          springs to `index × segmentWidth` (segments are
+                          equal-width, so it's arithmetic off the track's
+                          `onLayout`, no per-segment measuring) — a same-day
+                          follow-up, per feedback that the first version's
+                          per-option background snapped; first position is
+                          `setValue`, not animated, so it doesn't slide in
+                          from the left on mount. Plain RN `Animated`, not
+                          reanimated (still not a dependency). 340 max
+                          width by default (was 280 — three icon+label
+                          options were cramped); callers override via
+                          `style` (Transactions' 4-option range toggle 400,
+                          Home's breakdown toggle 200, add-transaction full
+                          width).
     screen-header.tsx        ScreenHeader({title, right?}) — the 28/700
                           per-tab title, one per (tabs) screen (added
                           2026-08-26; `right` slot added same day for
@@ -643,7 +677,11 @@ src/
                           categories are no longer a synchronously-importable
                           constant. Redesigned 2026-08-26 — see the
                           "Transaction rows redesigned" convention bullet
-                          below.
+                          below. Shows a small `event-repeat` glyph after
+                          the category name when `transaction.recurringId`
+                          is set (2026-09-10) — keyed off the id alone, so a
+                          row a since-stopped series generated keeps it
+                          ("this came from a series" stays true of it).
     themed-text.tsx, themed-view.tsx, ...   From the Expo default template.
 
   constants/theme.ts      Colors.light / Colors.dark. Extends the template's
@@ -651,6 +689,8 @@ src/
                           destructive/warning/textTertiary to cover the whole
                           app — same idea as HabitTracker's theme.ts, single
                           source of truth for every neutral/semantic color.
+                          `segmentThumb` (2026-09-10) is SegmentedControl's
+                          selected-thumb fill, see that component's entry.
   hooks/use-theme.ts       useTheme() — resolves Colors[light|dark] against the
                           OS color scheme (no in-app Light/Dark/Auto override in
                           v1, unlike HabitTracker — see TODO.md).
@@ -725,17 +765,31 @@ src/
   across the two card instances. The section label + `+` add button is the one thing still shared
   across both pages rather than duplicated per page — it sits in the pinned header above the pager
   and swaps its text/handler off the `view` state, rather than living inside each page's own scroll.
-- **A standalone Bills tab (added 2026-08-25) was removed again 2026-08-26** — it listed every
+- **A standalone Bills tab (added 2026-08-25) was removed 2026-08-26, briefly re-added 2026-09-10,
+  and folded into Transactions as a third pager page the same day** — the original tab listed every
   `RecurringTransaction` with add/edit/cancel, but got pulled to make room for a dashboard-style
-  redesign instead (see TODO.md). The "Repeat" checkbox in add-transaction.tsx (renamed from
-  "Repeat monthly" 2026-09-03 once weekly/biweekly frequencies were added) is unaffected and remains
-  the only way to create a `RecurringTransaction`; `lib/recurring.ts`'s core CRUD +
-  `generateDueTransactions()` is untouched, only the Bills-only exports were removed.
-  Recurring series went from completely unmanageable after creation (2026-09-02: cancelable
-  per-transaction, see add-transaction.tsx's own bullet above) to a full "see every series in one
-  place" screen (2026-09-03: recurring.tsx, reached from Settings — see its own Folder Structure
-  bullet), all without reviving a dedicated tab, per this bullet's own history. Still not built:
-  editing a series after creation (amount/day/category/frequency) — only add and stop, per TODO.md.
+  redesign instead (see TODO.md). Recurring series went from completely unmanageable after creation
+  (2026-09-02: cancelable per-transaction, see add-transaction.tsx's own bullet above) to a full "see
+  every series in one place" screen (2026-09-03: app/recurring.tsx, reached from Settings' "RECURRING"
+  row) without reviving a dedicated tab. On 2026-09-10, per feedback, that modal's list-and-stop
+  content became a 5th "Bills" tab with its own FAB — then, per immediate follow-up feedback that
+  (a) "Bills" oversold what is just a recurring-transaction list (no due dates, no paid/unpaid state)
+  and (b) Transactions + Recurring was two tabs for the same kind of thing, it moved again the same
+  day into `(tabs)/transactions.tsx` as the third page of the existing List/Calendar pager
+  (List/Calendar/**Recurring**; Custom's pager is List/Recurring since it has no Calendar page). Back
+  to four tabs; app/recurring.tsx and (tabs)/bills.tsx are both gone, as is Settings' "RECURRING"
+  row. On the Recurring page the range nav is hidden with `opacity: 0` + `pointerEvents: 'none'`
+  rather than unmounted, so the view toggle below it doesn't jump when the pager settles there; the
+  header's type/category filter narrows this page too (`applyTransactionFilter` went generic); and
+  the tab's existing FAB opens add-transaction with `?repeat=1` from this page — the one thing the
+  old Settings-modal version never had, since it only ever *linked out* to that checkbox. Fixed
+  alongside (and kept): `BottomTabInset` (constants/theme.ts) had no `web` case, so on web every
+  tab's FAB sat at `bottom: 0` with nothing accounting for `(tabs)/_layout.web.tsx`'s own floating
+  pill tab bar and ended up entirely covered by it (same stacking-order issue as any two overlapping
+  `position: absolute` siblings, the later-painted one wins); `web: 76` matches that bar's measured
+  height. `lib/recurring.ts`'s core CRUD + `generateDueTransactions()` was untouched by all of this —
+  only ever the screen-level plumbing moved. Still not built: editing a series after creation
+  (amount/day/category/frequency) — only add and stop, per TODO.md.
 - **Category icon colors: custom per-category, except in transaction rows (settled 2026-08-26 after
   two reversals)** — `6da13da` forced every `CategoryBadge` to destructive-red/success-green via a
   `color` override; that was undone the same day (`type: CategoryType` prop instead, drawing a small
@@ -758,17 +812,34 @@ src/
   required dropping their `overflow: 'hidden'` (shadows get clipped by it) — the only cost is a
   square instead of rounded corner on the first/last row's press-highlight, not worth the
   wrapper-View complexity to avoid.
-- **Settings + demo data (added 2026-08-26, extended 2026-08-31 and 2026-09-03)** — `app/settings.tsx`,
-  reached via `SettingsButton` on every tab. "Generate demo data"
+- **Settings + demo data (added 2026-08-26, extended 2026-08-31 and 2026-09-03, trimmed 2026-09-10)**
+  — `app/settings.tsx`, reached via `SettingsButton` on every tab. "Generate demo data"
   (`lib/demo-data.ts#generateDemoData`, renamed from `generateYearToDateDemoData`), a
   two-tap-confirmed button that backfills random transactions across two ranges — this year's Jan 1
   through today, plus (2026-08-31, per feedback that Trends' Year view had nothing prior to compare
   against) all of last year — and sets a handful of both expense budgets *and* income goals
   (2026-08-31; previously expense-only) — for demoing/testing without hand-entering months of data.
   Purely additive (never clears/dedupes), so repeated taps pile up rather than reset; there's no
-  companion "clear demo data" yet, see TODO.md. A second section, "RECURRING" (2026-09-03), sits
-  above it — a single row opening the new recurring.tsx (see its own Folder Structure bullet), its
-  subtitle a live "N active" count kept fresh via `useFocusEffect` rather than a static description.
+  companion "clear demo data" yet, see TODO.md. A "RECURRING" section briefly sat above it
+  (2026-09-03: a single row into app/recurring.tsx, its subtitle a live "N active" count) — removed
+  2026-09-10 once that screen's content moved into the Transactions tab's Recurring page (see the "A
+  standalone Bills tab" bullet above); Settings is back to just the one section.
+- **Repeat card redesign (2026-09-10)** — add-transaction.tsx's recurring UI was a bare checkbox
+  row ("Repeat" + a checkbox glyph) for new transactions and a plain text link
+  ("Repeats {frequency} — stop repeating") for editing one, per explicit feedback that both looked
+  dated. Landing point: one `repeatCard` shape (icon circle, title, a subtitle that states what will
+  actually happen, a control on the right) used both places. New transaction: a `Switch` (not the old
+  checkbox), subtitle live-previews `"{frequency} · next on {date}"` via a new `nextOccurrence()`
+  helper (mirrors `lib/recurring.ts`'s own cursor math for a series that doesn't exist yet, so the
+  preview doesn't need one to compute against) — the Weekly/Biweekly/Monthly `SegmentedControl` now
+  sits inside the card, below a divider, instead of as a separate element beneath the checkbox.
+  Editing a transaction in an active series: subtitle shows `"Next on {date} · since {date}"` (real
+  `nextDueDate`/`startDate` this time, a real record exists), and a pill "Stop" button (destructive
+  color, two-tap — first tap fills it solid destructive with "Confirm", matching the tap-again
+  pattern used elsewhere in this screen) replaces the old bare text link. Stopping no longer makes the
+  card disappear: a `stoppedRecurring` flag keeps it mounted in a "Repeating stopped / No more will be
+  added. Past ones stay." state instead, so there's some acknowledgement of what just happened rather
+  than the row silently vanishing.
 - **Mutations to `transactions.ts`/`budgets.ts`/`recurring.ts` all go through the same
   promise-chain write-queue pattern** (`let writeQueue = Promise.resolve(); enqueue(fn)`) — copied
   across all three files rather than shared, per the no-premature-abstraction rule above, but keep
@@ -811,11 +882,26 @@ src/
   changing) does. The toggle still fills destructive-red/success-green on selection (unchanged from
   its original 2026-08-26 styling) and the page-dot row is tinted to match, same as Budgets' own
   Expense/Income toggle.
-- **Transactions List/Calendar (added 2026-08-26, Calendar extended to Week/Year 2026-09-01)** —
-  reachable for every rangeType except Custom (2026-09-01, see the "Transactions range selector"
-  bullet below for the history); List and Calendar are pages of one horizontal `pagingEnabled`
-  ScrollView (`transactions.tsx`), both reading the same shared `anchor`/`start`/`end` state so the
-  range nav above them always applies to whichever page is active. A page-dot row (2026-08-27,
+- **Transactions List/Calendar (added 2026-08-26, Calendar extended to Week/Year 2026-09-01; on
+  2026-09-10 a Recurring page joined and Calendar left for its own tab)** — Transactions' pager is
+  now List + Recurring (`PAGES` in `transactions.tsx`, one horizontal `pagingEnabled` ScrollView);
+  List reads the shared `anchor`/`start`/`end` state so the range nav applies to it, Recurring isn't
+  period-scoped so the nav hides (layout kept) while it's showing — see the "A standalone Bills tab"
+  bullet for that page's history. The space the hidden nav leaves behind isn't blank, either
+  (2026-09-10, per feedback): `RecurringSummary` overlays it (absolutely positioned over that same,
+  still-reserved box, so there's no separate height to keep in sync with the nav's own) with a count
+  ("N recurring transactions") and, per type that actually has one, a monthly-equivalent total
+  ("-$1,416.67/mo · +$3,000.00/mo") — `monthlyEquivalent()` normalizes each series' amount by its real
+  occurrences-per-month (52/12 weeks, 26/12 fortnights, 1 for monthly) rather than a flat ×4, so a
+  weekly series doesn't quietly undercount months with a 5th occurrence. Computed off
+  `filteredRecurring`, so the header's type/category filter narrows these totals too, same as it
+  narrows the row list below. The three calendar grids described below now live in
+  `(tabs)/calendar.tsx` behind their own Week/Month/Year nav (per feedback that Calendar should be a
+  tab, not a page); the component-level notes here still describe them accurately. The Custom-has-
+  no-Calendar special case (a `pagesFor(rangeType)` that dropped the page, and before that a
+  full-bleed List with no pager) went away with the move — Calendar's own nav simply never offers
+  Custom. A
+  page-dot row (2026-08-27,
   same 6px/16px-active shape as HabitTracker's own swipe-page dots) sits below the segmented toggle
   as a passive readout of which page is active — the toggle itself still does the tapping. The
   segmented toggle calls `pagerRef.current.scrollTo({x, animated: false})` — `animated: true`
@@ -884,10 +970,9 @@ src/
   had no week/year equivalent — a day-of-month grid has no other shape — so switching `rangeType`
   away from `'month'` snapped `view` back to `'list'`; Week and Year each gained their own Calendar
   shape 2026-09-01 (see the "Transactions List/Calendar" bullet above), so that reset now only fires
-  for Custom, the one rangeType still without a Calendar page (a `useEffect` on `rangeType`, read via
-  the functional `setState` form so it doesn't also need `view` in its dependency array) — the
-  List/Calendar toggle and page-dot row render for every rangeType except Custom, which renders the
-  same `transactionList` element directly, full-bleed, with no pager around it.
+  for Custom, the one rangeType still without a Calendar page — until 2026-09-10, when Calendar
+  became its own tab and that reset (and the `useEffect` on `rangeType` that did it) went away
+  entirely; Transactions' List/Recurring pager is the same for every rangeType now.
 - **Custom date range (added 2026-08-30)** — a 4th "Custom" option alongside Week/Month/Year, on both
   Home and Transactions' range selectors. `rangeType`/`rangeBounds`/`RangePickerModal` all gained a
   `'custom'` case, backed by a new `CustomRange = { start: string; end: string | null }` piece of
@@ -906,11 +991,10 @@ src/
   exists). Home's previous-period delta comparison (`computeDelta`) is `null` (no ▲/▼ shown) in custom
   mode until a complete range is picked, since there's no anchor-based "previous period" to fall back
   on the way week/month/year have; once picked, the comparison period is the same
-  `shiftCustomRange`-shifted window one length back. Custom mode has no Calendar-page equivalent (no
-  single-grid shape fits an arbitrary range the way a month/week/year grid does) — Transactions falls
-  back to List, full-bleed, via the `rangeType !== 'custom'` effect (see the "Transactions
-  List/Calendar" bullet above; Week and Year both gained their own Calendar shapes 2026-09-01, so
-  Custom is now the only rangeType this fallback applies to). All of the above
+  `shiftCustomRange`-shifted window one length back. Custom mode has no Calendar equivalent (no
+  single-grid shape fits an arbitrary range the way a month/week/year grid does) — since 2026-09-10
+  that's simply the Calendar tab's own nav not offering Custom (see the "Transactions List/Calendar"
+  bullet above for how Transactions used to special-case it while Calendar was one of its pages). All of the above
   (`RangeType`/`CustomRange`/`rangeBounds`/
   `shiftAnchor`/`shiftCustomRange`/`formatRangeLabel`/`RangePickerModal`) started out duplicated
   per-file (2 occurrences, not yet 3, per the no-premature-abstraction rule) but got extracted to

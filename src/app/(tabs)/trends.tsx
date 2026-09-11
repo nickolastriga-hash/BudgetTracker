@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CumulativeTrendChart, type TrendPoint } from '@/components/cumulative-trend-chart';
 import { RangePickerModal } from '@/components/range-picker-modal';
 import { ScreenHeader } from '@/components/screen-header';
+import { SegmentedControl } from '@/components/segmented-control';
 import { SettingsButton } from '@/components/settings-button';
 import { ThemedText } from '@/components/themed-text';
 import { BottomTabInset, CardRadius, CardShadow, MaxContentWidth, Spacing } from '@/constants/theme';
@@ -338,47 +339,28 @@ export default function TrendsScreen() {
             </Pressable>
           </View>
 
-          <View style={[styles.segmented, { borderColor: theme.border }]}>
-            {(['month', 'year', 'custom'] as const).map((rt) => {
-              const isSelected = rangeType === rt;
-              return (
-                <Pressable
-                  key={rt}
-                  onPress={() => {
-                    setRangeType(rt);
-                    if (rt === 'custom' && !customRange) setPickerVisible(true);
-                  }}
-                  style={[styles.segment, isSelected && { backgroundColor: theme.accent }]}>
-                  <ThemedText
-                    type="smallBold"
-                    themeColor={isSelected ? 'text' : 'textSecondary'}
-                    style={isSelected && { color: '#ffffff' }}>
-                    {rt === 'month' ? 'Month' : rt === 'year' ? 'Year' : 'Custom'}
-                  </ThemedText>
-                </Pressable>
-              );
-            })}
-          </View>
+          <SegmentedControl
+            options={[
+              { value: 'month', label: 'Month' },
+              { value: 'year', label: 'Year' },
+              { value: 'custom', label: 'Custom' },
+            ]}
+            value={rangeType}
+            onChange={(rt) => {
+              setRangeType(rt);
+              if (rt === 'custom' && !customRange) setPickerVisible(true);
+            }}
+          />
 
-          <View style={[styles.segmented, { borderColor: theme.border }]}>
-            {(['expense', 'income', 'net'] as const).map((vt) => {
-              const isSelected = viewType === vt;
-              const activeColor = vt === 'expense' ? theme.destructive : vt === 'income' ? theme.success : theme.accent;
-              return (
-                <Pressable
-                  key={vt}
-                  onPress={() => goToView(vt)}
-                  style={[styles.segment, isSelected && { backgroundColor: activeColor }]}>
-                  <ThemedText
-                    type="smallBold"
-                    themeColor={isSelected ? 'text' : 'textSecondary'}
-                    style={isSelected && { color: '#ffffff' }}>
-                    {vt === 'expense' ? 'Expenses' : vt === 'income' ? 'Income' : 'Net'}
-                  </ThemedText>
-                </Pressable>
-              );
-            })}
-          </View>
+          <SegmentedControl
+            options={[
+              { value: 'expense', label: 'Expenses', color: theme.destructive },
+              { value: 'income', label: 'Income', color: theme.success },
+              { value: 'net', label: 'Net' },
+            ]}
+            value={viewType}
+            onChange={goToView}
+          />
 
           {/* Page dots — same 6px/16px-active shape as every other tab's own
               swipe-page indicator, tinted to match each page's segment
@@ -522,24 +504,6 @@ const styles = StyleSheet.create({
   rangeLabel: {
     minWidth: 132,
     textAlign: 'center',
-  },
-  segmented: {
-    flexDirection: 'row',
-    alignSelf: 'center',
-    borderRadius: Spacing.two,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 3,
-    gap: 3,
-    width: '100%',
-    maxWidth: 280,
-  },
-  segment: {
-    flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    paddingVertical: Spacing.two - 2,
-    borderRadius: Spacing.two - 2,
-    alignItems: 'center',
   },
   pageDots: {
     flexDirection: 'row',

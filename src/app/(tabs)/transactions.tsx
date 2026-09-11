@@ -1,6 +1,6 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Modal,
   NativeScrollEvent,
@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CategoryBadge } from '@/components/category-badge';
 import { RangePickerModal } from '@/components/range-picker-modal';
 import { ScreenHeader } from '@/components/screen-header';
+import { SegmentedControl } from '@/components/segmented-control';
 import { SettingsButton } from '@/components/settings-button';
 import { ThemedText } from '@/components/themed-text';
 import { TransactionRow } from '@/components/transaction-row';
@@ -25,19 +26,14 @@ import { BottomTabInset, CardRadius, CardShadow, MaxContentWidth, Spacing } from
 import { useTheme } from '@/hooks/use-theme';
 import { categoriesForType, getCategories, getCategory, type Category } from '@/lib/categories';
 import {
-  daysInMonth,
-  formatRangeLabel,
-  monthLabel,
-  MONTH_NAMES,
   rangeBounds,
   shiftAnchor,
   shiftCustomRange,
-  startOfWeek,
-  toDateStr,
-  toMonthStr,
+  shortDateLabel,
   type CustomRange,
   type RangeType,
 } from '@/lib/date-range';
+import { deleteRecurring, getRecurring, nextDueDate, type RecurringTransaction } from '@/lib/recurring';
 import { getTransactions, transactionsInRange, type Transaction, type TransactionType } from '@/lib/transactions';
 
 // Which transactions to show — 'all' (no type filter) plus an optional set
@@ -51,7 +47,12 @@ type TransactionFilter = {
 
 const EMPTY_FILTER: TransactionFilter = { type: 'all', categoryIds: [] };
 
-function applyTransactionFilter(transactions: Transaction[], filter: TransactionFilter): Transaction[] {
+// Generic over anything with a type + categoryId (a Transaction or a
+// RecurringTransaction) so the one filter narrows the Recurring page too.
+function applyTransactionFilter<T extends { type: TransactionType; categoryId: string }>(
+  transactions: T[],
+  filter: TransactionFilter
+): T[] {
   return transactions.filter((t) => {
     if (filter.type !== 'all' && t.type !== filter.type) return false;
     if (filter.categoryIds.length > 0 && !filter.categoryIds.includes(t.categoryId)) return false;
@@ -64,18 +65,9 @@ function dateHeaderLabel(dateStr: string) {
   return date.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
 }
 
-// Also used by Calendar's own day-of-month grid below.
-const WEEKDAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-
-// A cell in a day grid (CalendarView's and WeekCalendarView's own) — either
-// a real day (dateStr + display number) or `null` for a leading/trailing
-// blank.
-type DayGridCell = { dateStr: string; day: number };
-
 // Type + category filter, reached via the funnel button in the header.
-// Applies to both List and Calendar (the caller filters `transactions`
-// before handing them to either page, so neither page has to know about
-// filtering itself). Live-applies as you tap rather than needing an
+// Applies to both List and Recurring (the caller filters before handing
+// data to either page, so neither page has to know about filtering itself). Live-applies as you tap rather than needing an
 // Apply/Done step — same immediacy as the range/view toggles elsewhere on
 // this screen.
 function FilterModal({
@@ -126,25 +118,15 @@ function FilterModal({
             </Pressable>
           </View>
 
-          <View style={[styles.segmented, { borderColor: theme.border }]}>
-            {(['all', 'expense', 'income'] as const).map((t) => {
-              const isSelected = filter.type === t;
-              const activeColor = t === 'expense' ? theme.destructive : t === 'income' ? theme.success : theme.accent;
-              return (
-                <Pressable
-                  key={t}
-                  onPress={() => setType(t)}
-                  style={[styles.segment, isSelected && { backgroundColor: activeColor }]}>
-                  <ThemedText
-                    type="smallBold"
-                    themeColor={isSelected ? 'text' : 'textSecondary'}
-                    style={isSelected && { color: '#ffffff' }}>
-                    {t === 'all' ? 'All' : t === 'expense' ? 'Expenses' : 'Income'}
-                  </ThemedText>
-                </Pressable>
-              );
-            })}
-          </View>
+          <SegmentedControl
+            options={[
+              { value: 'all', label: 'All' },
+              { value: 'expense', label: 'Expenses', color: theme.destructive },
+              { value: 'income', label: 'Income', color: theme.success },
+            ]}
+            value={filter.type}
+            onChange={setType}
+          />
 
           <ScrollView style={styles.filterCategoryScroll} contentContainerStyle={styles.categoryGrid}>
             {visibleCategories.map((category) => {
@@ -180,522 +162,199 @@ function FilterModal({
   );
 }
 
-// Month mode's Calendar page — a day-of-month grid (leading blanks + every
-// day of the navigated month) showing each day's total spend/income, plus a
-// tap-to-expand transaction list below it.
-function CalendarView({
-  month,
-  transactions,
-  categories,
-  bottomPadding,
+function ordinal(n: number): string {
+  const v = n % 100;
+  if (v >= 11 && v <= 13) return `${n}th`;
+  switch (n % 10) {
+    case 1:
+      return `${n}st`;
+    case 2:
+      return `${n}nd`;
+    case 3:
+      return `${n}rd`;
+    default:
+      return `${n}th`;
+  }
+}
+
+function frequencyLabel(item: RecurringTransaction): string {
+  if (item.frequency === 'monthly') return `Monthly · ${ordinal(item.dayOfMonth)}`;
+  return item.frequency === 'weekly' ? 'Weekly' : 'Every 2 weeks';
+}
+
+// "YYYY-MM-DD" parsed via local y/m/d getters, not `new Date(dateStr)` — the
+// latter parses as UTC midnight, which shortDateLabel's local-timezone
+// formatting can then roll back a day (same reasoning as transaction-row.tsx).
+function localDateFromStr(dateStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function RecurringRow({
+  item,
+  category,
+  isLast,
+  onStop,
 }: {
-  month: Date;
-  transactions: Transaction[];
-  categories: Category[];
-  bottomPadding: number;
+  item: RecurringTransaction;
+  category: Category | undefined;
+  isLast: boolean;
+  onStop: () => void;
 }) {
   const theme = useTheme();
-  const monthStr = toMonthStr(month);
-  const todayStr = toDateStr(new Date());
-  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  // Two-tap confirm kept local to the row rather than lifted to the screen —
+  // avoids tracking "which row is confirming" in parent state.
+  const [confirming, setConfirming] = useState(false);
+  const isExpense = item.type === 'expense';
+  const typeColor = isExpense ? theme.destructive : theme.success;
 
-  // Adjusted during render against a tracked previous month rather than in a
-  // useEffect (same reasoning throughout this pass, see index.tsx's own
-  // rangeKey comment) — the visible month changed, so whatever day was
-  // selected no longer applies.
-  const [prevMonthStr, setPrevMonthStr] = useState(monthStr);
-  if (prevMonthStr !== monthStr) {
-    setPrevMonthStr(monthStr);
-    setSelectedDay(null);
+  function handleStopPress() {
+    if (!confirming) {
+      setConfirming(true);
+      return;
+    }
+    setConfirming(false);
+    onStop();
   }
 
-  // Both sides of each day now, not just spend — expense in red, income in
-  // green, same color convention as everywhere else a transaction's type
-  // shows. A type filter naturally zeroes out the unwanted side here since
-  // `transactions` has already been filtered by the caller.
-  const expenseByDay = useMemo(() => {
-    const totals = new Map<string, number>();
-    for (const t of transactions) {
-      if (t.type !== 'expense' || !t.date.startsWith(monthStr)) continue;
-      totals.set(t.date, (totals.get(t.date) ?? 0) + t.amount);
-    }
-    return totals;
-  }, [transactions, monthStr]);
-  const incomeByDay = useMemo(() => {
-    const totals = new Map<string, number>();
-    for (const t of transactions) {
-      if (t.type !== 'income' || !t.date.startsWith(monthStr)) continue;
-      totals.set(t.date, (totals.get(t.date) ?? 0) + t.amount);
-    }
-    return totals;
-  }, [transactions, monthStr]);
-
-  const year = month.getFullYear();
-  const monthIndex = month.getMonth();
-  const firstWeekday = new Date(year, monthIndex, 1).getDay();
-  const total = daysInMonth(year, monthIndex);
-  const cells: (DayGridCell | null)[] = [
-    ...Array(firstWeekday).fill(null),
-    ...Array.from({ length: total }, (_, i) => {
-      const day = i + 1;
-      return { dateStr: `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`, day };
-    }),
-  ];
-
-  const selectedDayTransactions = selectedDay
-    ? transactions.filter((t) => t.date === selectedDay).sort((a, b) => (a.id < b.id ? 1 : -1))
-    : [];
-
   return (
-    // One ScrollView, grid included (2026-09-01, replacing an earlier
-    // "freeze panes" split — the grid pinned above a separate inner
-    // ScrollView for just the day-detail list) per feedback that scrolling
-    // should be able to carry the grid away too, not just the list below it.
-    <ScrollView contentContainerStyle={[styles.content, { paddingBottom: bottomPadding }]}>
-      <View style={[styles.calendarCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-        <View style={styles.weekdayRow}>
-          {WEEKDAY_LABELS.map((w, i) => (
-            <ThemedText key={i} type="small" themeColor="textTertiary" style={styles.weekdayLabel}>
-              {w}
+    <View>
+      <View style={styles.recurringRow}>
+        {category && <CategoryBadge category={category} color={typeColor} size={42} />}
+        <View style={styles.recurringRowMiddle}>
+          <ThemedText type="default" numberOfLines={1}>
+            {category?.name ?? 'Other'}
+          </ThemedText>
+          <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+            {frequencyLabel(item)} — next {shortDateLabel(localDateFromStr(nextDueDate(item)))}
+          </ThemedText>
+        </View>
+        <View style={styles.recurringRowEnd}>
+          <ThemedText type="default" style={[styles.recurringAmount, { color: typeColor }]}>
+            {isExpense ? '-' : '+'}${item.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </ThemedText>
+          <Pressable onPress={handleStopPress} hitSlop={8}>
+            <ThemedText type="small" themeColor={confirming ? 'destructive' : 'accent'}>
+              {confirming ? 'Tap again' : 'Stop'}
             </ThemedText>
-          ))}
-        </View>
-        <View style={styles.dayGrid}>
-          {cells.map((cell, i) => {
-            if (!cell) return <View key={`empty-${i}`} style={styles.dayCell} />;
-            const { dateStr, day } = cell;
-            const expense = expenseByDay.get(dateStr) ?? 0;
-            const income = incomeByDay.get(dateStr) ?? 0;
-            const isToday = dateStr === todayStr;
-            const isSelected = dateStr === selectedDay;
-            return (
-              <Pressable
-                key={dateStr}
-                onPress={() => setSelectedDay((d) => (d === dateStr ? null : dateStr))}
-                style={styles.dayCell}>
-                <View
-                  style={[
-                    styles.dayCellInner,
-                    isSelected && { backgroundColor: theme.accent },
-                    !isSelected && isToday && { borderColor: theme.accent, borderWidth: 1.5 },
-                  ]}>
-                  <ThemedText type="small" style={[styles.dayNumber, isSelected && styles.dayNumberSelected]}>
-                    {day}
-                  </ThemedText>
-                  {expense > 0 && (
-                    <ThemedText
-                      type="small"
-                      themeColor={isSelected ? 'text' : 'destructive'}
-                      style={[styles.daySpend, isSelected && styles.daySpendSelected]}
-                      numberOfLines={1}>
-                      -${expense >= 1000 ? `${Math.round(expense / 100) / 10}k` : Math.round(expense)}
-                    </ThemedText>
-                  )}
-                  {income > 0 && (
-                    <ThemedText
-                      type="small"
-                      themeColor={isSelected ? 'text' : 'success'}
-                      style={[styles.daySpend, isSelected && styles.daySpendSelected]}
-                      numberOfLines={1}>
-                      +${income >= 1000 ? `${Math.round(income / 100) / 10}k` : Math.round(income)}
-                    </ThemedText>
-                  )}
-                </View>
-              </Pressable>
-            );
-          })}
+          </Pressable>
         </View>
       </View>
-
-      {selectedDay && (
-        <View style={styles.dateGroup}>
-          <ThemedText type="small" themeColor="textSecondary" style={styles.dateHeader}>
-            {dateHeaderLabel(selectedDay).toUpperCase()}
-          </ThemedText>
-          {selectedDayTransactions.length === 0 ? (
-            <View style={[styles.group, styles.emptyGroup, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
-              <ThemedText type="small" themeColor="textSecondary">
-                No transactions this day.
-              </ThemedText>
-            </View>
-          ) : (
-            <View style={[styles.group, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
-              {selectedDayTransactions.map((t, i) => (
-                <View key={t.id}>
-                  <TransactionRow
-                    transaction={t}
-                    category={getCategory(categories, t.categoryId)}
-                    onPress={() => router.push(`/add-transaction?id=${t.id}`)}
-                  />
-                  {i < selectedDayTransactions.length - 1 && (
-                    <View style={[styles.divider, styles.rowDividerInset, { backgroundColor: theme.border }]} />
-                  )}
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
-      )}
-    </ScrollView>
+      {!isLast && <View style={[styles.divider, styles.rowDividerInset, { backgroundColor: theme.border }]} />}
+    </View>
   );
 }
 
-// Week mode's Calendar page (2026-09-01, replacing an earlier "just the
-// selected week's 7 days" compact row per follow-up feedback that the whole
-// month should stay visible) — the same day-of-month grid as CalendarView
-// above, but the selectable/highlightable unit is a whole calendar week (one
-// grid row), not a single day: each week is wrapped in its own bounding
-// rectangle instead of each day getting its own bordered cell, the real
-// current week's rectangle is outlined blue by default (the same "isToday"
-// idea CalendarView's day cells use, just for a week instead of a day), and
-// tapping any week's rectangle selects it — fills it blue and expands that
-// whole week's transactions below, same "tap to expand" feel as a day in
-// CalendarView. Not built as a mode of the generalized CalendarView above
-// since the selection unit itself differs (a week vs. a day), which would
-// have meant threading an extra "granularity" flag through nearly every
-// branch of that component instead of just writing a second one.
-function WeekCalendarView({
-  month,
-  transactions,
-  categories,
-  bottomPadding,
-}: {
-  month: Date;
-  transactions: Transaction[];
-  categories: Category[];
-  bottomPadding: number;
-}) {
+// Normalizes a series' per-occurrence amount to a monthly figure so
+// differently-paced series (weekly/biweekly/monthly) can be summed into one
+// meaningful total — 52/12 and 26/12 weeks-per-month, not a flat ×4, so a
+// weekly series doesn't quietly undercount the months that have a 5th week.
+function monthlyEquivalent(item: RecurringTransaction): number {
+  const occurrencesPerMonth = item.frequency === 'weekly' ? 52 / 12 : item.frequency === 'biweekly' ? 26 / 12 : 1;
+  return item.amount * occurrencesPerMonth;
+}
+
+// Fills the space the range nav leaves behind while the Recurring page is
+// showing (2026-09-10, see the rangeNav/rangeNavHidden styles below) with
+// something that's actually about this page: how many series there are and
+// what they add up to per month. Absolutely positioned over that same,
+// still-reserved space rather than replacing it in the layout flow — keeps
+// this to exactly the nav's own footprint with no separate height to keep in
+// sync.
+function RecurringSummary({ items }: { items: RecurringTransaction[] }) {
   const theme = useTheme();
-  const monthStr = toMonthStr(month);
-  const todayStr = toDateStr(new Date());
-  const todayWeekStart = toDateStr(startOfWeek(new Date()));
-  const [selectedWeekStart, setSelectedWeekStart] = useState<string | null>(null);
-
-  // Same render-time adjustment as CalendarView's own selectedDay above.
-  const [prevMonthStr, setPrevMonthStr] = useState(monthStr);
-  if (prevMonthStr !== monthStr) {
-    setPrevMonthStr(monthStr);
-    setSelectedWeekStart(null);
+  let expenseMonthly = 0;
+  let incomeMonthly = 0;
+  for (const item of items) {
+    if (item.type === 'expense') expenseMonthly += monthlyEquivalent(item);
+    else incomeMonthly += monthlyEquivalent(item);
   }
-
-  const year = month.getFullYear();
-  const monthIndex = month.getMonth();
-  const firstWeekday = new Date(year, monthIndex, 1).getDay();
-  const totalDays = daysInMonth(year, monthIndex);
-
-  // Every calendar-week row the month's grid needs, leading/trailing blanks
-  // padded so each row is a real, full 7-day week (needed to draw one
-  // bounding rectangle per row) — each row's own Sunday/Saturday bounds are
-  // computed directly off its grid position (works even though a row's
-  // leading cells can be null) rather than via startOfWeek on any one cell.
-  const weeks = useMemo(() => {
-    const flat: (DayGridCell | null)[] = [
-      ...Array(firstWeekday).fill(null),
-      ...Array.from({ length: totalDays }, (_, i) => {
-        const day = i + 1;
-        return {
-          dateStr: `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
-          day,
-        };
-      }),
-    ];
-    while (flat.length % 7 !== 0) flat.push(null);
-    const rows: { weekStart: string; weekEnd: string; cells: (DayGridCell | null)[] }[] = [];
-    for (let i = 0; i < flat.length; i += 7) {
-      const weekStartDate = new Date(year, monthIndex, 1 - firstWeekday + i);
-      const weekEndDate = new Date(year, monthIndex, 1 - firstWeekday + i + 6);
-      rows.push({ weekStart: toDateStr(weekStartDate), weekEnd: toDateStr(weekEndDate), cells: flat.slice(i, i + 7) });
-    }
-    return rows;
-  }, [year, monthIndex, firstWeekday, totalDays]);
-
-  const expenseByDay = useMemo(() => {
-    const totals = new Map<string, number>();
-    for (const t of transactions) {
-      if (t.type !== 'expense' || !t.date.startsWith(monthStr)) continue;
-      totals.set(t.date, (totals.get(t.date) ?? 0) + t.amount);
-    }
-    return totals;
-  }, [transactions, monthStr]);
-  const incomeByDay = useMemo(() => {
-    const totals = new Map<string, number>();
-    for (const t of transactions) {
-      if (t.type !== 'income' || !t.date.startsWith(monthStr)) continue;
-      totals.set(t.date, (totals.get(t.date) ?? 0) + t.amount);
-    }
-    return totals;
-  }, [transactions, monthStr]);
-
-  const selectedWeek = weeks.find((w) => w.weekStart === selectedWeekStart) ?? null;
-  const selectedWeekTransactions = selectedWeek
-    ? transactions
-        .filter((t) => t.date >= selectedWeek.weekStart && t.date <= selectedWeek.weekEnd)
-        .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.id < b.id ? 1 : -1))
-    : [];
+  const count = items.length;
 
   return (
-    // One ScrollView, grid included — same 2026-09-01 change as CalendarView
-    // above (see its own comment), so scrolling can carry the whole-month
-    // grid away too, not just the selected week's transaction list below it.
-    <ScrollView contentContainerStyle={[styles.content, { paddingBottom: bottomPadding }]}>
-      <View style={[styles.calendarCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-        <View style={styles.weekdayRow}>
-          {WEEKDAY_LABELS.map((w, i) => (
-            <ThemedText key={i} type="small" themeColor="textTertiary" style={styles.weekdayLabel}>
-              {w}
+    <View style={styles.recurringSummary} pointerEvents="none">
+      <View style={styles.recurringSummaryCount}>
+        <MaterialIcons name="event-repeat" size={16} color={theme.textSecondary} />
+        <ThemedText type="smallBold" themeColor="textSecondary">
+          {count} recurring {count === 1 ? 'transaction' : 'transactions'}
+        </ThemedText>
+      </View>
+      {count > 0 && (expenseMonthly > 0 || incomeMonthly > 0) && (
+        <View style={styles.recurringSummaryTotals}>
+          {expenseMonthly > 0 && (
+            <ThemedText type="smallBold" themeColor="destructive">
+              -${expenseMonthly.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mo
             </ThemedText>
-          ))}
-        </View>
-        <View style={styles.weekGrid}>
-          {weeks.map((week) => {
-            const isCurrentWeek = week.weekStart === todayWeekStart;
-            const isSelected = week.weekStart === selectedWeekStart;
-            return (
-              <Pressable
-                key={week.weekStart}
-                onPress={() => setSelectedWeekStart((w) => (w === week.weekStart ? null : week.weekStart))}>
-                <View
-                  style={[
-                    styles.weekRow,
-                    { borderColor: theme.border },
-                    !isSelected && isCurrentWeek && { borderColor: theme.accent, borderWidth: 1.5 },
-                    isSelected && { backgroundColor: theme.accent, borderColor: theme.accent },
-                  ]}>
-                  {week.cells.map((cell, i) => {
-                    if (!cell) return <View key={`empty-${i}`} style={styles.weekDayCell} />;
-                    const { dateStr, day } = cell;
-                    const expense = expenseByDay.get(dateStr) ?? 0;
-                    const income = incomeByDay.get(dateStr) ?? 0;
-                    const isRealToday = dateStr === todayStr;
-                    return (
-                      <View key={dateStr} style={styles.weekDayCell}>
-                        <ThemedText
-                          type="small"
-                          style={[
-                            styles.dayNumber,
-                            isSelected && styles.dayNumberSelected,
-                            isRealToday && !isSelected && { color: theme.accent, fontWeight: '700' },
-                          ]}>
-                          {day}
-                        </ThemedText>
-                        {expense > 0 && (
-                          <ThemedText
-                            type="small"
-                            themeColor={isSelected ? 'text' : 'destructive'}
-                            style={[styles.daySpend, isSelected && styles.daySpendSelected]}
-                            numberOfLines={1}>
-                            -${expense >= 1000 ? `${Math.round(expense / 100) / 10}k` : Math.round(expense)}
-                          </ThemedText>
-                        )}
-                        {income > 0 && (
-                          <ThemedText
-                            type="small"
-                            themeColor={isSelected ? 'text' : 'success'}
-                            style={[styles.daySpend, isSelected && styles.daySpendSelected]}
-                            numberOfLines={1}>
-                            +${income >= 1000 ? `${Math.round(income / 100) / 10}k` : Math.round(income)}
-                          </ThemedText>
-                        )}
-                      </View>
-                    );
-                  })}
-                </View>
-              </Pressable>
-            );
-          })}
-        </View>
-      </View>
-
-      {selectedWeek && (
-        <View style={styles.dateGroup}>
-          <ThemedText type="small" themeColor="textSecondary" style={styles.dateHeader}>
-            {formatRangeLabel(
-              new Date(`${selectedWeek.weekStart}T00:00:00`),
-              new Date(`${selectedWeek.weekEnd}T00:00:00`)
-            ).toUpperCase()}
-          </ThemedText>
-          {selectedWeekTransactions.length === 0 ? (
-            <View style={[styles.group, styles.emptyGroup, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
-              <ThemedText type="small" themeColor="textSecondary">
-                No transactions this week.
-              </ThemedText>
-            </View>
-          ) : (
-            <View style={[styles.group, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
-              {selectedWeekTransactions.map((t, i) => (
-                <View key={t.id}>
-                  <TransactionRow
-                    transaction={t}
-                    category={getCategory(categories, t.categoryId)}
-                    onPress={() => router.push(`/add-transaction?id=${t.id}`)}
-                  />
-                  {i < selectedWeekTransactions.length - 1 && (
-                    <View style={[styles.divider, styles.rowDividerInset, { backgroundColor: theme.border }]} />
-                  )}
-                </View>
-              ))}
-            </View>
+          )}
+          {expenseMonthly > 0 && incomeMonthly > 0 && (
+            <ThemedText type="small" themeColor="textTertiary">
+              ·
+            </ThemedText>
+          )}
+          {incomeMonthly > 0 && (
+            <ThemedText type="smallBold" themeColor="success">
+              +${incomeMonthly.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mo
+            </ThemedText>
           )}
         </View>
       )}
-    </ScrollView>
+    </View>
   );
 }
 
-// Year mode's Calendar page — a 12-month grid showing each month's expense/
-// income totals. Tapping a month selects it (shows that month's transactions
-// below, the same "tap to expand" feel as a day in CalendarView above)
-// rather than drilling into a further day grid: a day-of-month grid for an
-// entire year would be 12 grids at once, more navigation than a quick
-// "what happened around when" glance calls for.
-function YearCalendarView({
-  year,
-  transactions,
+// The pager's Recurring page (2026-09-10) — every active RecurringTransaction
+// series, soonest-due-first, with a two-tap Stop per row. Not period-scoped
+// (a series just is or isn't active, whatever range the nav is on), which is
+// why the screen hides the range nav while this page is showing. Stopping
+// only removes the series going forward; transactions it already generated
+// stay put. View/add/stop only — editing a series after creation isn't
+// built (TODO.md).
+function RecurringView({
+  items,
   categories,
+  hasFilter,
   bottomPadding,
+  onStop,
 }: {
-  year: number;
-  transactions: Transaction[];
+  items: RecurringTransaction[];
   categories: Category[];
+  hasFilter: boolean;
   bottomPadding: number;
+  onStop: (id: string) => void;
 }) {
   const theme = useTheme();
-  const thisMonthStr = toMonthStr(new Date());
-  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
-
-  // Same render-time adjustment as CalendarView's own selectedDay above.
-  const [prevYear, setPrevYear] = useState(year);
-  if (prevYear !== year) {
-    setPrevYear(year);
-    setSelectedMonth(null);
-  }
-
-  const months = useMemo(
-    () => Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`),
-    [year]
-  );
-
-  const expenseByMonth = useMemo(() => {
-    const totals = new Map<string, number>();
-    for (const t of transactions) {
-      if (t.type !== 'expense' || !t.date.startsWith(String(year))) continue;
-      const m = t.date.slice(0, 7);
-      totals.set(m, (totals.get(m) ?? 0) + t.amount);
-    }
-    return totals;
-  }, [transactions, year]);
-  const incomeByMonth = useMemo(() => {
-    const totals = new Map<string, number>();
-    for (const t of transactions) {
-      if (t.type !== 'income' || !t.date.startsWith(String(year))) continue;
-      const m = t.date.slice(0, 7);
-      totals.set(m, (totals.get(m) ?? 0) + t.amount);
-    }
-    return totals;
-  }, [transactions, year]);
-
-  const monthRows = [months.slice(0, 4), months.slice(4, 8), months.slice(8, 12)];
-  const selectedMonthTransactions = selectedMonth
-    ? transactions.filter((t) => t.date.startsWith(selectedMonth)).sort((a, b) => (a.date < b.date ? 1 : -1))
-    : [];
+  const sorted = [...items].sort((a, b) => (nextDueDate(a) < nextDueDate(b) ? -1 : 1));
 
   return (
-    // One ScrollView, grid included — same 2026-09-01 change as CalendarView
-    // above (see its own comment), so scrolling can carry the year grid away
-    // too, not just the selected month's transaction list below it.
     <ScrollView contentContainerStyle={[styles.content, { paddingBottom: bottomPadding }]}>
-      <View style={[styles.calendarCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-        <View style={styles.yearMonthGrid}>
-          {monthRows.map((row) => (
-            <View key={row[0]} style={styles.yearMonthRow}>
-              {row.map((monthStr) => {
-                const monthIndex = Number(monthStr.slice(5, 7)) - 1;
-                const expense = expenseByMonth.get(monthStr) ?? 0;
-                const income = incomeByMonth.get(monthStr) ?? 0;
-                const isToday = monthStr === thisMonthStr;
-                const isSelected = monthStr === selectedMonth;
-                return (
-                  <Pressable
-                    key={monthStr}
-                    onPress={() => setSelectedMonth((m) => (m === monthStr ? null : monthStr))}
-                    style={styles.yearMonthCell}>
-                    <View
-                      style={[
-                        styles.yearMonthCellInner,
-                        { borderColor: theme.border },
-                        !isSelected && isToday && { borderColor: theme.accent, borderWidth: 1.5 },
-                        isSelected && { backgroundColor: theme.accent, borderColor: theme.accent },
-                      ]}>
-                      <ThemedText
-                        type="small"
-                        themeColor={isSelected ? undefined : 'textSecondary'}
-                        style={isSelected && styles.dayNumberSelected}>
-                        {MONTH_NAMES[monthIndex]}
-                      </ThemedText>
-                      {expense > 0 && (
-                        <ThemedText
-                          type="small"
-                          themeColor={isSelected ? 'text' : 'destructive'}
-                          style={[styles.daySpend, isSelected && styles.daySpendSelected]}
-                          numberOfLines={1}>
-                          -${expense >= 1000 ? `${Math.round(expense / 100) / 10}k` : Math.round(expense)}
-                        </ThemedText>
-                      )}
-                      {income > 0 && (
-                        <ThemedText
-                          type="small"
-                          themeColor={isSelected ? 'text' : 'success'}
-                          style={[styles.daySpend, isSelected && styles.daySpendSelected]}
-                          numberOfLines={1}>
-                          +${income >= 1000 ? `${Math.round(income / 100) / 10}k` : Math.round(income)}
-                        </ThemedText>
-                      )}
-                      {expense === 0 && income === 0 && (
-                        <ThemedText type="small" themeColor={isSelected ? 'text' : 'textTertiary'}>
-                          —
-                        </ThemedText>
-                      )}
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </View>
-          ))}
-        </View>
-      </View>
-
-      {selectedMonth && (
-        <View style={styles.dateGroup}>
-          <ThemedText type="small" themeColor="textSecondary" style={styles.dateHeader}>
-            {monthLabel(new Date(`${selectedMonth}-01T00:00:00`)).toUpperCase()}
+      {sorted.length === 0 ? (
+        <View style={[styles.group, styles.emptyGroup, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <MaterialIcons name="event-repeat" size={28} color={theme.textTertiary} />
+          <ThemedText type="small" themeColor="textSecondary" style={styles.emptyText}>
+            {hasFilter ? 'No matching recurring transactions.' : 'No recurring transactions yet. Tap + to set one up.'}
           </ThemedText>
-          {selectedMonthTransactions.length === 0 ? (
-            <View style={[styles.group, styles.emptyGroup, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
-              <ThemedText type="small" themeColor="textSecondary">
-                No transactions this month.
-              </ThemedText>
-            </View>
-          ) : (
-            <View style={[styles.group, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
-              {selectedMonthTransactions.map((t, i) => (
-                <View key={t.id}>
-                  <TransactionRow
-                    transaction={t}
-                    category={getCategory(categories, t.categoryId)}
-                    onPress={() => router.push(`/add-transaction?id=${t.id}`)}
-                  />
-                  {i < selectedMonthTransactions.length - 1 && (
-                    <View style={[styles.divider, styles.rowDividerInset, { backgroundColor: theme.border }]} />
-                  )}
-                </View>
-              ))}
-            </View>
-          )}
+        </View>
+      ) : (
+        <View style={[styles.group, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          {sorted.map((item, i) => (
+            <RecurringRow
+              key={item.id}
+              item={item}
+              category={getCategory(categories, item.categoryId)}
+              isLast={i === sorted.length - 1}
+              onStop={() => onStop(item.id)}
+            />
+          ))}
         </View>
       )}
     </ScrollView>
   );
 }
+
+// Calendar was the middle page of this pager until 2026-09-10, when it became
+// its own tab (see calendar.tsx).
+const PAGES = ['list', 'recurring'] as const;
+type PagerView = (typeof PAGES)[number];
 
 export default function TransactionsScreen() {
   const theme = useTheme();
@@ -704,21 +363,24 @@ export default function TransactionsScreen() {
   const [anchor, setAnchor] = useState(() => new Date());
   const [customRange, setCustomRange] = useState<CustomRange | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [recurring, setRecurring] = useState<RecurringTransaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [view, setView] = useState<'list' | 'calendar'>('list');
+  const [view, setView] = useState<PagerView>('list');
   const [pickerVisible, setPickerVisible] = useState(false);
   const [filterVisible, setFilterVisible] = useState(false);
   const [filter, setFilter] = useState<TransactionFilter>(EMPTY_FILTER);
   const pageWidth = useWindowDimensions().width;
   const pagerRef = useRef<ScrollView>(null);
+  const pages = PAGES;
 
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
-      Promise.all([getTransactions(), getCategories()]).then(([t, c]) => {
+      Promise.all([getTransactions(), getCategories(), getRecurring()]).then(([t, c, r]) => {
         if (!cancelled) {
           setTransactions(t);
           setCategories(c);
+          setRecurring(r);
         }
       });
       return () => {
@@ -726,6 +388,11 @@ export default function TransactionsScreen() {
       };
     }, [])
   );
+
+  async function handleStopRecurring(id: string) {
+    await deleteRecurring(id);
+    setRecurring((prev) => prev.filter((r) => r.id !== id));
+  }
 
   const { start, end, label } = rangeBounds(rangeType, anchor, customRange);
 
@@ -741,22 +408,8 @@ export default function TransactionsScreen() {
     if (customRange?.end) setPickerVisible(false);
   }
 
-  // Calendar has a real page for Month, Week, and Year now (see
-  // CalendarView/YearCalendarView above) — only Custom has no sensible
-  // single-grid shape for an arbitrary range, so switching to Custom is the
-  // only case that drops back to List. Read via the functional setState
-  // form rather than depending on `view` directly, so this only ever fires
-  // off a `rangeType` change.
-  useEffect(() => {
-    if (rangeType !== 'custom') return;
-    setView((v) => {
-      if (v !== 'calendar') return v;
-      pagerRef.current?.scrollTo({ x: 0, animated: false });
-      return 'list';
-    });
-  }, [rangeType]);
-
   const filteredTransactions = useMemo(() => applyTransactionFilter(transactions, filter), [transactions, filter]);
+  const filteredRecurring = useMemo(() => applyTransactionFilter(recurring, filter), [recurring, filter]);
   const hasFilter = filter.type !== 'all' || filter.categoryIds.length > 0;
 
   const groups = useMemo(() => {
@@ -770,18 +423,18 @@ export default function TransactionsScreen() {
     return Array.from(byDate.entries());
   }, [filteredTransactions, start, end]);
 
-  function goToView(next: 'list' | 'calendar') {
+  function goToView(next: PagerView) {
     setView(next);
     // animated: true silently no-ops on react-native-web here (scrollLeft
     // never moves, likely a scroll-snap-type/smooth-scroll interaction) —
     // an instant jump still reads fine for a tab-style toggle.
-    pagerRef.current?.scrollTo({ x: next === 'list' ? 0 : pageWidth, animated: false });
+    pagerRef.current?.scrollTo({ x: pages.indexOf(next) * pageWidth, animated: false });
   }
 
   function onPagerScrollEnd(e: NativeSyntheticEvent<NativeScrollEvent>) {
     if (!pageWidth) return;
     const index = Math.round(e.nativeEvent.contentOffset.x / pageWidth);
-    setView(index === 0 ? 'list' : 'calendar');
+    setView(pages[index] ?? 'list');
   }
 
   const bottomPadding = insets.bottom + BottomTabInset + Spacing.six;
@@ -795,11 +448,7 @@ export default function TransactionsScreen() {
     rangeType === 'week' ? 'week' : rangeType === 'year' ? 'year' : rangeType === 'custom' ? 'range' : 'month';
   const emptyMessage = hasFilter ? `No matching transactions this ${rangeNoun}.` : `No transactions this ${rangeNoun}.`;
 
-  // Same SectionList either way — month/week/year mode nests it as the List
-  // page of the List/Calendar pager below, custom mode renders it directly
-  // full-bleed (there's no Calendar page to pair it with, see the rangeType
-  // effect above) — kept as one shared element rather than several copies of
-  // this JSX so they can't drift out of sync.
+  // The pager's List page, for every rangeType.
   const transactionList = (
     <SectionList
       sections={sections}
@@ -838,28 +487,6 @@ export default function TransactionsScreen() {
     />
   );
 
-  // The pager's second page — its shape depends on rangeType. Custom never
-  // reaches this (it renders transactionList full-bleed instead, see the
-  // render below).
-  const calendarPage =
-    rangeType === 'week' ? (
-      <WeekCalendarView
-        month={anchor}
-        transactions={filteredTransactions}
-        categories={categories}
-        bottomPadding={bottomPadding}
-      />
-    ) : rangeType === 'year' ? (
-      <YearCalendarView
-        year={anchor.getFullYear()}
-        transactions={filteredTransactions}
-        categories={categories}
-        bottomPadding={bottomPadding}
-      />
-    ) : (
-      <CalendarView month={anchor} transactions={filteredTransactions} categories={categories} bottomPadding={bottomPadding} />
-    );
-
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       <View style={{ paddingTop: insets.top + Spacing.three, backgroundColor: theme.background }}>
@@ -883,121 +510,123 @@ export default function TransactionsScreen() {
             }
           />
 
-          <View style={styles.monthNav}>
-            <Pressable
-              hitSlop={10}
-              onPress={() => {
-                if (rangeType === 'custom') {
-                  setCustomRange((r) => (r && r.end ? shiftCustomRange(r, -1) : r));
-                } else {
-                  setAnchor((a) => shiftAnchor(rangeType, a, -1));
-                }
-              }}>
-              <MaterialIcons name="chevron-left" size={26} color={theme.accent} />
-            </Pressable>
-            <Pressable hitSlop={10} onPress={() => setPickerVisible(true)}>
-              <ThemedText type="smallBold" style={styles.monthLabel}>
-                {label}
-              </ThemedText>
-            </Pressable>
-            <Pressable
-              hitSlop={10}
-              onPress={() => {
-                if (rangeType === 'custom') {
-                  setCustomRange((r) => (r && r.end ? shiftCustomRange(r, 1) : r));
-                } else {
-                  setAnchor((a) => shiftAnchor(rangeType, a, 1));
-                }
-              }}>
-              <MaterialIcons name="chevron-right" size={26} color={theme.accent} />
-            </Pressable>
-          </View>
-
-          <View style={[styles.segmented, styles.rangeToggle, { borderColor: theme.border }]}>
-            {(['week', 'month', 'year', 'custom'] as const).map((rt) => {
-              const isSelected = rangeType === rt;
-              return (
+          {/* The range nav doesn't apply to the Recurring page (a series
+              isn't period-scoped) — hidden there, but still laid out
+              (opacity 0, not unmounted) so the view toggle below stays put
+              instead of jumping up as the pager settles on that page.
+              RecurringSummary (2026-09-10) fills the space it leaves behind
+              instead of leaving it blank — see that component's own
+              comment for why it's an absolute overlay rather than a second
+              element in the flow. */}
+          <View style={styles.rangeNavContainer}>
+            <View
+              style={[styles.rangeNav, view === 'recurring' && styles.rangeNavHidden]}
+              pointerEvents={view === 'recurring' ? 'none' : 'auto'}>
+              <View style={styles.monthNav}>
                 <Pressable
-                  key={rt}
+                  hitSlop={10}
                   onPress={() => {
-                    setRangeType(rt);
-                    if (rt === 'custom' && !customRange) setPickerVisible(true);
-                  }}
-                  style={[styles.segment, isSelected && { backgroundColor: theme.accent }]}>
-                  <ThemedText
-                    type="smallBold"
-                    themeColor={isSelected ? 'text' : 'textSecondary'}
-                    style={isSelected && { color: '#ffffff' }}>
-                    {rt === 'week' ? 'Week' : rt === 'month' ? 'Month' : rt === 'year' ? 'Year' : 'Custom'}
+                    if (rangeType === 'custom') {
+                      setCustomRange((r) => (r && r.end ? shiftCustomRange(r, -1) : r));
+                    } else {
+                      setAnchor((a) => shiftAnchor(rangeType, a, -1));
+                    }
+                  }}>
+                  <MaterialIcons name="chevron-left" size={26} color={theme.accent} />
+                </Pressable>
+                <Pressable hitSlop={10} onPress={() => setPickerVisible(true)}>
+                  <ThemedText type="smallBold" style={styles.monthLabel}>
+                    {label}
                   </ThemedText>
                 </Pressable>
-              );
-            })}
+                <Pressable
+                  hitSlop={10}
+                  onPress={() => {
+                    if (rangeType === 'custom') {
+                      setCustomRange((r) => (r && r.end ? shiftCustomRange(r, 1) : r));
+                    } else {
+                      setAnchor((a) => shiftAnchor(rangeType, a, 1));
+                    }
+                  }}>
+                  <MaterialIcons name="chevron-right" size={26} color={theme.accent} />
+                </Pressable>
+              </View>
+
+              <SegmentedControl
+                options={[
+                  { value: 'week', label: 'Week' },
+                  { value: 'month', label: 'Month' },
+                  { value: 'year', label: 'Year' },
+                  { value: 'custom', label: 'Custom' },
+                ]}
+                value={rangeType}
+                onChange={(rt) => {
+                  setRangeType(rt);
+                  if (rt === 'custom' && !customRange) setPickerVisible(true);
+                }}
+                style={styles.rangeToggle}
+              />
+            </View>
+
+            {view === 'recurring' && <RecurringSummary items={filteredRecurring} />}
           </View>
 
-          {/* List/Calendar toggle + page dots — shown for every rangeType
-              except Custom, which has no single-grid Calendar shape for an
-              arbitrary range (see the rangeType effect above). */}
-          {rangeType !== 'custom' && (
-            <>
-              <View style={[styles.segmented, { borderColor: theme.border }]}>
-                {(['list', 'calendar'] as const).map((v) => {
-                  const isSelected = view === v;
-                  return (
-                    <Pressable
-                      key={v}
-                      onPress={() => goToView(v)}
-                      style={[styles.segment, isSelected && { backgroundColor: theme.accent }]}>
-                      <MaterialIcons
-                        name={v === 'list' ? 'view-list' : 'calendar-month'}
-                        size={15}
-                        color={isSelected ? '#ffffff' : theme.textSecondary}
-                      />
-                      <ThemedText
-                        type="smallBold"
-                        themeColor={isSelected ? 'text' : 'textSecondary'}
-                        style={isSelected && { color: '#ffffff' }}>
-                        {v === 'list' ? 'List' : 'Calendar'}
-                      </ThemedText>
-                    </Pressable>
-                  );
-                })}
-              </View>
+          <SegmentedControl
+            options={pages.map((v) => ({
+              value: v,
+              label: v === 'list' ? 'List' : 'Recurring',
+              icon: v === 'list' ? 'view-list' : 'event-repeat',
+            }))}
+            value={view}
+            onChange={goToView}
+          />
 
-              {/* Page dots — same shape as HabitTracker's own swipe-page
-                  indicator (6px dot, active one widens to 16 and turns
-                  accent) — a passive readout of which page the pager is on,
-                  alongside the segmented control above which still does the
-                  actual tapping. */}
-              <View style={styles.pageDots}>
-                <View style={[styles.pageDot, { backgroundColor: theme.border }, view === 'list' && [styles.pageDotActive, { backgroundColor: theme.accent }]]} />
-                <View style={[styles.pageDot, { backgroundColor: theme.border }, view === 'calendar' && [styles.pageDotActive, { backgroundColor: theme.accent }]]} />
-              </View>
-            </>
-          )}
+          {/* Page dots — same shape as HabitTracker's own swipe-page
+              indicator (6px dot, active one widens to 16 and turns
+              accent) — a passive readout of which page the pager is on,
+              alongside the segmented control above which still does the
+              actual tapping. */}
+          <View style={styles.pageDots}>
+            {pages.map((v) => (
+              <View
+                key={v}
+                style={[styles.pageDot, { backgroundColor: theme.border }, view === v && [styles.pageDotActive, { backgroundColor: theme.accent }]]}
+              />
+            ))}
+          </View>
         </View>
       </View>
 
-      {rangeType !== 'custom' ? (
-        <View style={{ flex: 1 }}>
-          <ScrollView
-            ref={pagerRef}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onMomentumScrollEnd={onPagerScrollEnd}
-            style={{ flex: 1 }}>
-            <View style={{ width: pageWidth, flex: 1 }}>{transactionList}</View>
+      <View style={{ flex: 1 }}>
+        <ScrollView
+          ref={pagerRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onMomentumScrollEnd={onPagerScrollEnd}
+          style={{ flex: 1 }}>
+          {pages.map((p) => (
+            <View key={p} style={{ width: pageWidth, flex: 1 }}>
+              {p === 'list' ? (
+                transactionList
+              ) : (
+                <RecurringView
+                  items={filteredRecurring}
+                  categories={categories}
+                  hasFilter={hasFilter}
+                  bottomPadding={bottomPadding}
+                  onStop={handleStopRecurring}
+                />
+              )}
+            </View>
+          ))}
+        </ScrollView>
+      </View>
 
-            <View style={{ width: pageWidth, flex: 1 }}>{calendarPage}</View>
-          </ScrollView>
-        </View>
-      ) : (
-        transactionList
-      )}
-
+      {/* On the Recurring page the FAB opens the same modal with its Repeat
+          box pre-checked (see add-transaction.tsx's `repeat` param). */}
       <Pressable
-        onPress={() => router.push('/add-transaction')}
+        onPress={() => router.push(view === 'recurring' ? '/add-transaction?repeat=1' : '/add-transaction')}
         style={[
           styles.fab,
           { backgroundColor: theme.accent, bottom: insets.bottom + BottomTabInset + Spacing.three },
@@ -1075,6 +704,40 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: MaxContentWidth,
   },
+  // Wraps the month nav + range toggle so both can be hidden together on the
+  // Recurring page; carries the same gap headerContent gives its own children.
+  // Relatively positioned so RecurringSummary (an absolute overlay, see its
+  // own comment) sizes itself off rangeNav's own footprint rather than
+  // needing a height to keep in sync by hand.
+  rangeNavContainer: {
+    position: 'relative',
+  },
+  rangeNav: {
+    gap: Spacing.three,
+  },
+  rangeNavHidden: {
+    opacity: 0,
+  },
+  recurringSummary: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  recurringSummaryCount: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  recurringSummaryTotals: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   monthNav: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1085,29 +748,10 @@ const styles = StyleSheet.create({
     minWidth: 132,
     textAlign: 'center',
   },
-  // Wider than the plain segmented cap below — this toggle has a 4th
-  // ("Custom") option the List/Calendar and filter-type toggles don't.
+  // Wider than SegmentedControl's default cap — this toggle has a 4th
+  // ("Custom") option the view and filter-type toggles don't.
   rangeToggle: {
-    maxWidth: 320,
-  },
-  segmented: {
-    flexDirection: 'row',
-    alignSelf: 'center',
-    borderRadius: Spacing.two,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 3,
-    gap: 3,
-    width: '100%',
-    maxWidth: 280,
-  },
-  segment: {
-    flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: Spacing.two - 2,
-    borderRadius: Spacing.two - 2,
-    alignItems: 'center',
+    maxWidth: 400,
   },
   // Same shape as HabitTracker's own swipe-page dots.
   pageDots: {
@@ -1122,9 +766,6 @@ const styles = StyleSheet.create({
   },
   pageDotActive: {
     width: 16,
-  },
-  dateGroup: {
-    gap: Spacing.two,
   },
   // The SectionList's own header, sticky via stickySectionHeadersEnabled —
   // needs its own top spacing and a solid background (the sticky container
@@ -1149,8 +790,31 @@ const styles = StyleSheet.create({
   },
   emptyGroup: {
     paddingVertical: Spacing.four,
+    paddingHorizontal: Spacing.four,
     alignItems: 'center',
     gap: Spacing.two,
+  },
+  emptyText: {
+    textAlign: 'center',
+  },
+  recurringRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+    padding: Spacing.three,
+  },
+  recurringRowMiddle: {
+    flex: 1,
+    gap: 2,
+  },
+  recurringRowEnd: {
+    alignItems: 'flex-end',
+    gap: 6,
+  },
+  recurringAmount: {
+    fontVariant: ['tabular-nums'],
+    fontSize: 16,
+    fontWeight: '700',
   },
   divider: {
     height: StyleSheet.hairlineWidth,
@@ -1159,115 +823,6 @@ const styles = StyleSheet.create({
   rowDividerInset: {
     marginLeft: 42 + Spacing.three * 2,
     marginHorizontal: 0,
-  },
-  calendarPage: {
-    gap: Spacing.four,
-  },
-  calendarCard: {
-    borderRadius: CardRadius,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: Spacing.two,
-  },
-  weekdayRow: {
-    flexDirection: 'row',
-  },
-  weekdayLabel: {
-    flexBasis: '14.2857%',
-    textAlign: 'center',
-    fontSize: 11,
-  },
-  dayGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  dayCell: {
-    flexBasis: '14.2857%',
-    // Slightly condensed vertically (2026-09-01, per feedback) — a plain
-    // square (aspectRatio: 1) read as taller than it needed to be. 1.3 (same
-    // day, follow-up feedback) overcorrected into looking squished; 1.15 is
-    // a milder condense.
-    aspectRatio: 1.15,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 2,
-  },
-  dayCellInner: {
-    flex: 1,
-    width: '100%',
-    borderRadius: Spacing.two,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 1,
-  },
-  dayNumber: {
-    fontSize: 12,
-    lineHeight: 14,
-  },
-  dayNumberSelected: {
-    color: '#ffffff',
-  },
-  // Tight lineHeight (not just fontSize) since a cell can now show up to
-  // three lines — day number, expense, income — in a small square.
-  daySpend: {
-    fontSize: 9,
-    lineHeight: 11,
-  },
-  daySpendSelected: {
-    color: '#ffffff',
-  },
-  // Week mode's month grid with week-level selection (WeekCalendarView) —
-  // each week is one bounding rectangle (weekRow) around 7 plain day cells
-  // (weekDayCell, no individual border/background of their own, unlike
-  // CalendarView's dayCell/dayCellInner) rather than each day getting its
-  // own bordered cell.
-  weekGrid: {
-    gap: Spacing.two,
-  },
-  weekRow: {
-    flexDirection: 'row',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: Spacing.two,
-    paddingVertical: Spacing.two,
-  },
-  weekDayCell: {
-    flexBasis: '14.2857%',
-    // Fixed, not content-driven (2026-09-01, per feedback) — a plain
-    // content-sized cell made a row with a 2-line (expense + income) day
-    // taller than a row where every day shows at most one line or none,
-    // since a flex row's cross-axis default is to stretch every cell to the
-    // row's tallest one. Height covers dayNumber + two daySpend lines at
-    // their own line-heights (14 + 1 + 11 + 1 + 11) with a little slack, so
-    // every week row is the same height regardless of how much data it has.
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 1,
-  },
-  // Year mode's 12-month grid (YearCalendarView) — same 3-row/4-column shape
-  // as budget-editor.tsx's own year grid, sized for this screen's card.
-  yearMonthGrid: {
-    gap: Spacing.two,
-  },
-  yearMonthRow: {
-    flexDirection: 'row',
-    gap: Spacing.two,
-  },
-  yearMonthCell: {
-    flex: 1,
-  },
-  yearMonthCellInner: {
-    // Fixed, not content-driven (2026-09-01, per feedback, same fix as
-    // weekDayCell below) — a plain content-sized cell made a row with a
-    // 2-line (expense + income) month taller than a row where every month
-    // shows at most one line or the "—" placeholder, since a flex row's
-    // cross-axis default is to stretch every cell to the row's tallest one.
-    height: 78,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 2,
-    paddingVertical: Spacing.three,
-    borderRadius: Spacing.two,
-    borderWidth: StyleSheet.hairlineWidth,
   },
   modalBackdrop: {
     flex: 1,

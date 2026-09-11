@@ -32,11 +32,13 @@ transactions, all local-only. Deliberately deferred:
 - **Light/Dark/Auto override** — currently always follows the OS color scheme
   (`react-native`'s `useColorScheme`), no in-app theme preference like HabitTracker has.
 - **Export / CSV** — no data export yet.
-- ~~**No standalone Recurring management screen**~~ — done (2026-09-03): `app/recurring.tsx`, a
-  modal reached via a "RECURRING" section in Settings (not its own tab — the earlier Bills tab was
-  deliberately removed 2026-08-26, see CLAUDE.md), lists every active series soonest-due-first with a
-  two-tap "Stop" per row. **Still not covered**: editing a series' amount/day/category after
-  creation — only stop it entirely and set up a new one. See CLAUDE.md's `recurring.tsx` bullet.
+- ~~**No standalone Recurring management screen**~~ — done (2026-09-03), moved twice on 2026-09-10:
+  started as `app/recurring.tsx`, a modal reached via a "RECURRING" section in Settings; briefly a
+  5th "Bills" tab; now the **Recurring page** of the Transactions tab's List/Calendar/Recurring pager
+  (`app/(tabs)/transactions.tsx`) — every active series soonest-due-first with a two-tap "Stop" per
+  row, and the tab's FAB opens add-transaction.tsx pre-checked to Repeat from that page. **Still not
+  covered**: editing a series' amount/day/category after creation — only stop it entirely and set up
+  a new one. See CLAUDE.md's "A standalone Bills tab" convention bullet.
 - ~~**Dashboard**~~ — done (2026-08-26): Home's old plain summary card was replaced with a donut-ring
   category breakdown + compact income/expense/net row + 6-month trend mini chart. See CLAUDE.md's
   "Home's dashboard card" bullet.

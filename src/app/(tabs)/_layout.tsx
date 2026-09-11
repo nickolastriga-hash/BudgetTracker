@@ -30,6 +30,14 @@ export default function TabLayout() {
         <NativeTabs.Trigger.Label>Transactions</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
 
+      <NativeTabs.Trigger name="calendar">
+        <NativeTabs.Trigger.Icon
+          sf="calendar"
+          src={<NativeTabs.Trigger.VectorIcon family={MaterialIcons} name="calendar-month" />}
+        />
+        <NativeTabs.Trigger.Label>Calendar</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+
       <NativeTabs.Trigger name="budgets">
         <NativeTabs.Trigger.Icon
           sf="chart.pie.fill"

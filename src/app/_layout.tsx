@@ -46,7 +46,6 @@ export default function RootLayout() {
         />
         <Stack.Screen name="budget-editor" options={{ headerShown: false, presentation: 'modal' }} />
         <Stack.Screen name="settings" options={{ headerShown: true, presentation: 'modal', title: 'Settings' }} />
-        <Stack.Screen name="recurring" options={{ headerShown: true, presentation: 'modal', title: 'Recurring' }} />
       </Stack>
     </ThemeProvider>
   );

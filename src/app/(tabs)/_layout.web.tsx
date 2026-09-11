@@ -11,6 +11,7 @@ import { useTheme } from '@/hooks/use-theme';
 const TABS = [
   { name: 'index', href: '/', label: 'Home', icon: 'home' },
   { name: 'transactions', href: '/transactions', label: 'Transactions', icon: 'receipt-long' },
+  { name: 'calendar', href: '/calendar', label: 'Calendar', icon: 'calendar-month' },
   { name: 'budgets', href: '/budgets', label: 'Budgets', icon: 'pie-chart' },
   { name: 'trends', href: '/trends', label: 'Trends', icon: 'show-chart' },
 ] as const;

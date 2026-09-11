@@ -9,6 +9,7 @@ import { CategoryRingChart, groupRingSegments, RING_OTHER_KEY } from '@/componen
 import { ProgressBar } from '@/components/progress-bar';
 import { RangePickerModal } from '@/components/range-picker-modal';
 import { ScreenHeader } from '@/components/screen-header';
+import { SegmentedControl } from '@/components/segmented-control';
 import { SettingsButton } from '@/components/settings-button';
 import { ThemedText } from '@/components/themed-text';
 import { TransactionRow } from '@/components/transaction-row';
@@ -460,24 +461,14 @@ export default function HomeScreen() {
             </Pressable>
           </View>
 
-          <View style={[styles.segmented, { borderColor: theme.border }]}>
-            {(['month', 'year'] as const).map((rt) => {
-              const isSelected = rangeType === rt;
-              return (
-                <Pressable
-                  key={rt}
-                  onPress={() => setRangeType(rt)}
-                  style={[styles.segment, isSelected && { backgroundColor: theme.accent }]}>
-                  <ThemedText
-                    type="smallBold"
-                    themeColor={isSelected ? 'text' : 'textSecondary'}
-                    style={isSelected && { color: '#ffffff' }}>
-                    {rt === 'month' ? 'Month' : 'Year'}
-                  </ThemedText>
-                </Pressable>
-              );
-            })}
-          </View>
+          <SegmentedControl
+            options={[
+              { value: 'month', label: 'Month' },
+              { value: 'year', label: 'Year' },
+            ]}
+            value={rangeType}
+            onChange={setRangeType}
+          />
         </View>
       </View>
 
@@ -493,25 +484,15 @@ export default function HomeScreen() {
               convention as add-transaction.tsx's own type toggle) rather
               than a flat accent color, so the panel's color — not just its
               label — says which side is showing. */}
-          <View style={[styles.segmented, styles.breakdownToggle, { borderColor: theme.border }]}>
-            {(['expense', 'income'] as const).map((bt) => {
-              const isSelected = breakdownType === bt;
-              const activeColor = bt === 'expense' ? theme.destructive : theme.success;
-              return (
-                <Pressable
-                  key={bt}
-                  onPress={() => goToBreakdown(bt)}
-                  style={[styles.segment, isSelected && { backgroundColor: activeColor }]}>
-                  <ThemedText
-                    type="smallBold"
-                    themeColor={isSelected ? 'text' : 'textSecondary'}
-                    style={isSelected && { color: '#ffffff' }}>
-                    {bt === 'expense' ? 'Expenses' : 'Income'}
-                  </ThemedText>
-                </Pressable>
-              );
-            })}
-          </View>
+          <SegmentedControl
+            options={[
+              { value: 'expense', label: 'Expenses', color: theme.destructive },
+              { value: 'income', label: 'Income', color: theme.success },
+            ]}
+            value={breakdownType}
+            onChange={goToBreakdown}
+            style={styles.breakdownToggle}
+          />
 
           {/* Page dots — same 6px/16px-active shape as Budgets'/Transactions'
               own swipe-page indicators, tinted to match each page's segment
@@ -788,25 +769,6 @@ const styles = StyleSheet.create({
   monthLabel: {
     minWidth: 132,
     textAlign: 'center',
-  },
-  // Same shape as Transactions' own List/Calendar toggle.
-  segmented: {
-    flexDirection: 'row',
-    alignSelf: 'center',
-    borderRadius: Spacing.two,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 3,
-    gap: 3,
-    width: '100%',
-    maxWidth: 280,
-  },
-  segment: {
-    flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    paddingVertical: Spacing.two - 2,
-    borderRadius: Spacing.two - 2,
-    alignItems: 'center',
   },
   // Narrower than the month/year toggle above the fold — just the
   // Expenses/Income pair, so the full 280 maxWidth reads as oversized.
