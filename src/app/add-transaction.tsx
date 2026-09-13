@@ -1,7 +1,7 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
+import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Keyboard, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CategoryBadge } from '@/components/category-badge';
@@ -11,7 +11,16 @@ import { CardRadius, CardShadow, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { categoriesForType, getCategories, type Category, type CategoryType } from '@/lib/categories';
 import { shortDateLabel } from '@/lib/date-range';
-import { addRecurring, deleteRecurring, getRecurring, nextDueDate, type RecurringFrequency, type RecurringTransaction } from '@/lib/recurring';
+import {
+  addRecurring,
+  deleteRecurring,
+  getRecurring,
+  nextDueDate,
+  nextOccurrenceAfter,
+  type RecurringFrequency,
+  type RecurringFrequencySpec,
+  type RecurringTransaction,
+} from '@/lib/recurring';
 import { addTransaction, deleteTransaction, getTransactions, updateTransaction } from '@/lib/transactions';
 
 function toDateStr(date: Date) {
@@ -31,22 +40,63 @@ const FREQUENCY_LABEL: Record<RecurringFrequency, string> = {
   weekly: 'Every week',
   biweekly: 'Every 2 weeks',
   monthly: 'Every month',
+  everyNMonths: 'Every few months',
+  semimonthly: 'Twice a month',
+  yearly: 'Every year',
 };
 
-// The occurrence after `dateStr` for a not-yet-created series — previews
-// "Next on …" in the Repeat card. Mirrors lib/recurring's own cursor math
-// (monthly clamps to the next month's real length) without needing a
-// RecurringTransaction record to exist yet.
-function nextOccurrence(dateStr: string, frequency: RecurringFrequency): Date {
-  const date = localDate(dateStr);
-  if (frequency === 'monthly') {
-    const day = date.getDate();
-    const next = new Date(date.getFullYear(), date.getMonth() + 1, 1);
-    next.setDate(Math.min(day, daysInMonth(next.getFullYear(), next.getMonth())));
-    return next;
+// Options for the frequency chip row (below) — 6 no longer fit
+// SegmentedControl, which is sized for the app's compact 2-4-option toggles
+// elsewhere, so this one picker uses a horizontally-scrolling chip row
+// instead (same chip visual the series editor's category row already uses).
+const FREQUENCY_OPTIONS: { value: RecurringFrequency; label: string }[] = [
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'biweekly', label: 'Biweekly' },
+  { value: 'monthly', label: 'Monthly' },
+  { value: 'semimonthly', label: 'Twice Monthly' },
+  { value: 'everyNMonths', label: 'Every N Months' },
+  { value: 'yearly', label: 'Yearly' },
+];
+
+// Same suffix rule as transactions.tsx's own ordinal — 2 occurrences, not yet
+// a 3rd, per the no-premature-abstraction rule.
+function ordinal(n: number): string {
+  const v = n % 100;
+  if (v >= 11 && v <= 13) return `${n}th`;
+  switch (n % 10) {
+    case 1:
+      return `${n}st`;
+    case 2:
+      return `${n}nd`;
+    case 3:
+      return `${n}rd`;
+    default:
+      return `${n}th`;
   }
-  date.setDate(date.getDate() + (frequency === 'weekly' ? 7 : 14));
-  return date;
+}
+
+// Builds the frequency-specific fields (day/month/interval) from explicit
+// values — shared by the new-transaction Repeat card (its "Next on …"
+// preview and handleSave's addRecurring payload, where dayOfMonth/month come
+// straight off the transaction's own date, same as monthly always has) and
+// the series editor (its own day/month stepper state, for editing an
+// existing series' frequency), so there's one place building each
+// frequency's fields, not two.
+function frequencySpec(frequency: RecurringFrequency, dayOfMonth: number, month: number, intervalMonths: number, dayOfMonth2: number): RecurringFrequencySpec {
+  switch (frequency) {
+    case 'weekly':
+      return { frequency: 'weekly' };
+    case 'biweekly':
+      return { frequency: 'biweekly' };
+    case 'monthly':
+      return { frequency: 'monthly', dayOfMonth };
+    case 'everyNMonths':
+      return { frequency: 'everyNMonths', intervalMonths, dayOfMonth };
+    case 'yearly':
+      return { frequency: 'yearly', month, dayOfMonth };
+    case 'semimonthly':
+      return { frequency: 'semimonthly', dayOfMonth1: dayOfMonth, dayOfMonth2 };
+  }
 }
 
 function CalendarPicker({
@@ -130,6 +180,13 @@ export default function AddTransactionScreen() {
 
   const [type, setType] = useState<CategoryType>('expense');
   const [amount, setAmount] = useState('');
+  const amountInputRef = useRef<TextInput>(null);
+  // Drives the checkmark button next to the amount — the keypad no longer
+  // opens on its own (see amountInput's own comment below), so this is the
+  // one visible way to confirm the amount is done and put the keyboard away
+  // (the decimal-pad keyboard has no "Done" key of its own on Android to
+  // rely on instead).
+  const [amountFocused, setAmountFocused] = useState(false);
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [date, setDate] = useState(() => toDateStr(new Date()));
   const [note, setNote] = useState('');
@@ -139,6 +196,14 @@ export default function AddTransactionScreen() {
   // transaction.
   const [repeat, setRepeat] = useState(() => repeatParam === '1');
   const [frequency, setFrequency] = useState<RecurringFrequency>('monthly');
+  // Only read when frequency is 'everyNMonths'/'semimonthly' respectively —
+  // monthly/yearly/weekly/biweekly derive everything they need from `date`
+  // itself, same as monthly always has.
+  const [intervalMonths, setIntervalMonths] = useState(3);
+  const [dayOfMonth2, setDayOfMonth2] = useState(() => {
+    const day = localDate(date).getDate();
+    return ((day - 1 + 15) % 31) + 1;
+  });
   const [showCalendar, setShowCalendar] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [confirmingStopRepeat, setConfirmingStopRepeat] = useState(false);
@@ -178,11 +243,45 @@ export default function AddTransactionScreen() {
     });
   }, [id]);
 
+  // Refreshes just the series' own current state on every focus — not the
+  // transaction fields above, which the effect above already owns and which
+  // this shouldn't clobber with in-progress edits. Needed now that editing a
+  // series happens on a separate screen (edit-recurring.tsx): without this,
+  // coming back from there would leave this Repeats card showing whatever
+  // frequency/amount/next-due-date the series had *before* that edit, until
+  // this whole modal was closed and reopened. If the series existed a moment
+  // ago and doesn't anymore, that's this screen's own Stop having run
+  // elsewhere — reflected the same way handleStopRepeating already does,
+  // via `stoppedRecurring`, so the card settles into its "stopped" state
+  // instead of just vanishing.
+  useFocusEffect(
+    useCallback(() => {
+      if (!id) return;
+      let cancelled = false;
+      (async () => {
+        const transactions = await getTransactions();
+        const existing = transactions.find((t) => t.id === id);
+        const recurringId = existing?.recurringId;
+        const series = recurringId ? ((await getRecurring()).find((r) => r.id === recurringId) ?? null) : null;
+        if (cancelled) return;
+        if (activeRecurring && !series) setStoppedRecurring(true);
+        setActiveRecurring(series);
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [id, activeRecurring])
+  );
+
   const categories = categoriesForType(allCategories, type);
   const parsedAmount = parseFloat(amount);
   const canSave = !Number.isNaN(parsedAmount) && parsedAmount > 0 && !!categoryId;
   // Standardized across the app: expense = destructive (red), income = success (green).
   const typeColor = type === 'expense' ? theme.destructive : theme.success;
+  // day/month a not-yet-created series' monthly/yearly/everyNMonths fields
+  // come from, straight off the transaction's own date field.
+  const dateDay = localDate(date).getDate();
+  const dateMonth = localDate(date).getMonth() + 1;
 
   async function handleSave() {
     if (!canSave || !categoryId) return;
@@ -191,32 +290,18 @@ export default function AddTransactionScreen() {
     } else if (repeat) {
       // Create the series first so the seed transaction below can carry its
       // id, and mark this transaction's own occurrence as already generated
-      // (lastGeneratedMonth for monthly, lastGeneratedDate for weekly/
-      // biweekly) — otherwise the next session's generateDueTransactions
-      // would find nothing generated yet, start its cursor back at this same
-      // occurrence, and double-log it.
-      const recurring = await addRecurring(
-        frequency === 'monthly'
-          ? {
-              type,
-              amount: parsedAmount,
-              categoryId,
-              note: note.trim() || undefined,
-              frequency,
-              dayOfMonth: new Date(`${date}T00:00:00`).getDate(),
-              startDate: date,
-              lastGeneratedMonth: date.slice(0, 7),
-            }
-          : {
-              type,
-              amount: parsedAmount,
-              categoryId,
-              note: note.trim() || undefined,
-              frequency,
-              startDate: date,
-              lastGeneratedDate: date,
-            }
-      );
+      // (lastGeneratedDate = date) — otherwise the next session's
+      // generateDueTransactions would find nothing generated yet, start its
+      // cursor back at this same occurrence, and double-log it.
+      const recurring = await addRecurring({
+        type,
+        amount: parsedAmount,
+        categoryId,
+        note: note.trim() || undefined,
+        startDate: date,
+        lastGeneratedDate: date,
+        ...frequencySpec(frequency, dateDay, dateMonth, intervalMonths, dayOfMonth2),
+      });
       await addTransaction({
         type,
         amount: parsedAmount,
@@ -277,20 +362,40 @@ export default function AddTransactionScreen() {
           style={styles.fullWidthToggle}
         />
 
-        <View style={styles.amountRow}>
+        {/* Doesn't autofocus (dropped 2026-09-18 per feedback) — the numeric
+            keypad used to pop up the instant this screen opened, before the
+            amount area was even tapped. Wrapping the row in a Pressable
+            makes the $ sign itself part of the tap target, not just the
+            input box next to it. */}
+        <Pressable onPress={() => amountInputRef.current?.focus()} style={styles.amountRow}>
           <ThemedText type="title" style={[styles.currencySign, { color: typeColor }]}>
             $
           </ThemedText>
           <TextInput
+            ref={amountInputRef}
             value={amount}
             onChangeText={setAmount}
             placeholder="0.00"
             placeholderTextColor={theme.textTertiary}
             keyboardType="decimal-pad"
             style={[styles.amountInput, { color: typeColor }]}
-            autoFocus={!isEditing}
+            onFocus={() => setAmountFocused(true)}
+            onBlur={() => setAmountFocused(false)}
           />
-        </View>
+          {/* Shown only while the keypad is up — a decimal-pad keyboard has
+              no "Done" key on Android to dismiss it with otherwise. */}
+          {amountFocused && (
+            <Pressable
+              onPress={() => {
+                amountInputRef.current?.blur();
+                Keyboard.dismiss();
+              }}
+              hitSlop={8}
+              style={[styles.amountDoneButton, { backgroundColor: typeColor }]}>
+              <MaterialIcons name="check" size={20} color="#ffffff" />
+            </Pressable>
+          )}
+        </Pressable>
 
         <View style={styles.field}>
           <ThemedText type="small" themeColor="textSecondary">
@@ -377,7 +482,9 @@ export default function AddTransactionScreen() {
                   Repeat
                 </ThemedText>
                 <ThemedText type="small" themeColor="textSecondary">
-                  {repeat ? `${FREQUENCY_LABEL[frequency]} · next on ${shortDateLabel(nextOccurrence(date, frequency))}` : 'Off'}
+                  {repeat
+                    ? `${FREQUENCY_LABEL[frequency]} · next on ${shortDateLabel(localDate(nextOccurrenceAfter(frequencySpec(frequency, dateDay, dateMonth, intervalMonths, dayOfMonth2), date)))}`
+                    : 'Off'}
                 </ThemedText>
               </View>
               <Switch
@@ -389,19 +496,72 @@ export default function AddTransactionScreen() {
             </Pressable>
             {/* Frequency only appears once Repeat is on — meaningless
                 otherwise. Defaults to Monthly, the pre-existing behavior from
-                before weekly/biweekly existed. */}
+                before weekly/biweekly existed. A scrolling chip row, not
+                SegmentedControl — 6 options no longer fit its compact
+                2-4-segment design. */}
             {repeat && (
               <View style={[styles.repeatBody, { borderTopColor: theme.border }]}>
-                <SegmentedControl
-                  options={[
-                    { value: 'weekly', label: 'Weekly' },
-                    { value: 'biweekly', label: 'Biweekly' },
-                    { value: 'monthly', label: 'Monthly' },
-                  ]}
-                  value={frequency}
-                  onChange={setFrequency}
-                  style={styles.fullWidthToggle}
-                />
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.frequencyChipScroll}>
+                  {FREQUENCY_OPTIONS.map((option) => {
+                    const isSelected = option.value === frequency;
+                    return (
+                      <Pressable
+                        key={option.value}
+                        onPress={() => setFrequency(option.value)}
+                        style={[
+                          styles.frequencyChip,
+                          { borderColor: isSelected ? theme.accent : theme.border },
+                          isSelected && { backgroundColor: theme.accent + '1A' },
+                        ]}>
+                        <ThemedText type="small" themeColor={isSelected ? 'accent' : 'text'}>
+                          {option.label}
+                        </ThemedText>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+                {/* Monthly/yearly need nothing extra — day and month are
+                    read straight off the Date field above, same as monthly
+                    always has. */}
+                {frequency === 'everyNMonths' && (
+                  <View style={styles.inlineStepperRow}>
+                    <ThemedText type="small" themeColor="textSecondary">
+                      Every
+                    </ThemedText>
+                    <View style={styles.dayStepper}>
+                      <Pressable hitSlop={8} onPress={() => setIntervalMonths((n) => Math.max(2, n - 1))}>
+                        <MaterialIcons name="remove-circle-outline" size={20} color={theme.accent} />
+                      </Pressable>
+                      <ThemedText type="small" style={styles.dayStepperValue}>
+                        {intervalMonths}
+                      </ThemedText>
+                      <Pressable hitSlop={8} onPress={() => setIntervalMonths((n) => Math.min(11, n + 1))}>
+                        <MaterialIcons name="add-circle-outline" size={20} color={theme.accent} />
+                      </Pressable>
+                    </View>
+                    <ThemedText type="small" themeColor="textSecondary">
+                      months
+                    </ThemedText>
+                  </View>
+                )}
+                {frequency === 'semimonthly' && (
+                  <View style={styles.inlineStepperRow}>
+                    <ThemedText type="small" themeColor="textSecondary">
+                      And on the
+                    </ThemedText>
+                    <View style={styles.dayStepper}>
+                      <Pressable hitSlop={8} onPress={() => setDayOfMonth2((d) => Math.max(1, d - 1))}>
+                        <MaterialIcons name="remove-circle-outline" size={20} color={theme.accent} />
+                      </Pressable>
+                      <ThemedText type="small" style={styles.dayStepperValue}>
+                        {ordinal(dayOfMonth2)}
+                      </ThemedText>
+                      <Pressable hitSlop={8} onPress={() => setDayOfMonth2((d) => Math.min(31, d + 1))}>
+                        <MaterialIcons name="add-circle-outline" size={20} color={theme.accent} />
+                      </Pressable>
+                    </View>
+                  </View>
+                )}
               </View>
             )}
           </View>
@@ -428,20 +588,28 @@ export default function AddTransactionScreen() {
                 </ThemedText>
               </View>
               {activeRecurring && (
-                <Pressable
-                  onPress={handleStopRepeating}
-                  hitSlop={8}
-                  style={[
-                    styles.stopButton,
-                    { backgroundColor: confirmingStopRepeat ? theme.destructive : theme.destructive + '1A' },
-                  ]}>
-                  <ThemedText
-                    type="smallBold"
-                    themeColor={confirmingStopRepeat ? undefined : 'destructive'}
-                    style={confirmingStopRepeat && { color: '#ffffff' }}>
-                    {confirmingStopRepeat ? 'Confirm' : 'Stop'}
-                  </ThemedText>
-                </Pressable>
+                <View style={styles.repeatActions}>
+                  {/* Routes to edit-recurring.tsx's own standalone editor
+                      (2026-09-17) rather than an inline sub-panel here — see
+                      that screen's own comment for why. */}
+                  <Pressable onPress={() => router.push(`/edit-recurring?id=${activeRecurring.id}`)} hitSlop={8} style={styles.editSeriesButton}>
+                    <MaterialIcons name="edit" size={18} color={theme.accent} />
+                  </Pressable>
+                  <Pressable
+                    onPress={handleStopRepeating}
+                    hitSlop={8}
+                    style={[
+                      styles.stopButton,
+                      { backgroundColor: confirmingStopRepeat ? theme.destructive : theme.destructive + '1A' },
+                    ]}>
+                    <ThemedText
+                      type="smallBold"
+                      themeColor={confirmingStopRepeat ? undefined : 'destructive'}
+                      style={confirmingStopRepeat && { color: '#ffffff' }}>
+                      {confirmingStopRepeat ? 'Confirm' : 'Stop'}
+                    </ThemedText>
+                  </Pressable>
+                </View>
               )}
             </View>
           </View>
@@ -487,6 +655,13 @@ const styles = StyleSheet.create({
   },
   currencySign: {
     fontSize: 32,
+  },
+  amountDoneButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   amountInput: {
     fontSize: 48,
@@ -579,11 +754,49 @@ const styles = StyleSheet.create({
   repeatBody: {
     borderTopWidth: StyleSheet.hairlineWidth,
     padding: Spacing.three,
+    gap: Spacing.three,
+  },
+  frequencyChipScroll: {
+    flexGrow: 0,
+  },
+  frequencyChip: {
+    paddingVertical: Spacing.two,
+    paddingHorizontal: Spacing.three,
+    marginRight: Spacing.two,
+    borderRadius: Spacing.three,
+    borderWidth: 1.5,
+  },
+  inlineStepperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  repeatActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  editSeriesButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   stopButton: {
     paddingVertical: Spacing.two - 1,
     paddingHorizontal: Spacing.three,
     borderRadius: 999,
+  },
+  dayStepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  dayStepperValue: {
+    minWidth: 34,
+    textAlign: 'center',
+    fontVariant: ['tabular-nums'],
   },
   saveButton: {
     paddingVertical: Spacing.three,

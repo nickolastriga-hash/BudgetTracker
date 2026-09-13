@@ -29,16 +29,29 @@ transactions, all local-only. Deliberately deferred:
   *reviewed*, but that's still reading the same flat-limit-plus-overrides model, not storing a
   distinct record per month.
 - **Multi-currency** — amounts are unitless numbers rendered with a hardcoded `$`.
-- **Light/Dark/Auto override** — currently always follows the OS color scheme
-  (`react-native`'s `useColorScheme`), no in-app theme preference like HabitTracker has.
+- ~~**Light/Dark/Auto override**~~ — done (2026-09-17): `hooks/use-theme-preference.tsx`
+  (`ThemePreferenceProvider`/`useThemePreference`), matching HabitTracker's own hook of the same
+  name — an AsyncStorage-backed preference, defaulting to `'system'` (the old always-follows-OS
+  behavior), with `'light'`/`'dark'` pinning it. Set from Settings' new "APPEARANCE" section. See
+  CLAUDE.md's `hooks/use-theme-preference.tsx` and Settings bullets.
 - **Export / CSV** — no data export yet.
 - ~~**No standalone Recurring management screen**~~ — done (2026-09-03), moved twice on 2026-09-10:
   started as `app/recurring.tsx`, a modal reached via a "RECURRING" section in Settings; briefly a
   5th "Bills" tab; now the **Recurring page** of the Transactions tab's List/Calendar/Recurring pager
   (`app/(tabs)/transactions.tsx`) — every active series soonest-due-first with a two-tap "Stop" per
-  row, and the tab's FAB opens add-transaction.tsx pre-checked to Repeat from that page. **Still not
-  covered**: editing a series' amount/day/category after creation — only stop it entirely and set up
-  a new one. See CLAUDE.md's "A standalone Bills tab" convention bullet.
+  row, and the tab's FAB opens add-transaction.tsx pre-checked to Repeat from that page. See
+  CLAUDE.md's "A standalone Bills tab" convention bullet.
+- ~~**Editing a recurring series after creation**~~ — done (2026-09-12): `lib/recurring.ts#updateRecurring`
+  patches a series' amount/category/note (any frequency) and dayOfMonth (monthly only) — only future
+  occurrences pick it up, past ones (including the transaction you're editing, unless you also hit
+  the regular Save) are untouched. Reached from add-transaction.tsx's Repeats card (an Edit pencil
+  next to Stop, its own compact amount/category/day panel — not a satellite of the screen's own
+  fields, see CLAUDE.md's own bullet for why) and from the Recurring page's own row (its Edit pencil
+  deep-links to the series' most recent transaction).
+  Frequency itself (monthly/weekly/biweekly) still isn't editable — switching it would need to
+  re-derive `lastGeneratedMonth`/`lastGeneratedDate` from scratch rather than patch a field; still
+  only add a new series or stop this one for that. See CLAUDE.md's "Editing a recurring series"
+  convention bullet.
 - ~~**Dashboard**~~ — done (2026-08-26): Home's old plain summary card was replaced with a donut-ring
   category breakdown + compact income/expense/net row + 6-month trend mini chart. See CLAUDE.md's
   "Home's dashboard card" bullet.

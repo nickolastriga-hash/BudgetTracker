@@ -31,7 +31,8 @@ system to show a profile for; opens `app/settings.tsx`, see its own bullet below
   its own tab and Recurring joined 2026-09-10 — see the "Transactions List/Calendar" and "A
   standalone Bills tab" convention bullets below). List: all of the navigated range's transactions
   grouped by date with sticky per-date headers, tapping a row opens the same modal in edit mode.
-  Recurring: every active `RecurringTransaction` series soonest-due-first with a two-tap Stop — not
+  Recurring: every active `RecurringTransaction` series soonest-due-first with a two-tap Stop and an
+  Edit (added 2026-09-12, deep-links to add-transaction.tsx's series editor) per row — not
   period-scoped, so the range nav hides (opacity 0, layout kept) while it's showing, and the tab's
   FAB opens the add-transaction modal with `?repeat=1` from there. The two are pages of one
   horizontal `pagingEnabled` ScrollView — swipe between them, or tap the toggle. A funnel button
@@ -167,10 +168,19 @@ src/
                           Calendar left for its own tab 2026-09-10), see the
                           "Transactions List/Calendar" convention bullet
                           below. The Recurring page
-                          (`RecurringView`/`RecurringRow`, local) lists every
-                          active `RecurringTransaction` soonest-due-first via
-                          `lib/recurring.ts#nextDueDate`, with a two-tap Stop
-                          per row (local `confirming` state, not lifted);
+                          (`RecurringView`/`RecurringRow`, local) groups every
+                          active `RecurringTransaction` into a forecast — Due
+                          This Week/Due This Month/Later, via
+                          `lib/recurring.ts#nextDueDate` (2026-09-12,
+                          replacing one flat soonest-due-first list; see the
+                          "Recurring page forecast grouping + row redesign"
+                          convention bullet below), with a two-tap Stop
+                          per row (local `confirming` state, not lifted) and,
+                          since 2026-09-12, an Edit pencil that routes to
+                          edit-recurring.tsx (that series' own id, directly —
+                          see the "Editing a recurring series" convention
+                          bullet below for how this got simpler on 2026-09-17)
+                          rather than duplicating an editor here;
                           `applyTransactionFilter` is generic over anything
                           with a type + categoryId so the header's filter
                           narrows this page too. The tab's FAB opens
@@ -230,6 +240,13 @@ src/
                           forward; it doesn't touch transactions the series
                           already generated, same as canceling a
                           subscription doesn't refund what was already paid.
+                          The Repeats card also gained an Edit pencil
+                          (2026-09-12, next to Stop) that originally revealed
+                          its own compact amount/category/day panel inline;
+                          as of 2026-09-17 it instead routes to the standalone
+                          edit-recurring.tsx (see its own Folder Structure
+                          entry and the "Editing a recurring series"
+                          convention bullet below for why).
     category-editor.tsx   Add/edit-category modal, reached from Budgets (a `+`
                           button in each of the two section headers to add,
                           long-press a row to edit that category's
@@ -254,12 +271,37 @@ src/
                           `applyLimit` convention bullet), and Reset-to-default.
                           `monthCell`'s `paddingVertical` bumped `Spacing.two`→`Spacing.three`
                           (2026-09-01, per feedback it still read squished).
+    edit-recurring.tsx     Standalone editor for one RecurringTransaction series
+                          (added 2026-09-17), reached from either place a series
+                          can be found — Transactions' Recurring page and
+                          add-transaction.tsx's own Repeats card — both routing
+                          to `/edit-recurring?id=<recurringId>`. Same
+                          `headerShown: false`/own-header-with-X shape as
+                          budget-editor.tsx above. Replaces what used to be a
+                          sub-panel inline inside add-transaction.tsx's Repeats
+                          card (reached from the Recurring page only by finding
+                          *some* transaction the series had generated and
+                          opening its edit screen) — see the "Editing a
+                          recurring series" convention bullet below for why
+                          that indirection got flagged as confusing and cut.
+                          Frequency chips, amount, the frequency-specific day/
+                          month/interval fields, and a category grid, all
+                          seeded from the series record itself; Save calls
+                          `updateRecurring`, a two-tap Stop at the bottom calls
+                          `deleteRecurring`, both then `router.back()`.
     settings.tsx           Settings modal (added 2026-08-26), reached from any
                           tab's SettingsButton. `headerShown: true` in
                           _layout.tsx (native title "Settings", auto back
                           button) — no in-content title of its own, unlike
                           add-transaction/category-editor which follow the
-                          same convention. One section, "Generate demo data"
+                          same convention. An "APPEARANCE" section (added
+                          2026-09-17) is the standard 3-option
+                          SegmentedControl (Light/Dark/Auto,
+                          `light-mode`/`dark-mode`/`brightness-auto` icons)
+                          wired straight to `useThemePreference()` — no local
+                          state of its own, the control's `value`/`onChange`
+                          are the hook's `preference`/`setPreference`
+                          directly. Below that, "Generate demo data"
                           (two-tap confirm, same pattern as add-transaction's
                           Delete), calls lib/demo-data.ts#generateDemoData().
                           Used to also carry a "RECURRING" section (a single
@@ -343,10 +385,22 @@ src/
                           (tabs)/transactions.tsx's own bullet above for its
                           Recurring page). `updateRecurring` existed briefly
                           for the old Bills management screen removed
-                          2026-08-26 (see TODO.md) and is still not back —
-                          there's still no
-                          way to edit a series' amount/day/category/frequency
-                          after creation, only add/stop. `nextDueDate` did
+                          2026-08-26 (see TODO.md), then came back for real
+                          2026-09-12 (see the "Editing a recurring series"
+                          convention bullet below) — it patches
+                          amount/categoryId/note (any frequency) and
+                          dayOfMonth (monthly only) in place, keeping
+                          `lastGeneratedMonth`/`lastGeneratedDate` untouched
+                          since neither of those edits invalidates the
+                          existing cursor (`dateInMonth` reads the item's
+                          *current* dayOfMonth at generation time, so a
+                          changed day just takes effect the next time the
+                          cursor's month is reached). Frequency itself still
+                          isn't editable there — switching monthly to
+                          weekly/biweekly or back would need to re-derive
+                          the cursor field from scratch rather than patch one,
+                          different enough to be its own feature if it's ever
+                          needed. `nextDueDate` did
                           come back (2026-09-03, read-only: the next date a
                           series is due, without materializing anything —
                           mirrors generateDueTransactions' own first-cursor
@@ -356,7 +410,13 @@ src/
                           the Transactions tab's Recurring page — see the "A
                           standalone Bills tab" convention bullet) and still
                           used by transactions.tsx's RecurringView today to
-                          sort/label its list.
+                          sort/label its list. `isActiveRecurring(recurringId,
+                          recurring)` (2026-09-12) is the one place that
+                          checks whether a transaction's `recurringId` still
+                          points at an existing series, rather than trusting
+                          the id's mere presence — see transaction-row.tsx's
+                          own bullet above for why that distinction matters
+                          for its recurring badge.
                           `RecurringTransaction` is a discriminated union on
                           `frequency` (2026-09-03, was monthly-only before —
                           `dayOfMonth` was a bare field on one flat shape):
@@ -388,6 +448,73 @@ src/
                           real double-log bug where reopening the app later
                           the same period a recurring transaction was created
                           would materialize a second copy of it.
+                          **3 more frequencies + a unified cursor (2026-09-12)**
+                          — `yearly` (`month` 1-12 + a leap-year-aware clamped
+                          `dayOfMonth`), `everyNMonths` (a custom
+                          `intervalMonths` 2-11 + `dayOfMonth`), and
+                          `semimonthly` (`dayOfMonth1`/`dayOfMonth2`, no
+                          ordering assumed between them) joined the union.
+                          Rather than add two more branch-shapes to
+                          `generateDueTransactions`' existing monthly-cursor-
+                          vs-day-step-cursor split, every variant's cursor
+                          unified onto one field, `lastGeneratedDate` (monthly
+                          dropped `lastGeneratedMonth`) — `getRecurring()`
+                          migrates old stored monthly records still carrying
+                          `lastGeneratedMonth` by deriving the equivalent date
+                          (`dateInMonth(lastGeneratedMonth, dayOfMonth)`), the
+                          same lazy-on-read spirit as the frequency backfill
+                          above. A new exported `nextOccurrenceAfter(item,
+                          cursorDate)` is the one place that knows how to step
+                          any frequency forward from a date — used by
+                          `generateDueTransactions`' now-single loop,
+                          `nextDueDate`, and add-transaction.tsx's live "next
+                          on" preview (previously a separate duplicate
+                          implementation there). Its parameter type,
+                          `RecurringFrequencySpec`, is deliberately narrower
+                          than `RecurringTransaction` (just `frequency` + the
+                          fields that frequency needs) so the preview can
+                          build one from in-progress form state before any
+                          real record exists — every `RecurringTransaction` is
+                          still structurally a valid spec, so real records
+                          pass through unchanged. Unifying the cursor also
+                          fixed a real behavior quirk as a side effect: monthly
+                          used to materialize its occurrence as soon as its
+                          calendar month began (cursor was a bare `YYYY-MM`),
+                          so a bill due the 25th could appear already-added on
+                          the 1st; now every frequency waits for its actual
+                          date, matching weekly/biweekly's always-correct
+                          behavior. `RecurringEdit` gained optional
+                          `dayOfMonth2`/`month`/`intervalMonths`, and
+                          `updateRecurring` switches on frequency to know
+                          which apply.
+                          **Frequency itself became editable, and the day cap
+                          was a bug (both 2026-09-16)** — the "frequency isn't
+                          editable" line above didn't survive long: per
+                          feedback, `RecurringEdit` is now `{ amount,
+                          categoryId, note? } & RecurringFrequencySpec` (the
+                          same spec type `nextOccurrenceAfter` takes) instead
+                          of a sparse per-field patch, so the caller always
+                          passes a complete frequency description — including
+                          `frequency` itself — for what the series should
+                          look like after the edit, never an ambiguous
+                          "which old field survives" merge. `updateRecurring`
+                          simplified accordingly to one plain object-literal
+                          return instead of a per-frequency switch (see
+                          add-transaction.tsx's own bullet below for how the
+                          series editor drives this). Switching frequency
+                          needs no special cursor handling — exactly the
+                          payoff of the `lastGeneratedDate` unification above:
+                          `lastGeneratedDate` is left untouched, and
+                          `nextOccurrenceAfter` just steps forward from that
+                          same cursor date using whichever frequency is now
+                          selected. Separately, `dayOfMonth`'s "1-28" cap
+                          turned out to be a real bug, not a deliberate
+                          simplification — `dateInMonth`'s clamping already
+                          handles a 30th/31st pick correctly (landing on
+                          Feb's real last day, same idea as a 31st already
+                          did for monthly before this), so the type comment
+                          and every UI day-stepper's artificial `Math.min(28,
+                          …)` ceiling were both wrong; both now allow 1-31.
     demo-data.ts            generateDemoData() (added 2026-08-26 as
                           generateYearToDateDemoData, renamed and extended
                           2026-08-31), called from settings.tsx. Backfills two
@@ -677,11 +804,20 @@ src/
                           categories are no longer a synchronously-importable
                           constant. Redesigned 2026-08-26 — see the
                           "Transaction rows redesigned" convention bullet
-                          below. Shows a small `event-repeat` glyph after
-                          the category name when `transaction.recurringId`
-                          is set (2026-09-10) — keyed off the id alone, so a
-                          row a since-stopped series generated keeps it
-                          ("this came from a series" stays true of it).
+                          below. Shows a small `event-repeat` glyph after the
+                          category name via an `isRecurring` boolean prop the
+                          caller resolves (2026-09-10, initially keyed off a
+                          bare `transaction.recurringId` truthiness check;
+                          changed 2026-09-12 to `lib/recurring.ts
+                          #isActiveRecurring(transaction.recurringId,
+                          recurring)` instead, per feedback that the old
+                          version was confusing — `recurringId` itself is
+                          still left on a transaction forever once set, so
+                          the original version kept showing the badge on rows
+                          a since-stopped series generated; now every caller
+                          also loads `getRecurring()` and the badge reflects
+                          the series' *current* state, disappearing once it's
+                          stopped).
     themed-text.tsx, themed-view.tsx, ...   From the Expo default template.
 
   constants/theme.ts      Colors.light / Colors.dark. Extends the template's
@@ -691,9 +827,42 @@ src/
                           source of truth for every neutral/semantic color.
                           `segmentThumb` (2026-09-10) is SegmentedControl's
                           selected-thumb fill, see that component's entry.
-  hooks/use-theme.ts       useTheme() — resolves Colors[light|dark] against the
-                          OS color scheme (no in-app Light/Dark/Auto override in
-                          v1, unlike HabitTracker — see TODO.md).
+  hooks/use-theme.ts       useTheme() — resolves Colors[scheme] against
+                          useThemePreference()'s resolved scheme. Used to read
+                          the OS color scheme directly (no in-app override);
+                          see use-theme-preference.tsx below for why that
+                          changed 2026-09-17 — TODO.md's note about this
+                          being missing, unlike HabitTracker, no longer
+                          applies.
+  hooks/use-theme-preference.tsx  ThemePreferenceProvider + useThemePreference()
+                          (added 2026-09-17, matching HabitTracker's own hook
+                          of the same name) — an in-app Light/Dark/Auto
+                          override, AsyncStorage-backed
+                          (`@budgettracker/theme-preference`). `'system'`
+                          (the default, and the only behavior that existed
+                          before this) tracks the OS scheme via
+                          hooks/use-color-scheme(.web).ts; `'light'`/`'dark'`
+                          pin it regardless of the OS. Wraps the whole app
+                          from src/app/_layout.tsx, which split into an outer
+                          `RootLayout` (just the provider) and an inner
+                          `RootLayoutInner` (everything that used to be the
+                          whole component) since a hook needs to render
+                          underneath its own provider, not beside it. Also
+                          calls `Appearance.setColorScheme` on native (a
+                          no-op guarded out on web, where the shim doesn't
+                          implement it) so native chrome that reads UIKit's
+                          trait collection directly — NativeTabs' own tab bar
+                          material, not styled through any RN prop — doesn't
+                          stay stuck on the OS's scheme when the app
+                          overrides away from it; same fix HabitTracker uses
+                          for the identical gap. `_layout.tsx` also gained an
+                          explicit `<StatusBar>` synced to the resolved
+                          scheme, since its default behavior otherwise follows
+                          the OS's own appearance rather than this app's,
+                          which would leave status bar icons unreadable
+                          against this app's actual background once the two
+                          can differ. Set from Settings — see that screen's
+                          own bullet above.
 ```
 
 ## Important Conventions
@@ -702,14 +871,39 @@ src/
   `${y}-${pad(m)}` formatting rather than `toISOString()` in most places, since `Date`'s local
   getters (`getFullYear`/`getMonth`) are what the calendar picker and month nav actually need —
   `toISOString()` shifts to UTC and can land on the wrong local day.
-- **Recurring transactions support monthly, weekly, and biweekly frequency** (weekly/biweekly added
-  2026-09-03) — `RecurringTransaction` is a discriminated union on `frequency`. Monthly's
-  `dayOfMonth` is clamped to each month's real last day (so a "31st" recurs on the 28th/29th/30th in
-  shorter months); weekly/biweekly have no `dayOfMonth` at all — their recurring weekday is implicit
-  in `startDate`, and they walk `lastGeneratedDate` by 7/14 real days instead of `lastGeneratedMonth`
-  by a calendar month. See `lib/recurring.ts`'s own Folder Structure bullet for the full mechanics
-  (including how pre-2026-09-03 monthly-only records migrate on read). A further frequency (e.g.
-  daily, or a custom N-day interval) would be a new union member, same pattern.
+- **Recurring transactions support 6 frequencies**: monthly, weekly, biweekly (weekly/biweekly added
+  2026-09-03), plus yearly, everyNMonths (a custom interval), and semimonthly (twice a month — all
+  three added 2026-09-12, researched off how YNAB/Monarch Money/Copilot Money handle recurring
+  bills). `RecurringTransaction` is a discriminated union on `frequency`. Monthly/everyNMonths/yearly
+  clamp their `dayOfMonth` to the real length of whichever month they land in (so a "31st" recurs on
+  the 28th/29th/30th in shorter months, and yearly's clamp is leap-year aware for Feb 29); weekly/
+  biweekly have no `dayOfMonth` at all — their recurring weekday is implicit in `startDate`;
+  semimonthly carries two independent clamped days (`dayOfMonth1`/`dayOfMonth2`). As of 2026-09-12
+  every frequency's cursor is the same field, `lastGeneratedDate` (a real date, not a `YYYY-MM`
+  month string) — monthly used to track `lastGeneratedMonth` instead, which meant a monthly item
+  materialized as soon as its calendar month began rather than when its actual day arrived (a bill
+  due the 25th could show up already-added on the 1st); unifying the cursor onto a real date, via one
+  `nextOccurrenceAfter(item, cursorDate)` stepping function used by both `generateDueTransactions`
+  and the read-only `nextDueDate`/preview math, fixed that as a side effect of adding the 3 new
+  frequencies rather than as a separate change. See `lib/recurring.ts`'s own Folder Structure bullet
+  for the full mechanics (including how pre-2026-09-12 monthly records with the old
+  `lastGeneratedMonth` field migrate lazily on read). A further frequency (e.g. daily) would be a new
+  union member, same pattern.
+- **Recurring page forecast grouping + row redesign (2026-09-12)** — Transactions' Recurring page
+  (see the "A standalone Bills tab" bullet below for its own history) replaced its one flat
+  soonest-due-first list with 3 sections — Due This Week / Due This Month / Later — bucketed off
+  `nextDueDate`. There's no "Overdue"/"Due Today" bucket: `generateDueTransactions` always catches a
+  series up to today before any screen renders (root layout, before the splash screen hides), so
+  `nextDueDate` is never today or in the past in practice, only ever tomorrow-or-later — building an
+  Overdue bucket would've been dead code. `RecurringRow` also picked up a small "Tomorrow"/"in Nd"
+  pill next to the next-due date, shown only for This-Week rows (This-Month/Later rows just keep the
+  plain date text — the section header already conveys the timeframe, a redundant "in 23d" pill would
+  be noise), plus a bumped amount font size for emphasis. `add-transaction.tsx`'s Repeat card's
+  frequency picker moved from a 3-option `SegmentedControl` to a horizontally-scrolling chip row (6
+  options no longer fit that component's compact 2-4-segment design) and gained inline steppers for
+  everyNMonths' interval and semimonthly's second day; the edit-mode series editor gained matching
+  extra fields per frequency (a month chip row for yearly, an interval stepper for everyNMonths, a
+  second day stepper for semimonthly).
 - **Categories are AsyncStorage-backed and user-editable** (`lib/categories.ts`) — name/icon/color
   can be changed for any category, including the seeded defaults, via `category-editor.tsx` (Budgets'
   `+` button to add, long-press a row to edit). `type` is deliberately not editable through that
@@ -788,20 +982,31 @@ src/
   pill tab bar and ended up entirely covered by it (same stacking-order issue as any two overlapping
   `position: absolute` siblings, the later-painted one wins); `web: 76` matches that bar's measured
   height. `lib/recurring.ts`'s core CRUD + `generateDueTransactions()` was untouched by all of this —
-  only ever the screen-level plumbing moved. Still not built: editing a series after creation
-  (amount/day/category/frequency) — only add and stop, per TODO.md.
-- **Category icon colors: custom per-category, except in transaction rows (settled 2026-08-26 after
-  two reversals)** — `6da13da` forced every `CategoryBadge` to destructive-red/success-green via a
-  `color` override; that was undone the same day (`type: CategoryType` prop instead, drawing a small
-  red/green corner dot without overriding the icon tint) per feedback that custom colors should
-  survive; then *that* was partially undone again after further feedback specifically about
-  transaction rows. Landing point: `CategoryBadge` takes both `color` (hard override) and `type`
-  (dot only, ignored if `color` is set) — **`transaction-row.tsx`** passes `color={typeColor}` so a
-  transaction's own icon is always red/green (a transaction has one unambiguous type, and that's
-  what the row redesign below leans on), while **`budgets.tsx`** (×2), **`add-transaction.tsx`**'s
-  category grid, and **`budget-editor.tsx`** all pass `type={...}` and keep each category's own
-  custom color with just the corner dot. Home's dashboard ring badge passes neither (always an
-  expense category, unambiguous either way).
+  only ever the screen-level plumbing moved. Editing a series' amount/category/day after creation was
+  still not built at this point — see the "Editing a recurring series" convention bullet below for
+  when that landed (2026-09-12; frequency itself followed 2026-09-16, per that bullet's own note).
+- **Category icon colors: custom per-category everywhere; the expense/income cue lives elsewhere on
+  the row, not on the icon (settled 2026-09-12 after four reversals)** — `6da13da` forced every
+  `CategoryBadge` to destructive-red/success-green via a `color` override; that was undone the same
+  day (`type: CategoryType` prop instead, drawing a small red/green corner dot without overriding the
+  icon tint) per feedback that custom colors should survive; then *that* was partially undone again
+  after further feedback specifically about transaction rows, which went back to the hard `color`
+  override there only. That carve-out was itself reverted 2026-09-12 per feedback that a
+  transaction's icon burying its category's own color wasn't worth it just for a redundant type cue.
+  `CategoryBadge` still takes both `color` (hard override, kept for any future caller that needs it)
+  and `type` (a small corner dot, ignored if `color` is set) — **`budgets.tsx`** (×2),
+  **`add-transaction.tsx`**'s category grid, and **`budget-editor.tsx`** pass `type={...}` and keep
+  each category's own custom color with just the dot; Home's dashboard ring badge passes neither
+  (always an expense category, unambiguous either way). **`transaction-row.tsx`** passes neither —
+  per the same-day follow-up feedback that even the corner dot wasn't an obvious enough expense/
+  income cue, it instead renders its own `typePill`, a small "Expense"/"Income" text pill (soft
+  destructive/success-tinted background, same `color + '1a'` convention as Budgets' own
+  over-budget/goal-reached pills) — **paired with the amount in a right-aligned column, not inline
+  next to the category name**. An inline-next-to-the-name placement was tried first and reverted the
+  same day: on a narrow phone width the pill competed with the category name (and the recurring
+  glyph) for the same shrinking row, truncating ordinary names like "Shopping" to "Shoppi...". Stacked
+  above the amount instead, the pill has its own space and reads naturally as "this label describes
+  the amount below it," while the category name column is free to show in full.
 - **Transaction rows redesigned (2026-08-26)** — `transaction-row.tsx` (Home's recent list,
   Transactions' List and Calendar-day-detail lists) dropped the old 4px left accent bar and the
   small arrow-up/down glyph next to the amount, per feedback that the old look was dated. Now: a
@@ -824,6 +1029,14 @@ src/
   (2026-09-03: a single row into app/recurring.tsx, its subtitle a live "N active" count) — removed
   2026-09-10 once that screen's content moved into the Transactions tab's Recurring page (see the "A
   standalone Bills tab" bullet above); Settings is back to just the one section.
+- **Amount field: tap-to-focus, no autofocus (2026-09-18)** — the amount `TextInput` used to carry
+  `autoFocus={!isEditing}`, popping the numeric keypad the instant a new transaction was started,
+  before anything was even tapped; removed per feedback. The `$`/amount pair is now wrapped in a
+  `Pressable` that calls `.focus()` on the input via a ref, so tapping the `$` sign itself (plain
+  `ThemedText`, not part of the input) opens the keypad too, not just tapping the digits. A checkmark
+  button appears next to the input only while it's focused (tracked via `onFocus`/`onBlur`) and calls
+  `Keyboard.dismiss()` — needed because the `decimal-pad` keyboard type has no built-in "Done" key on
+  Android to close it with otherwise.
 - **Repeat card redesign (2026-09-10)** — add-transaction.tsx's recurring UI was a bare checkbox
   row ("Repeat" + a checkbox glyph) for new transactions and a plain text link
   ("Repeats {frequency} — stop repeating") for editing one, per explicit feedback that both looked
@@ -840,6 +1053,58 @@ src/
   card disappear: a `stoppedRecurring` flag keeps it mounted in a "Repeating stopped / No more will be
   added. Past ones stay." state instead, so there's some acknowledgement of what just happened rather
   than the row silently vanishing.
+- **Editing a recurring series (added 2026-09-12, self-contained panel same day per feedback)** —
+  `lib/recurring.ts#updateRecurring` patches a series' amount/categoryId/note (any frequency) and
+  dayOfMonth (monthly only); see that function's own bullet above for why frequency itself stayed
+  out of scope and why the monthly cursor doesn't need adjusting when dayOfMonth changes. Reached two
+  ways, both landing on the same editor rather than building a second one: (1) add-transaction.tsx's
+  Repeats card gained an Edit pencil next to Stop — tapping it reveals a compact panel with its own
+  amount input, a day-of-month stepper (monthly only) on the same row, a horizontally-scrolling
+  category chip row, and a "Save series" button. An earlier version of this panel reused the screen's
+  own amount/category/note fields above instead of carrying its own — reverted the same day per
+  feedback that it read as more description than function (a long explanatory caption, a scroll back
+  up to actually change anything): the panel now seeds its own state straight from the series record
+  (not from whatever this transaction's own fields happen to show, which can have drifted from the
+  series after the fact) and needs no caption, since editing here plainly can't touch the transaction
+  you're looking at — there's no shared field for it to reach through. (2) `(tabs)/transactions.tsx`'s
+  Recurring page — `RecurringRow` gained a matching Edit pencil next to its own Stop, which doesn't
+  reimplement any of this: `handleEditRecurring` finds that series' most recent transaction (by date,
+  off the full unfiltered `transactions` list so the header's type/category filter can't hide the
+  only match — a series always has at least its seed transaction, see add-transaction.tsx's own
+  bullet on how that's created) and routes to `/add-transaction?id=<that transaction's id>`, landing
+  on the exact same Repeats-card editor as (1).
+  **Frequency became editable too (2026-09-16), per follow-up feedback** — the series editor panel
+  gained its own frequency chip row (same `FREQUENCY_OPTIONS` chips as the new-transaction Repeat
+  card) above the amount row; switching it there shows/hides the relevant day/month/interval fields
+  below without resetting any of them, so a value the series already had (or the panel was last set
+  to) just carries over rather than blanking out. `lib/recurring.ts#updateRecurring` no longer takes
+  a sparse per-field patch — see that function's own bullet above for the reworked `RecurringEdit`
+  shape and why switching frequency needs no special cursor handling now.
+  **The day-of-month cap was a bug, not a deliberate limit (2026-09-16)** — every day stepper
+  (monthly/everyNMonths/yearly/semimonthly's two) was artificially capped at 28, on top of the real
+  per-month clamping `dateInMonth`/`dateInYear` already do correctly; raised to 31 everywhere (a
+  30th/31st pick now lands on Feb's real last day exactly like it already did for a 31st before this
+  fix — the cap just hid the 29th-31st range from ever being pickable).
+  **Pulled out into its own screen, `edit-recurring.tsx` (2026-09-17), per feedback that reaching it
+  from the Recurring page was too indirect to feel like editing a series at all** — (2)'s
+  `handleEditRecurring` used to search for that series' most recent transaction and open *its* edit
+  screen just to reach the Repeats card's own pencil, which put two separate amount/category pickers
+  (one for that one transaction, one for the whole series) on one screen at once — easy to blur which
+  one you were changing. Both entry points now route straight to `/edit-recurring?id=<recurringId>`:
+  (2) passes the tapped row's id directly (no more searching `transactions` for a stand-in), and (1)'s
+  Repeats-card pencil does the same with `activeRecurring.id` instead of toggling the old inline
+  panel open. The panel's own fields (frequency chips, amount, conditional day/month/interval
+  fields, category grid, Save) moved into that new screen close to verbatim — same look, same
+  behavior — plus its own header (title, an X `router.back()`, matching `budget-editor.tsx`'s own
+  shape) and its own Stop control at the bottom, so stopping a series no longer requires being on the
+  Recurring page or already looking at one of its transactions. add-transaction.tsx gained a
+  `useFocusEffect` that re-fetches just `activeRecurring` (not the transaction's own fields, which it
+  shouldn't clobber with unsaved edits) on every focus — necessary now that editing happens on a
+  screen you navigate away to and back from: without it, the Repeats card would keep showing the
+  series' pre-edit frequency/amount/next-due-date until the whole add-transaction modal was closed
+  and reopened. If that refresh finds the series gone (stopped from the new screen instead of this
+  one), it sets `stoppedRecurring` too, so the card still settles into its "stopped" state instead of
+  just disappearing.
 - **Mutations to `transactions.ts`/`budgets.ts`/`recurring.ts` all go through the same
   promise-chain write-queue pattern** (`let writeQueue = Promise.resolve(); enqueue(fn)`) — copied
   across all three files rather than shared, per the no-premature-abstraction rule above, but keep

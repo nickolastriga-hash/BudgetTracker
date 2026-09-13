@@ -25,6 +25,7 @@ import {
   toMonthStr,
   type RangeType,
 } from '@/lib/date-range';
+import { getRecurring, isActiveRecurring, type RecurringTransaction } from '@/lib/recurring';
 import { getTransactions, type Transaction } from '@/lib/transactions';
 
 // Week/Month/Year only — Custom has no single-grid shape for an arbitrary
@@ -50,11 +51,13 @@ function CalendarView({
   month,
   transactions,
   categories,
+  recurring,
   bottomPadding,
 }: {
   month: Date;
   transactions: Transaction[];
   categories: Category[];
+  recurring: RecurringTransaction[];
   bottomPadding: number;
 }) {
   const theme = useTheme();
@@ -185,6 +188,7 @@ function CalendarView({
                   <TransactionRow
                     transaction={t}
                     category={getCategory(categories, t.categoryId)}
+                    isRecurring={isActiveRecurring(t.recurringId, recurring)}
                     onPress={() => router.push(`/add-transaction?id=${t.id}`)}
                   />
                   {i < selectedDayTransactions.length - 1 && (
@@ -218,11 +222,13 @@ function WeekCalendarView({
   month,
   transactions,
   categories,
+  recurring,
   bottomPadding,
 }: {
   month: Date;
   transactions: Transaction[];
   categories: Category[];
+  recurring: RecurringTransaction[];
   bottomPadding: number;
 }) {
   const theme = useTheme();
@@ -386,6 +392,7 @@ function WeekCalendarView({
                   <TransactionRow
                     transaction={t}
                     category={getCategory(categories, t.categoryId)}
+                    isRecurring={isActiveRecurring(t.recurringId, recurring)}
                     onPress={() => router.push(`/add-transaction?id=${t.id}`)}
                   />
                   {i < selectedWeekTransactions.length - 1 && (
@@ -411,11 +418,13 @@ function YearCalendarView({
   year,
   transactions,
   categories,
+  recurring,
   bottomPadding,
 }: {
   year: number;
   transactions: Transaction[];
   categories: Category[];
+  recurring: RecurringTransaction[];
   bottomPadding: number;
 }) {
   const theme = useTheme();
@@ -540,6 +549,7 @@ function YearCalendarView({
                   <TransactionRow
                     transaction={t}
                     category={getCategory(categories, t.categoryId)}
+                    isRecurring={isActiveRecurring(t.recurringId, recurring)}
                     onPress={() => router.push(`/add-transaction?id=${t.id}`)}
                   />
                   {i < selectedMonthTransactions.length - 1 && (
@@ -568,15 +578,17 @@ export default function CalendarScreen() {
   const [anchor, setAnchor] = useState(() => new Date());
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [recurring, setRecurring] = useState<RecurringTransaction[]>([]);
   const [pickerVisible, setPickerVisible] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
-      Promise.all([getTransactions(), getCategories()]).then(([t, c]) => {
+      Promise.all([getTransactions(), getCategories(), getRecurring()]).then(([t, c, r]) => {
         if (!cancelled) {
           setTransactions(t);
           setCategories(c);
+          setRecurring(r);
         }
       });
       return () => {
@@ -590,7 +602,11 @@ export default function CalendarScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      <View style={{ paddingTop: insets.top + Spacing.three, backgroundColor: theme.background }}>
+      {/* `paddingBottom` (2026-09-18) is load-bearing — see Home's own
+          identical pinned-header comment for why: the ScrollView's own
+          `paddingTop` only creates a gap for the very first scroll position,
+          since it scrolls away with the grid/list below it. */}
+      <View style={{ paddingTop: insets.top + Spacing.three, paddingBottom: Spacing.three, backgroundColor: theme.background }}>
         <View style={[styles.headerContent, { paddingHorizontal: Spacing.three }]}>
           <ScreenHeader title="Calendar" right={<SettingsButton />} />
 
@@ -621,16 +637,29 @@ export default function CalendarScreen() {
       </View>
 
       {rangeType === 'week' ? (
-        <WeekCalendarView month={anchor} transactions={transactions} categories={categories} bottomPadding={bottomPadding} />
+        <WeekCalendarView
+          month={anchor}
+          transactions={transactions}
+          categories={categories}
+          recurring={recurring}
+          bottomPadding={bottomPadding}
+        />
       ) : rangeType === 'year' ? (
         <YearCalendarView
           year={anchor.getFullYear()}
           transactions={transactions}
           categories={categories}
+          recurring={recurring}
           bottomPadding={bottomPadding}
         />
       ) : (
-        <CalendarView month={anchor} transactions={transactions} categories={categories} bottomPadding={bottomPadding} />
+        <CalendarView
+          month={anchor}
+          transactions={transactions}
+          categories={categories}
+          recurring={recurring}
+          bottomPadding={bottomPadding}
+        />
       )}
 
       <Pressable

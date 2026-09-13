@@ -7,16 +7,20 @@
 // straight import-source swap, no behavior change.
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
-import { useColorScheme } from 'react-native';
 
 import { Colors } from '@/constants/theme';
+import { ThemePreferenceProvider, useThemePreference } from '@/hooks/use-theme-preference';
 import { generateDueTransactions } from '@/lib/recurring';
 
 SplashScreen.preventAutoHideAsync();
 
-export default function RootLayout() {
-  const colorScheme = useColorScheme();
+// Split out from the default export (2026-09-17, alongside the Light/Dark/
+// Auto appearance setting) so this can call useThemePreference() — a hook
+// needs to render underneath ThemePreferenceProvider, not beside it.
+function RootLayoutInner() {
+  const { scheme } = useThemePreference();
 
   useEffect(() => {
     // Materialize any due recurring transactions once per session, then reveal the UI.
@@ -29,11 +33,11 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <ThemeProvider value={scheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack
         screenOptions={{
           headerShown: false,
-          contentStyle: { backgroundColor: Colors[colorScheme === 'dark' ? 'dark' : 'light'].background },
+          contentStyle: { backgroundColor: Colors[scheme].background },
         }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen
@@ -45,8 +49,23 @@ export default function RootLayout() {
           options={{ headerShown: true, presentation: 'modal', title: 'New Category' }}
         />
         <Stack.Screen name="budget-editor" options={{ headerShown: false, presentation: 'modal' }} />
+        <Stack.Screen name="edit-recurring" options={{ headerShown: false, presentation: 'modal' }} />
         <Stack.Screen name="settings" options={{ headerShown: true, presentation: 'modal', title: 'Settings' }} />
       </Stack>
+      {/* expo-status-bar's default behavior otherwise follows the OS's own
+          appearance, not this app's resolved scheme — now that Settings can
+          pin the two apart (a Dark override on a Light OS, say), leaving it
+          on the default would risk status bar icons the same color as the
+          background behind them. */}
+      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
     </ThemeProvider>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <ThemePreferenceProvider>
+      <RootLayoutInner />
+    </ThemePreferenceProvider>
   );
 }

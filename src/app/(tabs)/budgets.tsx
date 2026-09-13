@@ -193,8 +193,11 @@ export default function BudgetsScreen() {
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       {/* Pinned above the pager (not inside it) so the title, month nav, and
           toggle stay visible while swiping/scrolling between pages — same
-          treatment as Home and Transactions' own headers. */}
-      <View style={{ paddingTop: insets.top + Spacing.three, backgroundColor: theme.background }}>
+          treatment as Home and Transactions' own headers. `paddingBottom`
+          (2026-09-18) is load-bearing — see Home's own comment on this same
+          style for why a gap has to live here rather than in each page's own
+          `paddingTop`. */}
+      <View style={{ paddingTop: insets.top + Spacing.three, paddingBottom: Spacing.three, backgroundColor: theme.background }}>
         <View style={[styles.headerContent, { paddingHorizontal: Spacing.three }]}>
           <ScreenHeader title="Budgets" right={<SettingsButton />} />
 

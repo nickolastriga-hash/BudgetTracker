@@ -3,9 +3,11 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { SegmentedControl } from '@/components/segmented-control';
 import { ThemedText } from '@/components/themed-text';
 import { CardRadius, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useThemePreference } from '@/hooks/use-theme-preference';
 import { generateDemoData } from '@/lib/demo-data';
 
 function SettingsRow({
@@ -49,6 +51,7 @@ function SettingsRow({
 export default function SettingsScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const { preference, setPreference } = useThemePreference();
   const [confirming, setConfirming] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState<string | null>(null);
@@ -73,6 +76,21 @@ export default function SettingsScreen() {
           styles.content,
           { paddingTop: insets.top + Spacing.three, paddingBottom: insets.bottom + Spacing.six },
         ]}>
+        <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+          APPEARANCE
+        </ThemedText>
+        <View style={[styles.section, styles.appearanceSection, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <SegmentedControl
+            options={[
+              { value: 'light', label: 'Light', icon: 'light-mode' },
+              { value: 'dark', label: 'Dark', icon: 'dark-mode' },
+              { value: 'system', label: 'Auto', icon: 'brightness-auto' },
+            ]}
+            value={preference}
+            onChange={setPreference}
+          />
+        </View>
+
         <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
           DEMO DATA
         </ThemedText>
@@ -119,6 +137,11 @@ const styles = StyleSheet.create({
     borderRadius: CardRadius,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
+  },
+  // SettingsRow provides its own padding per row; the appearance toggle
+  // isn't a row, so this section pads itself instead.
+  appearanceSection: {
+    padding: Spacing.two,
   },
   row: {
     flexDirection: 'row',

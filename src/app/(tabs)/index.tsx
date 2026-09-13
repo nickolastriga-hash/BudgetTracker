@@ -18,6 +18,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { effectiveLimit, getBudgetProgress, getBudgets, type Budget, type BudgetProgress } from '@/lib/budgets';
 import { getCategories, getCategory, type Category } from '@/lib/categories';
 import { monthsBetween, rangeBounds, shiftAnchor, toMonthStr, type RangeType } from '@/lib/date-range';
+import { getRecurring, isActiveRecurring, type RecurringTransaction } from '@/lib/recurring';
 import {
   byCategoryTotalsInRange,
   getTransactions,
@@ -305,6 +306,7 @@ export default function HomeScreen() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [recurring, setRecurring] = useState<RecurringTransaction[]>([]);
   const [pickerVisible, setPickerVisible] = useState(false);
   // Kept separate per side (rather than one shared selection) so switching
   // pages doesn't clear whatever was tapped on the other one.
@@ -314,11 +316,12 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
-      Promise.all([getTransactions(), getBudgets(), getCategories()]).then(([t, b, c]) => {
+      Promise.all([getTransactions(), getBudgets(), getCategories(), getRecurring()]).then(([t, b, c, r]) => {
         if (!cancelled) {
           setTransactions(t);
           setBudgets(b);
           setCategories(c);
+          setRecurring(r);
         }
       });
       return () => {
@@ -438,8 +441,14 @@ export default function HomeScreen() {
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       {/* Pinned above the ScrollView (not inside it) so the title and month
           nav stay visible while scrolling the dashboard/budgets/recent list
-          below — same treatment as Transactions' own header. */}
-      <View style={{ paddingTop: insets.top + Spacing.three, backgroundColor: theme.background }}>
+          below — same treatment as Transactions' own header. Its own
+          `paddingBottom` (2026-09-18) is load-bearing, not decorative: the
+          ScrollView's matching `paddingTop` only creates a gap for the very
+          first scroll position, since that padding scrolls away with the
+          rest of the content — without a gap baked into this pinned block
+          itself, scrolling even slightly left the dashboard card butted
+          right up against the toggle with no space at all. */}
+      <View style={{ paddingTop: insets.top + Spacing.three, paddingBottom: Spacing.three, backgroundColor: theme.background }}>
         <View style={[styles.headerContent, { paddingHorizontal: Spacing.three }]}>
           <ScreenHeader title="Home" right={<SettingsButton />} />
 
@@ -703,6 +712,7 @@ export default function HomeScreen() {
                   <TransactionRow
                     transaction={t}
                     category={getCategory(categories, t.categoryId)}
+                    isRecurring={isActiveRecurring(t.recurringId, recurring)}
                     onPress={() => router.push(`/add-transaction?id=${t.id}`)}
                     showDate
                   />

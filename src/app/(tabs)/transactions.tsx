@@ -26,14 +26,16 @@ import { BottomTabInset, CardRadius, CardShadow, MaxContentWidth, Spacing } from
 import { useTheme } from '@/hooks/use-theme';
 import { categoriesForType, getCategories, getCategory, type Category } from '@/lib/categories';
 import {
+  MONTH_NAMES,
   rangeBounds,
   shiftAnchor,
   shiftCustomRange,
   shortDateLabel,
+  toDateStr,
   type CustomRange,
   type RangeType,
 } from '@/lib/date-range';
-import { deleteRecurring, getRecurring, nextDueDate, type RecurringTransaction } from '@/lib/recurring';
+import { deleteRecurring, getRecurring, isActiveRecurring, nextDueDate, type RecurringTransaction } from '@/lib/recurring';
 import { getTransactions, transactionsInRange, type Transaction, type TransactionType } from '@/lib/transactions';
 
 // Which transactions to show — 'all' (no type filter) plus an optional set
@@ -178,8 +180,20 @@ function ordinal(n: number): string {
 }
 
 function frequencyLabel(item: RecurringTransaction): string {
-  if (item.frequency === 'monthly') return `Monthly · ${ordinal(item.dayOfMonth)}`;
-  return item.frequency === 'weekly' ? 'Weekly' : 'Every 2 weeks';
+  switch (item.frequency) {
+    case 'monthly':
+      return `Monthly · ${ordinal(item.dayOfMonth)}`;
+    case 'weekly':
+      return 'Weekly';
+    case 'biweekly':
+      return 'Every 2 weeks';
+    case 'yearly':
+      return `Yearly · ${MONTH_NAMES[item.month - 1]} ${ordinal(item.dayOfMonth)}`;
+    case 'everyNMonths':
+      return `Every ${item.intervalMonths} months · ${ordinal(item.dayOfMonth)}`;
+    case 'semimonthly':
+      return `Twice monthly · ${ordinal(item.dayOfMonth1)} & ${ordinal(item.dayOfMonth2)}`;
+  }
 }
 
 // "YYYY-MM-DD" parsed via local y/m/d getters, not `new Date(dateStr)` — the
@@ -190,16 +204,30 @@ function localDateFromStr(dateStr: string): Date {
   return new Date(y, m - 1, d);
 }
 
+// generateDueTransactions (see lib/recurring.ts) always catches a series up
+// to today before any screen renders, so nextDueDate is never today or in
+// the past in practice — only ever tomorrow or later. Used both to decide
+// the This-Week/This-Month/Later bucket a row falls into and, within This
+// Week, to show a "Tomorrow"/"in Nd" pill.
+function daysUntil(dateStr: string): number {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = localDateFromStr(dateStr);
+  return Math.round((target.getTime() - today.getTime()) / 86_400_000);
+}
+
 function RecurringRow({
   item,
   category,
   isLast,
   onStop,
+  onEdit,
 }: {
   item: RecurringTransaction;
   category: Category | undefined;
   isLast: boolean;
   onStop: () => void;
+  onEdit: () => void;
 }) {
   const theme = useTheme();
   // Two-tap confirm kept local to the row rather than lifted to the screen —
@@ -207,6 +235,11 @@ function RecurringRow({
   const [confirming, setConfirming] = useState(false);
   const isExpense = item.type === 'expense';
   const typeColor = isExpense ? theme.destructive : theme.success;
+  // Computed independently of whichever section RecurringView bucketed this
+  // row into — daysOut naturally only lands ≤7 for This-Week rows anyway,
+  // so there's no need to pass the bucket down as a prop.
+  const daysOut = daysUntil(nextDueDate(item));
+  const duePillLabel = daysOut === 1 ? 'Tomorrow' : daysOut <= 7 ? `in ${daysOut}d` : null;
 
   function handleStopPress() {
     if (!confirming) {
@@ -225,19 +258,37 @@ function RecurringRow({
           <ThemedText type="default" numberOfLines={1}>
             {category?.name ?? 'Other'}
           </ThemedText>
-          <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-            {frequencyLabel(item)} — next {shortDateLabel(localDateFromStr(nextDueDate(item)))}
-          </ThemedText>
+          <View style={styles.recurringSubtitleRow}>
+            <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.recurringSubtitleText}>
+              {frequencyLabel(item)} — next {shortDateLabel(localDateFromStr(nextDueDate(item)))}
+            </ThemedText>
+            {duePillLabel && (
+              <View style={[styles.duePill, { backgroundColor: theme.accent + '26' }]}>
+                <ThemedText type="small" themeColor="accent" style={styles.duePillText}>
+                  {duePillLabel}
+                </ThemedText>
+              </View>
+            )}
+          </View>
         </View>
         <View style={styles.recurringRowEnd}>
           <ThemedText type="default" style={[styles.recurringAmount, { color: typeColor }]}>
             {isExpense ? '-' : '+'}${item.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </ThemedText>
-          <Pressable onPress={handleStopPress} hitSlop={8}>
-            <ThemedText type="small" themeColor={confirming ? 'destructive' : 'accent'}>
-              {confirming ? 'Tap again' : 'Stop'}
-            </ThemedText>
-          </Pressable>
+          <View style={styles.recurringRowActions}>
+            {/* Routes into add-transaction.tsx's own Edit control on this
+                series' Repeats card (see that screen's own comment) rather
+                than editing amount/category/day here — one edit surface,
+                reached two ways. */}
+            <Pressable onPress={onEdit} hitSlop={8}>
+              <MaterialIcons name="edit" size={16} color={theme.accent} />
+            </Pressable>
+            <Pressable onPress={handleStopPress} hitSlop={8}>
+              <ThemedText type="small" themeColor={confirming ? 'destructive' : 'accent'}>
+                {confirming ? 'Tap again' : 'Stop'}
+              </ThemedText>
+            </Pressable>
+          </View>
         </View>
       </View>
       {!isLast && <View style={[styles.divider, styles.rowDividerInset, { backgroundColor: theme.border }]} />}
@@ -250,8 +301,20 @@ function RecurringRow({
 // meaningful total — 52/12 and 26/12 weeks-per-month, not a flat ×4, so a
 // weekly series doesn't quietly undercount the months that have a 5th week.
 function monthlyEquivalent(item: RecurringTransaction): number {
-  const occurrencesPerMonth = item.frequency === 'weekly' ? 52 / 12 : item.frequency === 'biweekly' ? 26 / 12 : 1;
-  return item.amount * occurrencesPerMonth;
+  switch (item.frequency) {
+    case 'weekly':
+      return item.amount * (52 / 12);
+    case 'biweekly':
+      return item.amount * (26 / 12);
+    case 'monthly':
+      return item.amount;
+    case 'yearly':
+      return item.amount / 12;
+    case 'everyNMonths':
+      return item.amount / item.intervalMonths;
+    case 'semimonthly':
+      return item.amount * 2;
+  }
 }
 
 // Fills the space the range nav leaves behind while the Recurring page is
@@ -302,32 +365,71 @@ function RecurringSummary({ items }: { items: RecurringTransaction[] }) {
   );
 }
 
+// Forecast-style grouping (2026-09-12, replacing one flat soonest-first
+// list) — Due This Week / Due This Month / Later. There's no "Overdue"/"Due
+// today" bucket: nextDueDate is always tomorrow-or-later by the time this
+// renders (see daysUntil's own comment above), so a real due-today/overdue
+// state can't occur under normal operation.
+function bucketRecurring(items: RecurringTransaction[]): {
+  thisWeek: RecurringTransaction[];
+  thisMonth: RecurringTransaction[];
+  later: RecurringTransaction[];
+} {
+  const now = new Date();
+  const weekEnd = toDateStr(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7));
+  const monthEnd = toDateStr(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+  const sorted = [...items].sort((a, b) => (nextDueDate(a) < nextDueDate(b) ? -1 : 1));
+
+  const thisWeek: RecurringTransaction[] = [];
+  const thisMonth: RecurringTransaction[] = [];
+  const later: RecurringTransaction[] = [];
+  for (const item of sorted) {
+    const due = nextDueDate(item);
+    if (due <= weekEnd) thisWeek.push(item);
+    else if (due <= monthEnd) thisMonth.push(item);
+    else later.push(item);
+  }
+  return { thisWeek, thisMonth, later };
+}
+
 // The pager's Recurring page (2026-09-10) — every active RecurringTransaction
-// series, soonest-due-first, with a two-tap Stop per row. Not period-scoped
-// (a series just is or isn't active, whatever range the nav is on), which is
-// why the screen hides the range nav while this page is showing. Stopping
-// only removes the series going forward; transactions it already generated
-// stay put. View/add/stop only — editing a series after creation isn't
-// built (TODO.md).
+// series, grouped into a forecast (This Week/This Month/Later, see
+// bucketRecurring above) rather than one flat list, with a two-tap Stop per
+// row. Not period-scoped (a series just is or isn't active, whatever range
+// the nav is on), which is why the screen hides the range nav while this
+// page is showing. Stopping only removes the series going forward;
+// transactions it already generated stay put. Edit routes straight to
+// edit-recurring.tsx (2026-09-17) with this series' own id — see that
+// screen's own comment for why it's a dedicated screen rather than (as
+// 2026-09-12 first landed it) a deep-link into add-transaction.tsx's Repeats
+// card, which meant finding some transaction the series had generated and
+// opening its edit screen just to reach the series editor buried inside it.
 function RecurringView({
   items,
   categories,
   hasFilter,
   bottomPadding,
   onStop,
+  onEdit,
 }: {
   items: RecurringTransaction[];
   categories: Category[];
   hasFilter: boolean;
   bottomPadding: number;
   onStop: (id: string) => void;
+  onEdit: (id: string) => void;
 }) {
   const theme = useTheme();
-  const sorted = [...items].sort((a, b) => (nextDueDate(a) < nextDueDate(b) ? -1 : 1));
+  const { thisWeek, thisMonth, later } = bucketRecurring(items);
+  const sections = [
+    { key: 'thisWeek', label: 'Due This Week', data: thisWeek },
+    { key: 'thisMonth', label: 'Due This Month', data: thisMonth },
+    { key: 'later', label: 'Later', data: later },
+  ].filter((section) => section.data.length > 0);
 
   return (
     <ScrollView contentContainerStyle={[styles.content, { paddingBottom: bottomPadding }]}>
-      {sorted.length === 0 ? (
+      {items.length === 0 ? (
         <View style={[styles.group, styles.emptyGroup, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
           <MaterialIcons name="event-repeat" size={28} color={theme.textTertiary} />
           <ThemedText type="small" themeColor="textSecondary" style={styles.emptyText}>
@@ -335,17 +437,25 @@ function RecurringView({
           </ThemedText>
         </View>
       ) : (
-        <View style={[styles.group, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
-          {sorted.map((item, i) => (
-            <RecurringRow
-              key={item.id}
-              item={item}
-              category={getCategory(categories, item.categoryId)}
-              isLast={i === sorted.length - 1}
-              onStop={() => onStop(item.id)}
-            />
-          ))}
-        </View>
+        sections.map((section) => (
+          <View key={section.key}>
+            <ThemedText type="small" themeColor="textSecondary" style={[styles.dateHeader, styles.recurringSectionLabel]}>
+              {section.label.toUpperCase()}
+            </ThemedText>
+            <View style={[styles.group, CardShadow, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              {section.data.map((item, i) => (
+                <RecurringRow
+                  key={item.id}
+                  item={item}
+                  category={getCategory(categories, item.categoryId)}
+                  isLast={i === section.data.length - 1}
+                  onStop={() => onStop(item.id)}
+                  onEdit={() => onEdit(item.id)}
+                />
+              ))}
+            </View>
+          </View>
+        ))
       )}
     </ScrollView>
   );
@@ -392,6 +502,10 @@ export default function TransactionsScreen() {
   async function handleStopRecurring(id: string) {
     await deleteRecurring(id);
     setRecurring((prev) => prev.filter((r) => r.id !== id));
+  }
+
+  function handleEditRecurring(recurringId: string) {
+    router.push(`/edit-recurring?id=${recurringId}`);
   }
 
   const { start, end, label } = rangeBounds(rangeType, anchor, customRange);
@@ -477,6 +591,7 @@ export default function TransactionsScreen() {
               <TransactionRow
                 transaction={t}
                 category={getCategory(categories, t.categoryId)}
+                isRecurring={isActiveRecurring(t.recurringId, recurring)}
                 onPress={() => router.push(`/add-transaction?id=${t.id}`)}
               />
               {i < item.length - 1 && <View style={[styles.divider, styles.rowDividerInset, { backgroundColor: theme.border }]} />}
@@ -489,7 +604,12 @@ export default function TransactionsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      <View style={{ paddingTop: insets.top + Spacing.three, backgroundColor: theme.background }}>
+      {/* `paddingBottom` (2026-09-18) is load-bearing, not decorative — see
+          Home's own identical pinned-header comment for why a gap has to
+          live in this fixed block rather than in the pager's own
+          `paddingTop` (which only creates a gap for the very first scroll
+          position, since it scrolls away with everything else). */}
+      <View style={{ paddingTop: insets.top + Spacing.three, paddingBottom: Spacing.three, backgroundColor: theme.background }}>
         <View style={[styles.headerContent, { paddingHorizontal: Spacing.three }]}>
           <ScreenHeader
             title="Transactions"
@@ -616,6 +736,7 @@ export default function TransactionsScreen() {
                   hasFilter={hasFilter}
                   bottomPadding={bottomPadding}
                   onStop={handleStopRecurring}
+                  onEdit={handleEditRecurring}
                 />
               )}
             </View>
@@ -807,14 +928,42 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
   },
+  recurringSubtitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  recurringSubtitleText: {
+    flexShrink: 1,
+  },
+  duePill: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 8,
+  },
+  duePillText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
   recurringRowEnd: {
     alignItems: 'flex-end',
     gap: 6,
   },
+  recurringRowActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+  },
   recurringAmount: {
     fontVariant: ['tabular-nums'],
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
+  },
+  // Above each forecast section's card — no vertical margin of its own on
+  // dateHeader (that came from the List page's stickyDateHeader wrapper),
+  // so this adds just enough breathing room before the card below.
+  recurringSectionLabel: {
+    marginBottom: Spacing.two,
   },
   divider: {
     height: StyleSheet.hairlineWidth,
