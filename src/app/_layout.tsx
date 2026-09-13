@@ -10,7 +10,9 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 
+import { LockScreen } from '@/components/lock-screen';
 import { Colors } from '@/constants/theme';
+import { AppLockProvider } from '@/hooks/use-app-lock';
 import { ThemePreferenceProvider, useThemePreference } from '@/hooks/use-theme-preference';
 import { generateDueTransactions } from '@/lib/recurring';
 
@@ -51,7 +53,15 @@ function RootLayoutInner() {
         <Stack.Screen name="budget-editor" options={{ headerShown: false, presentation: 'modal' }} />
         <Stack.Screen name="edit-recurring" options={{ headerShown: false, presentation: 'modal' }} />
         <Stack.Screen name="settings" options={{ headerShown: true, presentation: 'modal', title: 'Settings' }} />
+        <Stack.Screen name="goal-editor" options={{ headerShown: false, presentation: 'modal' }} />
+        <Stack.Screen name="debt-editor" options={{ headerShown: false, presentation: 'modal' }} />
+        <Stack.Screen name="account-editor" options={{ headerShown: false, presentation: 'modal' }} />
+        <Stack.Screen name="set-pin" options={{ headerShown: false, presentation: 'modal' }} />
       </Stack>
+      {/* A sibling above the Stack (not a route) so it covers whatever
+          screen or modal is open when the app locks, and unlocking doesn't
+          disturb navigation state underneath. Renders null while unlocked. */}
+      <LockScreen />
       {/* expo-status-bar's default behavior otherwise follows the OS's own
           appearance, not this app's resolved scheme — now that Settings can
           pin the two apart (a Dark override on a Light OS, say), leaving it
@@ -65,7 +75,9 @@ function RootLayoutInner() {
 export default function RootLayout() {
   return (
     <ThemePreferenceProvider>
-      <RootLayoutInner />
+      <AppLockProvider>
+        <RootLayoutInner />
+      </AppLockProvider>
     </ThemePreferenceProvider>
   );
 }

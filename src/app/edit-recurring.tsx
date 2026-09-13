@@ -5,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CategoryBadge } from '@/components/category-badge';
+import { EditorHeader } from '@/components/editor-header';
 import { ThemedText } from '@/components/themed-text';
 import { CardRadius, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -176,13 +177,8 @@ export default function EditRecurringScreen() {
 
   if (notFound || !recurring) {
     return (
-      <View style={[styles.header, { paddingTop: insets.top + Spacing.two, borderBottomColor: theme.border, backgroundColor: theme.background }]}>
-        <ThemedText type="default" style={styles.headerTitle}>
-          This series no longer exists
-        </ThemedText>
-        <Pressable onPress={() => router.back()} hitSlop={10} style={[styles.closeButton, { backgroundColor: theme.backgroundElement }]}>
-          <MaterialIcons name="close" size={20} color={theme.text} />
-        </Pressable>
+      <View style={{ flex: 1, backgroundColor: theme.background }}>
+        <EditorHeader title="This series no longer exists" />
       </View>
     );
   }
@@ -192,14 +188,7 @@ export default function EditRecurringScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      <View style={[styles.header, { paddingTop: insets.top + Spacing.two, borderBottomColor: theme.border }]}>
-        <ThemedText type="default" style={styles.headerTitle}>
-          Edit Series
-        </ThemedText>
-        <Pressable onPress={() => router.back()} hitSlop={10} style={[styles.closeButton, { backgroundColor: theme.backgroundElement }]}>
-          <MaterialIcons name="close" size={20} color={theme.text} />
-        </Pressable>
-      </View>
+      <EditorHeader title="Edit Series" />
 
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + Spacing.six }]} keyboardShouldPersistTaps="handled">
         <ThemedText type="small" themeColor="textSecondary">
@@ -363,25 +352,6 @@ export default function EditRecurringScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.three,
-    paddingBottom: Spacing.two,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  closeButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   content: {
     padding: Spacing.three,
     gap: Spacing.four,

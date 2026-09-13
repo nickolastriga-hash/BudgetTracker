@@ -13,7 +13,7 @@ const TABS = [
   { name: 'transactions', href: '/transactions', label: 'Transactions', icon: 'receipt-long' },
   { name: 'calendar', href: '/calendar', label: 'Calendar', icon: 'calendar-month' },
   { name: 'budgets', href: '/budgets', label: 'Budgets', icon: 'pie-chart' },
-  { name: 'trends', href: '/trends', label: 'Trends', icon: 'show-chart' },
+  { name: 'wealth', href: '/wealth', label: 'Wealth', icon: 'account-balance-wallet' },
 ] as const;
 
 export default function TabLayout() {

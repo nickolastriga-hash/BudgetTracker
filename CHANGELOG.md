@@ -2,6 +2,41 @@
 
 Newest first.
 
+## 2026-09-13 — Wealth tab (goals, debt payoff, net worth), app lock, JSON backup/restore
+
+- **New Wealth tab** (`app/(tabs)/wealth.tsx`), a Goals/Debts/Net Worth pager: hand-entered savings
+  goals with contributions, deadlines, and a $/month pacing line (`lib/goals.ts`, `goal-editor.tsx`);
+  debts with a snowball/avalanche payoff planner and "extra per month" (`lib/debts.ts#simulatePayoff`,
+  `debt-editor.tsx`); assets/liabilities with a net-worth total, history line, and every tracked debt
+  merged in as a liability (`lib/net-worth.ts`, `account-editor.tsx`).
+- **Trends is now a card on Home** (`components/trends-card.tsx`) — `NativeTabs` caps Android at 5
+  tabs and iOS overflows a 6th into "More…", so Wealth took the slot; the chart reads Home's own
+  Month/Year range. Home toggles its ScrollView's `scrollEnabled` while a chart is scrubbed.
+- **App lock** (Settings → SECURITY): Face ID/Touch ID/fingerprint with a 4-digit PIN fallback,
+  re-locks after 30s in the background. `hooks/use-app-lock.tsx`, `lib/app-lock.ts`, `set-pin.tsx`,
+  `components/lock-screen.tsx` + `pin-pad.tsx`. New deps: expo-local-authentication, expo-crypto.
+- **Backup/restore to a JSON file** (Settings → DATA): every `@budgettracker/*` key except the lock
+  config and theme preference; restore replaces, two-tap confirmed. `lib/backup.ts`; new deps:
+  expo-sharing, expo-document-picker (expo-file-system's `File`/`Paths` API already present).
+- Extracted `EditorHeader` (budget-editor and edit-recurring migrated onto it) and
+  `ColorPicker`/`IconPicker` (category-editor migrated) once the new editors made 3+ copies.
+  `CategoryBadge` now accepts anything with `icon` + `color`, not only a `Category`.
+- Verified live in the Browser pane: goal create/contribute, debt create + plan recompute on extra
+  payment, asset create + net worth math, set-pin two-step, lock on reload, wrong-PIN error, unlock.
+- **Payoff chart (same-day follow-up, per feedback):** `components/debt-payoff-chart.tsx`, a stacked
+  balance-over-time graph inside the Debts summary card — one band per debt in attack order (target
+  on top, each melting to zero at its payoff month), a dashed "minimums only" comparison line, and a
+  press-and-drag readout of any month's total and per-debt balances. `lib/debts.ts#simulatePayoff`
+  now returns the month-by-month `schedule` + attack `order`, and a new `simulateMinimumsOnly`
+  shares the same simulation with rollover off; a "Minimums only: N months, $X in interest" caption
+  sits under the plan result. New goals/debts/accounts default to the next unused palette color so
+  stacked bands stay distinguishable. Redesigned the same day after a real 3-debt, 25-year plan on a
+  phone read as a flat wedge with dotted fragments: dollar gridlines with `$20k`-style labels, year
+  ticks scaled to the plan's length, gradient-filled bands with card-colored edges, a proper dashed
+  minimums-only line, and the simulation no longer truncates a stalled baseline early.
+- **No em dashes in UI copy** (per feedback that they read as AI-written): every user-facing string
+  swept; recorded as a Coding Standards rule in CLAUDE.md.
+
 ## 2026-09-01 — Transactions Calendar: un-pinned the grid, milder Month cell condense
 
 - Per feedback, Month/Week/Year's Calendar page no longer pins its grid above a separate inner scroll

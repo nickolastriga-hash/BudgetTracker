@@ -13,6 +13,7 @@ import { SegmentedControl } from '@/components/segmented-control';
 import { SettingsButton } from '@/components/settings-button';
 import { ThemedText } from '@/components/themed-text';
 import { TransactionRow } from '@/components/transaction-row';
+import { TrendsCard } from '@/components/trends-card';
 import { BottomTabInset, CardRadius, CardShadow, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { effectiveLimit, getBudgetProgress, getBudgets, type Budget, type BudgetProgress } from '@/lib/budgets';
@@ -46,7 +47,7 @@ function computeDelta(
   if (current === 0 && previous === 0) return null;
   if (previous === 0) return { label: 'New', tone: 'neutral' };
   const diff = current - previous;
-  if (diff === 0) return { label: '—', tone: 'neutral' };
+  if (diff === 0) return { label: '0%', tone: 'neutral' };
   const pct = Math.round((Math.abs(diff) / Math.abs(previous)) * 100);
   const arrow = diff > 0 ? '▲' : '▼';
   const tone: 'positive' | 'negative' = (goodDirection === 'up') === (diff > 0) ? 'positive' : 'negative';
@@ -312,6 +313,12 @@ export default function HomeScreen() {
   // pages doesn't clear whatever was tapped on the other one.
   const [selectedExpenseKey, setSelectedExpenseKey] = useState<string | null>(null);
   const [selectedIncomeKey, setSelectedIncomeKey] = useState<string | null>(null);
+  // While a TrendsCard chart is being scrubbed, the outer vertical
+  // ScrollView is disabled for the drag's duration — same reason TrendsCard
+  // disables its own horizontal pager (see CumulativeTrendChart). The old
+  // Trends tab avoided a vertical ScrollView altogether for this; Home can't,
+  // so it toggles scrollEnabled instead.
+  const [isScrubbing, setIsScrubbing] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -482,6 +489,7 @@ export default function HomeScreen() {
       </View>
 
       <ScrollView
+        scrollEnabled={!isScrubbing}
         contentContainerStyle={[
           styles.content,
           { paddingTop: Spacing.three, paddingBottom: insets.bottom + BottomTabInset + Spacing.six },
@@ -612,6 +620,23 @@ export default function HomeScreen() {
               </ThemedText>
             </View>
           )}
+        </View>
+
+        {/* The former Trends tab, as a card (2026-09-13 — its tab slot went
+            to Wealth). Reads Home's own navigated range, so it has no range
+            nav of its own and no Custom option the tab used to offer. */}
+        <View style={styles.section}>
+          <ThemedText type="small" themeColor="textSecondary" style={styles.sectionTitle}>
+            TRENDS
+          </ThemedText>
+          <TrendsCard
+            transactions={transactions}
+            budgets={budgets}
+            categories={categories}
+            start={start}
+            end={end}
+            onScrubbingChange={setIsScrubbing}
+          />
         </View>
 
         {expenseBudgetProgress.length > 0 && (

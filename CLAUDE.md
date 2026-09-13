@@ -7,8 +7,9 @@
 A single-user, offline-first budget tracking app built with Expo Router. Users log expense/income
 transactions against a fixed set of categories, set optional monthly spending limits per category,
 and can mark a transaction as recurring monthly (e.g. rent, subscriptions) so it's regenerated
-automatically each month. Five tabs (Home/Transactions/Calendar/Budgets/Trends — Trends added
-2026-08-30, Calendar split out of Transactions 2026-09-10, see their own bullets below), each opening
+automatically each month. Five tabs (Home/Transactions/Calendar/Budgets/Wealth — Calendar split out of Transactions
+2026-09-10; Wealth took the 5th slot 2026-09-13 from Trends, whose content became a card on Home — see
+the "Five tabs is the ceiling" convention bullet below for why a 6th tab wasn't an option), each opening
 with a `ScreenHeader` title (added 2026-08-26,
 `components/screen-header.tsx` — 28/700, matching HabitTracker's own per-tab header sizing) plus a
 `SettingsButton` in the header's top-right corner (also 2026-08-26, matching HabitTracker's
@@ -64,17 +65,29 @@ system to show a profile for; opens `app/settings.tsx`, see its own bullet below
   still applies every month by default (see the `effectiveLimit`/`applyLimit` convention bullet
   below for the override/scheduled-change machinery), the nav just lets a past or future month's
   actual spent/earned be reviewed against that limit.
-- **Trends** (added 2026-08-30) — "Trends" header, a Month/Year/Custom range nav (no Week option —
-  see the screen's own convention bullet below), then an Expenses/Income/Net segmented toggle plus a
-  page-dot row, same swipeable-pager pattern as Budgets' and Home's own pagers. Each page is a
-  `CumulativeTrendChart` line — a running daily total of that type's actual transactions across the
-  navigated range — against a flat, dashed budget/goal reference line (see the component's own bullet
-  below) at that period's total budgeted/goal
-  amount (summed from whichever categories actually have a budget/goal set), plus an actual-vs-budget summary
-  row above the chart (a colored total, the budget total, and a green/red over-or-under pill). Net's
-  page derives its line from the other two (`income - expense`, index-for-index) rather than its own
-  transaction scan, and its "budgeted" reference is `incomeBudgetTotal - expenseBudgetTotal`. See the
-  screen's own convention bullet below for the full mechanics.
+- **Wealth** (added 2026-09-13, replacing the Trends tab — see the "Five tabs is the ceiling"
+  convention bullet below) — "Wealth" header, a Goals/Debts/Net Worth segmented toggle plus a page-dot
+  row and one section label + `+` button that swaps per page (same pinned-header-over-a-pager shape as
+  Budgets), then three pages of one horizontal `pagingEnabled` ScrollView. **Goals**: a "Total saved"
+  summary card (goals-reached pill) above every `SavingsGoal` row — icon badge, saved/target, a
+  "by <month> · $X/mo" pacing line when a deadline is set, a progress bar that goes success-green at
+  100% (`ProgressBar type="income"` semantics). Tap a row → `goal-editor.tsx`. **Debts**: a "Total owed"
+  card carrying the payoff planner — a Snowball/Avalanche toggle and an "Extra per month" field (both
+  persisted via `lib/debts.ts#savePlanSettings`), with the simulated result ("Debt-free Oct 2027 · 14
+  months · $444 in interest", or a red "payments don't outrun the interest" warning), a "Minimums
+  only: N months, $X in interest" caption whenever paying minimums would be slower, and a
+  `DebtPayoffChart` (stacked per-debt balance bands melting to zero, a dashed minimums-only line,
+  press-and-drag readout — see its own Folder Structure entry) — above every `Debt` row (balance,
+  APR, minimum, projected payoff month, a paid-down progress bar). Tap a row → `debt-editor.tsx`.
+  New goals/debts/accounts default to the next unused `CATEGORY_COLORS` slot rather than always the
+  same swatch (offset per kind: red for debts, green for goals, blue for accounts), since the payoff
+  chart stacks by color and two debts left on one default were indistinguishable there. **Net Worth**: a hero card (assets − liabilities, signed, a date-positioned
+  `NetWorthChart` line once ≥2 history snapshots exist) above ASSETS and LIABILITIES groups; the
+  liabilities group merges manual liability `Account`s with every tracked `Debt` (tagged "From Debts",
+  tapping one opens the debt editor) so a card on the Debts page isn't entered twice. Each `Add` link /
+  the pinned `+` → `account-editor.tsx`. The former Trends content (an Expenses/Income/Net pager of
+  `CumulativeTrendChart`s) lives on Home now as `components/trends-card.tsx` — see the "Trends tab"
+  convention bullet below, whose mechanics still apply.
 All data is local — `AsyncStorage` only, no accounts, no sync. That's a deliberate v1 scope
 decision, not an oversight; see [TODO.md](TODO.md) for what's intentionally deferred.
 
@@ -133,6 +146,14 @@ fighting the compiler's own memoization rather than helping).
 - **react-native-svg** for Home's dashboard card (`CategoryRingChart`) and Trends' own
   `CumulativeTrendChart` (added 2026-08-30).
 - **AsyncStorage** (`@react-native-async-storage/async-storage`) as the only persistence layer.
+- **expo-local-authentication + expo-crypto** (added 2026-09-13) for the optional app lock —
+  biometrics are the device's own, the PIN is a salted SHA-256 in AsyncStorage; see `lib/app-lock.ts`.
+  `app.json` carries the `expo-local-authentication` config plugin with a `faceIDPermission` string
+  (`NSFaceIDUsageDescription` — without it iOS silently falls back to the device passcode).
+- **expo-file-system (the `File`/`Paths` API, not `/legacy`) + expo-sharing + expo-document-picker**
+  (added 2026-09-13) for JSON backup/restore — see `lib/backup.ts`. On web, backup is a Blob download
+  and restore reads the picked `File` directly; neither sharing nor the native `File` class is touched
+  there.
 - **@expo/vector-icons** (`MaterialIcons`) for all icons — category icons, tab icons (via
   `NativeTabs.Trigger.VectorIcon` on native, plain `<MaterialIcons>` in the web tab bar), and UI
   chrome. iOS tab icons additionally use SF Symbols via the `sf` prop.
@@ -142,6 +163,11 @@ fighting the compiler's own memoization rather than helping).
 
 ## Coding Standards
 
+- **No em dashes (`—`) in user-facing copy** (2026-09-13, per explicit feedback that they read as
+  AI-written). Use a comma, a period, a colon, parentheses, or the app's existing `·` separator for
+  label-style joins ("Monthly · next Sep 25", "by Mar 2027 · $642.86/mo"); a bare `-` for empty-cell
+  placeholders. Code comments and docs are fine. Every UI string was swept clean the same day, so a
+  new `—` in JSX text or a string literal is a regression, not a style choice.
 - **No comments unless the *why* is non-obvious.** Keep it to short comments justifying a decision
   (e.g. why writes are queued, why recurring generation is batched by month).
 - **No premature abstraction.** Small helpers like `toMonthStr`/`toDateStr` are redefined per file
@@ -202,9 +228,18 @@ src/
                           No filter; loads transactions/categories itself on
                           focus, same as every other tab.
       budgets.tsx         Budgets
-      trends.tsx           Trends (added 2026-08-30) — Expense/Income/Net
-                          swipeable pager of CumulativeTrendChart lines, see
-                          the "Trends tab" convention bullet below.
+      wealth.tsx           Wealth (added 2026-09-13, in the tab slot Trends
+                          used to hold — trends.tsx is gone, its content is
+                          components/trends-card.tsx on Home). Goals/Debts/
+                          Net Worth pager; loads goals, debts, plan
+                          settings, accounts, and net-worth history on
+                          focus and records a net-worth snapshot for today
+                          on every load (see lib/net-worth.ts). Owns a
+                          small NetWorthChart (react-native-svg Polyline,
+                          x positioned by snapshot date — deliberately not
+                          CumulativeTrendChart, which assumes a fixed daily
+                          domain and a target line). See the "Wealth tab"
+                          bullet in Project Overview.
     add-transaction.tsx   Add/edit modal — type toggle, amount, category grid,
                           a self-contained calendar-panel date picker (capped at
                           today), optional note, and a Repeat card (new
@@ -310,9 +345,126 @@ src/
                           the Transactions tab's Recurring page (see
                           (tabs)/transactions.tsx above and the "A standalone
                           Bills tab" convention bullet below); nothing in
-                          Settings duplicates it any more.
+                          Settings duplicates it any more. Gained a
+                          "SECURITY" section (2026-09-13: an App lock Switch
+                          — on routes through set-pin.tsx, off is immediate
+                          — plus, once enabled, a "Use Face ID/Fingerprint"
+                          Switch when the device has enrolled biometrics and
+                          a "Change PIN" row) and a "DATA" section (Back up
+                          to file / Restore from file, the latter two-tap;
+                          both via lib/backup.ts). `SettingsRow` takes an
+                          optional `right` node that replaces its chevron —
+                          how the Switch rows are built.
+    goal-editor.tsx        Add/edit a SavingsGoal (2026-09-13), reached from
+                          Wealth's Goals page. Own EditorHeader (see
+                          components/editor-header.tsx), name, target
+                          amount, an optional deadline (a Switch revealing a
+                          year-nav + 12-month grid, same shape as
+                          budget-editor's), then the shared ColorPicker/
+                          IconPicker. Edit mode adds a progress card, an
+                          "ADD MONEY" row (amount + green add / red
+                          withdraw buttons — a withdrawal is a negative
+                          contribution) with a contribution list (× removes
+                          one), and a two-tap Delete. Contributions reload
+                          just the goal record (`reloadGoal`), not the form
+                          fields, so unsaved edits survive.
+    debt-editor.tsx        Add/edit a Debt (2026-09-13), from Wealth's Debts
+                          page or a "From Debts" liability row. Name,
+                          current balance, starting balance (optional —
+                          blank means "same as current"; saving clamps it to
+                          at least the current balance so paydown never
+                          reads negative), APR %, minimum/month, color, icon.
+                          Edit mode adds a paid-down card, a "RECORD A
+                          PAYMENT" row (reduces the balance via
+                          lib/debts.ts#recordPayment — deliberately doesn't
+                          log a transaction, see that module's comment), and
+                          a two-tap Delete.
+    account-editor.tsx     Add/edit a net-worth Account (2026-09-13). An
+                          Asset/Liability SegmentedControl (preset by
+                          `?kind=` from the Net Worth page's per-section Add
+                          links; the pinned + opens it as asset), name,
+                          balance, color, icon, two-tap Delete.
+    set-pin.tsx            Two-step PIN entry (choose, confirm) over the
+                          shared PinPad (2026-09-13). Reached from Settings'
+                          App lock Switch (turning on) and Change PIN row
+                          (`?mode=change`); a mismatch restarts from step 1.
+                          Calls lib/app-lock.ts#setPin then
+                          useAppLock().refresh() so the Switch flips only
+                          once a PIN actually exists.
 
   lib/
+    goals.ts                SavingsGoal CRUD + contributions (2026-09-13),
+                          same write-queue shape as budgets.ts. A goal's
+                          "saved" is the sum of its hand-entered
+                          contributions, not derived from transactions —
+                          money set aside isn't an expense, and the ledger
+                          deliberately doesn't model transfers.
+                          `goalProgress` computes saved/remaining/percent
+                          plus monthsLeft (counting the current month, so a
+                          goal due this month has 1 left, 0 once past) and
+                          neededPerMonth off an optional `targetMonth`.
+    debts.ts                Debt CRUD + `recordPayment` + the payoff planner
+                          (2026-09-13). `simulatePayoff(debts, settings)` is
+                          a month-by-month amortization: interest accrues at
+                          apr/12, every debt gets its minimum, and the rest
+                          of a fixed budget (sum of *all* minimums + the
+                          extra — a paid-off debt's minimum rolls into the
+                          next target, the snowball idea) goes to the
+                          strategy's target (snowball: smallest balance
+                          first; avalanche: highest APR). Returns months,
+                          total interest, debt-free month, per-debt payoff
+                          months, and `unreachable` when a month ends with
+                          more owed than it started (payments < interest) —
+                          capped at 600 months either way. Also returns
+                          `order` (the attack order) and a `schedule` of
+                          PayoffMonth entries — index 0 is today before any
+                          payment, index i ≥ 1 the end of month i-1 after
+                          its interest and payment, each with per-debt
+                          balances and the total — which is what
+                          DebtPayoffChart draws. The simulation itself is
+                          one private `run(order, budget, rollover, start)`
+                          shared with `simulateMinimumsOnly(debts,
+                          strategy)`, the chart's comparison baseline: every
+                          debt pays only its own minimum, no extra, no
+                          rollover (what actually happens to someone paying
+                          statement minimums). Strategy + extra persist
+                          separately under '@budgettracker/debt-plan'
+                          (`getPlanSettings`/`savePlanSettings`).
+    net-worth.ts            Account CRUD (kind: asset | liability) + a
+                          NetWorthSnapshot history (2026-09-13). History is
+                          recorded lazily by the Wealth screen on load
+                          (`recordNetWorthSnapshot` — replaces a same-day
+                          point, skips one identical to the previous point)
+                          rather than by every balance write, same on-read
+                          spirit as generateDueTransactions. Doesn't import
+                          debts.ts — the screen merges debts into
+                          liabilities itself — so the two write-queues stay
+                          independent.
+    app-lock.ts             App-lock config (2026-09-13): `enabled`, a
+                          random-UUID `salt`, `pinHash` (SHA-256 of
+                          `${salt}:${pin}` via expo-crypto), `useBiometrics`.
+                          Hashing is honesty, not security — a 4-digit PIN
+                          is brute-forceable offline in milliseconds; the
+                          threat model is a picked-up phone, not extracted
+                          storage. Exports APP_LOCK_STORAGE_KEY so backup.ts
+                          can exclude it.
+    backup.ts               JSON backup/restore (2026-09-13). Enumerates every
+                          '@budgettracker/*' AsyncStorage key by prefix
+                          (values kept as raw JSON strings) minus two
+                          device-level ones — the app-lock config and the
+                          theme preference — so a new lib module's key is
+                          included the moment it exists, no hand-kept list.
+                          `parseBackup` validates shape/version/per-entry
+                          JSON with user-readable errors; `restoreBackup`
+                          replaces (removes every current data key first,
+                          then multiSet), never merges. `exportBackup`:
+                          native writes `Paths.cache/budgettracker-backup-
+                          <date>.json` and hands it to expo-sharing; web
+                          triggers a Blob download. `importBackup`: expo-
+                          document-picker with type '*/*' (some Android
+                          pickers mis-type .json and would hide it), text
+                          read via the native `File` class or the web
+                          `File` object.
     date-range.ts           Week/Month/Year/Custom range machinery (RangeType,
                           CustomRange, rangeBounds, shiftAnchor,
                           shiftCustomRange, daysBetween, monthsBetween, plus
@@ -549,6 +701,89 @@ src/
                           per-month density grew much larger.
 
   components/
+    debt-payoff-chart.tsx    DebtPayoffChart (2026-09-13, same-day follow-up
+                          per feedback that the snowball calculator needed
+                          a graph) — balance-over-time for a PayoffPlan:
+                          one stacked react-native-svg Polygon band per
+                          debt in the plan's attack order, stacked bottom-
+                          up in *reverse* so the current target is the top
+                          band and the top edge is the total owed (each
+                          band melts to nothing at its payoff month rather
+                          than layers above it dropping when one below
+                          vanishes), a dashed "minimums only" Polyline over
+                          the same months (drawn only across the plan's
+                          own domain — the baseline still owing at the
+                          right edge is exactly the comparison it exists
+                          to make), and a press-and-drag callout (month,
+                          total left, per-debt balances, minimums-only
+                          figure). Touch layer / measureInWindow / pager-
+                          disabling via onScrubStart/onScrubEnd are copied
+                          from CumulativeTrendChart, not shared — see that
+                          file for the reasoning; wealth.tsx wires the
+                          callbacks to `scrollEnabled={!isScrubbing}` on
+                          both its horizontal pager and the Debts page's
+                          own vertical ScrollView (same fix Home uses for
+                          TrendsCard). Sits inside the Debts summary card
+                          with a color legend; hidden while the plan is
+                          unreachable. **Redesigned the same day per
+                          feedback** (a real 3-debt, 25-year plan on a
+                          phone read as one flat featureless wedge with
+                          dotted fragments): the chart now draws its own
+                          axes — dollar gridlines at a 1/2/5×10ⁿ "nice"
+                          step with `$20k`-style labels, the axis top
+                          rounded up to that step, and calendar ticks
+                          under the plot (quarters / half-years / years /
+                          every 2 or 5 years depending on how many months
+                          the plan spans, labels skipped where they'd crowd
+                          the fixed "Today"/end labels); bands fill with a
+                          per-debt top-to-bottom gradient (0.95→0.6 alpha,
+                          ids namespaced via useId like CumulativeTrendChart)
+                          and each band's top edge is stroked in the card
+                          color so two same-colored debts still separate;
+                          the minimums-only line is a real dash
+                          (`5,4`), not the `0.5,6` round-cap dots that
+                          rendered as disconnected specks. `lib/debts.ts#
+                          run` no longer stops at the first stalled month —
+                          it keeps filling the schedule to MAX_MONTHS and
+                          just flags `unreachable`, so the baseline always
+                          spans the plan's own months instead of
+                          flat-lining at a truncated value. Height 200.
+    trends-card.tsx          TrendsCard (2026-09-13) — everything the Trends
+                          tab used to render below its range nav (the
+                          Expenses/Income/Net toggle + dots, the three-page
+                          pager, TrendPanel, budgetTotalForRange,
+                          cumulativePoints, formatSigned), moved verbatim
+                          minus the manual useMemo wrappers (React Compiler
+                          — see Tech Stack). Takes transactions/budgets/
+                          categories/start/end from Home plus an
+                          `onScrubbingChange` callback Home wires to its
+                          outer ScrollView's `scrollEnabled`. See the
+                          "Trends tab" convention bullet.
+    editor-header.tsx        EditorHeader({title, badge?}) (2026-09-13) — the
+                          own-header-with-X shape every `headerShown: false`
+                          editor modal uses; extracted once goal/debt/
+                          account editors would've been copies 3-5 of
+                          budget-editor's inline version (budget-editor and
+                          edit-recurring migrated onto it the same day). The
+                          X carries accessibilityLabel="Close".
+    icon-color-picker.tsx    ColorPicker + IconPicker + resolveIcon
+                          (2026-09-13) — category-editor's swatch row and
+                          AI-suggested/manual-grid icon picker, extracted for
+                          the same 3+-copies reason; category-editor uses
+                          them now too. `IconPicker` value `null` means auto
+                          (follows the name via suggestCategoryIcon), so
+                          callers hold `CategoryIcon | null` and save
+                          `resolveIcon(value, name)`.
+    pin-pad.tsx              PinPad (2026-09-13) — 4 dots + a 3×4 keypad,
+                          shared by the lock screen and set-pin.tsx; a
+                          `bottomLeft` slot is where the lock screen puts its
+                          biometric button. PIN_LENGTH = 4.
+    lock-screen.tsx          LockScreen (2026-09-13) — absolute-fill overlay
+                          the root layout renders as a sibling above the
+                          Stack (not a route), null while unlocked. Prompts
+                          biometrics once per lock via a ref guard (reset
+                          when `locked` flips off), else PIN entry with an
+                          "Incorrect PIN" state.
     range-picker-modal.tsx   RangePickerModal (extracted 2026-08-30 from Home/
                           Transactions' own near-identical copies once Trends
                           became a 3rd — see the "Custom date range" and
@@ -863,6 +1098,23 @@ src/
                           against this app's actual background once the two
                           can differ. Set from Settings — see that screen's
                           own bullet above.
+  hooks/use-app-lock.tsx   AppLockProvider + useAppLock() (2026-09-13) —
+                          owns enabled/locked/biometricsAvailable/
+                          biometricLabel/useBiometrics plus refresh,
+                          unlockWithPin, unlockWithBiometrics,
+                          setUseBiometrics, disable. Mounted from
+                          src/app/_layout.tsx inside ThemePreferenceProvider.
+                          Locks on cold start when a PIN exists, and on
+                          AppState 'active' after ≥30s in 'background' —
+                          only 'background', never 'inactive', because iOS
+                          goes inactive for the biometric prompt itself (and
+                          Control Center etc.) and re-locking on that would
+                          loop. `authenticateAsync` runs with
+                          `disableDeviceFallback: true` — the app has its
+                          own PIN fallback, and the OS passcode sheet would
+                          be a third way in this app never verified.
+                          expo-local-authentication's web shim reports no
+                          hardware, so web is PIN-only with no branch.
 ```
 
 ## Important Conventions
@@ -1299,7 +1551,44 @@ src/
   yet** — there's no drag-and-drop anywhere in this app. If one gets added, read HabitTracker's
   `CLAUDE.md` "Home habit reordering" bullet first; it documents a real, hard-won lesson about
   animating a transform over many native list children.
-- **Trends tab (added 2026-08-30)** — a 4th tab, `app/(tabs)/trends.tsx`, showing cumulative actual
+- **Five tabs is the ceiling (2026-09-13)** — Expo's `NativeTabs` hard-caps Android at 5 tabs (the
+  docs say so outright) and iOS's `UITabBarController` shoves a 6th into an automatic "More…" tab on
+  iPhone. So when Savings Goals / Debt Payoff / Net Worth needed a home, a 6th tab wasn't an option;
+  per explicit choice, **Wealth took Trends' slot** and Trends' content became a card on Home rather
+  than folding Calendar back into Transactions (a decision already made the other way 2026-09-10) or
+  cramming Budgets to five pages. If a further top-level area ever comes up, the same constraint
+  applies: something has to move into a card or a modal, not a 6th tab.
+- **Wealth tab data is hand-entered, not derived from transactions (2026-09-13)** — a goal's saved
+  amount is its contributions, a debt's balance is whatever was last typed or paid down via "Record a
+  payment", an account's balance is updated by hand. That's deliberate for an offline app with no bank
+  sync: setting money aside isn't an expense, a card payment is already logged as whatever it bought,
+  and a loan payment splits into principal/interest the ledger can't see. The one cross-link is Net
+  Worth counting every Debt as a liability automatically (merged on the screen, not in lib) so a card
+  isn't entered twice. Net-worth history is sampled lazily whenever the Net Worth page loads (one
+  point per day something changed), not on every balance write — same on-read spirit as
+  generateDueTransactions.
+- **App lock (2026-09-13)** — off by default; Settings' App lock Switch routes through `set-pin.tsx`
+  (the toggle only reads on once a PIN exists) and turning it off is immediate, since the session
+  already got past the lock screen. Face ID/Touch ID/fingerprint when the device has enrolled
+  biometrics (a per-device sub-toggle, default on), PIN otherwise or as fallback. Re-locks after 30s in
+  the background, not on `inactive` — see `hooks/use-app-lock.tsx`'s Folder Structure entry for why
+  that distinction is load-bearing on iOS. The lock config never leaves the device: `lib/backup.ts`
+  excludes it from exports and restores.
+- **Backup/restore is replace, not merge (2026-09-13)** — the file becomes the whole truth for every
+  data key, including ones it doesn't mention. Per explicit choice over a merge, which would double up
+  data the way repeated demo-data runs already do. Two-tap confirm on Restore in Settings, and the
+  subtitle tells the user to back up first. Keys are enumerated by the '@budgettracker/' prefix at
+  runtime, so any new lib module's storage is covered without touching backup.ts — the only thing to
+  remember when adding a device-level setting (like the theme preference) is to add its key to
+  backup.ts's `EXCLUDED_KEYS`.
+- **Trends moved into Home as `TrendsCard` (2026-09-13)** — the bullet below still describes the
+  chart mechanics accurately; what changed: it reads Home's own Month/Year range (so no Week, and the
+  Custom option the tab used to offer is gone with it), sits in a "TRENDS" section between the
+  dashboard card and the budgets list, and the "No vertical scrolling" sub-bullet no longer applies —
+  Home *is* a vertical ScrollView, so it toggles `scrollEnabled={!isScrubbing}` for the drag's
+  duration via the card's `onScrubbingChange`, the same trick the card's own horizontal pager uses.
+- **Trends tab (added 2026-08-30; a Home card since 2026-09-13, see above)** — was a tab,
+  `app/(tabs)/trends.tsx`, showing cumulative actual
   spend/income against budgeted/goal totals over time. Range nav is Month/Year/Custom only (no Week —
   a 7-day cumulative-budget chart reads as less meaningful than a month or year one; the shared
   `RangePickerModal` still supports all four rangeTypes generically, this screen's own segmented

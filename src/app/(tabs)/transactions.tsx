@@ -260,7 +260,7 @@ function RecurringRow({
           </ThemedText>
           <View style={styles.recurringSubtitleRow}>
             <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.recurringSubtitleText}>
-              {frequencyLabel(item)} — next {shortDateLabel(localDateFromStr(nextDueDate(item)))}
+              {frequencyLabel(item)} · next {shortDateLabel(localDateFromStr(nextDueDate(item)))}
             </ThemedText>
             {duePillLabel && (
               <View style={[styles.duePill, { backgroundColor: theme.accent + '26' }]}>

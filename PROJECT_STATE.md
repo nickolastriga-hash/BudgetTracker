@@ -1,10 +1,27 @@
 # Project State
 
-_Last updated: 2026-09-01_
+_Last updated: 2026-09-13_
 
 Snapshot of where the app stands. History: [CHANGELOG.md](CHANGELOG.md). Upcoming: [TODO.md](TODO.md).
 
 ## What's implemented
+
+- **Wealth tab, app lock, JSON backup/restore (2026-09-13)** — picked off a comparison against the
+  App Store's top budgeting apps (YNAB, Monarch, Copilot, PocketGuard, Rocket Money), filtered to what
+  fits an offline, no-bank-sync app. A new 5th tab, **Wealth** (Goals / Debts / Net Worth pager, same
+  pinned-header shape as Budgets) replaced Trends, since `NativeTabs` caps Android at 5 tabs and iOS
+  overflows a 6th into "More…" — Trends' Expense/Income/Net cumulative charts moved into a Home card
+  (`components/trends-card.tsx`) on Home's own Month/Year range. Savings goals (target, optional
+  deadline, hand-entered contributions, $/mo pacing), a debt payoff planner (snowball/avalanche + extra
+  per month, month-by-month amortization giving debt-free date, total interest, per-debt payoff
+  months, plus a stacked balance-over-time chart with a dashed minimums-only comparison and a
+  press-and-drag month readout), and net worth (manual assets/liabilities, every tracked debt counted
+  automatically, a lazily-sampled history line) — all hand-entered by design, see CLAUDE.md's "Wealth tab data is
+  hand-entered" bullet. **App lock**: Face ID/Touch ID/fingerprint with a 4-digit PIN fallback, off by
+  default, re-locks after 30s backgrounded, a full-screen overlay above the Stack. **Backup/restore**:
+  one JSON file of every data key (lock config and theme preference excluded), restore replaces with a
+  two-tap confirm. Shared `EditorHeader` and `ColorPicker`/`IconPicker` components came out of it
+  (3+ copies). Verified live in the Browser pane end to end on the web build.
 
 - **Ring chart stray-dot bug fixed, ring center auto-shrinks, budget month grid taller (2026-09-01)**
   — `CategoryRingChart`: a segment computing to `dash: 0` (e.g. a grouped "Other" wedge left with

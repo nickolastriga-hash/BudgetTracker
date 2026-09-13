@@ -34,7 +34,19 @@ transactions, all local-only. Deliberately deferred:
   name — an AsyncStorage-backed preference, defaulting to `'system'` (the old always-follows-OS
   behavior), with `'light'`/`'dark'` pinning it. Set from Settings' new "APPEARANCE" section. See
   CLAUDE.md's `hooks/use-theme-preference.tsx` and Settings bullets.
-- **Export / CSV** — no data export yet.
+- **Export / CSV** — no *CSV* export yet. A full JSON backup/restore landed 2026-09-13 (Settings →
+  DATA, `lib/backup.ts`) — that's for not losing data, not for spreadsheets; a per-transaction CSV for
+  reporting is still open.
+- **Wealth follow-ups (2026-09-13)** — savings goals, debt payoff planner, and net worth are all
+  hand-entered (see CLAUDE.md's "Wealth tab data is hand-entered" bullet). Open ideas, none started:
+  a goal contribution optionally logging a matching transaction; a debt payment doing the same; net
+  worth history sampled on a schedule rather than only when the page opens; a Home card summarizing
+  Wealth (net worth headline + goals/debts one-liners).
+- **Trends lost its Custom range** — with Trends now a card on Home (Month/Year only), the
+  Week/Custom range types the old tab could show are gone. Revisit if a custom-range cumulative chart
+  is missed.
+- **App lock is PIN-only on web** — expo-local-authentication's web shim reports no hardware, so the
+  biometric row never shows there. Fine for the dev-fallback web build; not worth a WebAuthn path.
 - ~~**No standalone Recurring management screen**~~ — done (2026-09-03), moved twice on 2026-09-10:
   started as `app/recurring.tsx`, a modal reached via a "RECURRING" section in Settings; briefly a
   5th "Bills" tab; now the **Recurring page** of the Transactions tab's List/Calendar/Recurring pager

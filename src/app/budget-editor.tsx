@@ -5,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CategoryBadge } from '@/components/category-badge';
+import { EditorHeader } from '@/components/editor-header';
 import { ThemedText } from '@/components/themed-text';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -112,20 +113,10 @@ export default function BudgetEditorScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      <View style={[styles.header, { paddingTop: insets.top + Spacing.two, borderBottomColor: theme.border }]}>
-        <View style={styles.headerTitleGroup}>
-          <CategoryBadge category={category} size={30} type={isIncome ? 'income' : 'expense'} />
-          <ThemedText type="default" style={styles.headerTitle}>
-            {category.name}
-          </ThemedText>
-        </View>
-        <Pressable
-          onPress={() => router.back()}
-          hitSlop={10}
-          style={[styles.closeButton, { backgroundColor: theme.backgroundElement }]}>
-          <MaterialIcons name="close" size={20} color={theme.text} />
-        </Pressable>
-      </View>
+      <EditorHeader
+        title={category.name}
+        badge={<CategoryBadge category={category} size={30} type={isIncome ? 'income' : 'expense'} />}
+      />
 
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + Spacing.six }]}>
         <View>
@@ -163,7 +154,7 @@ export default function BudgetEditorScreen() {
               <MaterialIcons name="chevron-left" size={22} color={theme.accent} />
             </Pressable>
             <ThemedText type="small" themeColor="textSecondary">
-              Tap a month to set its starting point — {calendarYear}
+              Tap a month to set its starting point ({calendarYear})
             </ThemedText>
             <Pressable hitSlop={10} onPress={() => setCalendarYear((y) => y + 1)}>
               <MaterialIcons name="chevron-right" size={22} color={theme.accent} />
@@ -191,7 +182,7 @@ export default function BudgetEditorScreen() {
                       <ThemedText type="small" themeColor="textSecondary">
                         {monthShort(monthStr)}
                       </ThemedText>
-                      <ThemedText type="smallBold">{limit != null && limit > 0 ? formatCompact(limit) : '—'}</ThemedText>
+                      <ThemedText type="smallBold">{limit != null && limit > 0 ? formatCompact(limit) : '-'}</ThemedText>
                     </Pressable>
                   );
                 })}
@@ -229,30 +220,6 @@ export default function BudgetEditorScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.three,
-    paddingBottom: Spacing.two,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  headerTitleGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.two,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  closeButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   content: {
     paddingHorizontal: Spacing.three,
     paddingTop: Spacing.three,

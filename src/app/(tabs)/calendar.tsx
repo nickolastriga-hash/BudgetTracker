@@ -519,7 +519,7 @@ function YearCalendarView({
                       )}
                       {expense === 0 && income === 0 && (
                         <ThemedText type="small" themeColor={isSelected ? 'text' : 'textTertiary'}>
-                          —
+                          -
                         </ThemedText>
                       )}
                     </View>

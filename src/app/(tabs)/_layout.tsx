@@ -46,12 +46,12 @@ export default function TabLayout() {
         <NativeTabs.Trigger.Label>Budgets</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="trends">
+      <NativeTabs.Trigger name="wealth">
         <NativeTabs.Trigger.Icon
-          sf="chart.line.uptrend.xyaxis"
-          src={<NativeTabs.Trigger.VectorIcon family={MaterialIcons} name="show-chart" />}
+          sf="dollarsign.circle.fill"
+          src={<NativeTabs.Trigger.VectorIcon family={MaterialIcons} name="account-balance-wallet" />}
         />
-        <NativeTabs.Trigger.Label>Trends</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Label>Wealth</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
     </NativeTabs>
   );

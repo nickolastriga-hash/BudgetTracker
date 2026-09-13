@@ -10,7 +10,10 @@ export function CategoryBadge({
   color,
   type,
 }: {
-  category: Category;
+  // Anything with an icon + color — a Category, or a SavingsGoal/Debt/Account
+  // (lib/goals, lib/debts, lib/net-worth), which reuse the same icon/color
+  // picker and badge look.
+  category: Pick<Category, 'icon' | 'color'>;
   size?: number;
   // Overrides the category's own color — for contexts where the type
   // (expense/income) should read as the standardized red/green rather than
