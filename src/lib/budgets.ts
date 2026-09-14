@@ -1,6 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { getCategory, type Category, type CategoryType } from '@/lib/categories';
+// Type-only on purpose: categories.ts imports removeBudget from here (for
+// deleteCategory), so a value import back the other way would be a runtime
+// cycle.
+import type { Category, CategoryType } from '@/lib/categories';
 import { byCategoryTotals, type Transaction } from '@/lib/transactions';
 
 export interface Budget {
@@ -117,7 +120,7 @@ export function getBudgetProgress(
   const spentByCategory = byCategoryTotals(transactions, monthStr, 'expense');
   const earnedByCategory = byCategoryTotals(transactions, monthStr, 'income');
   return budgets.map((b) => {
-    const type = getCategory(categories, b.categoryId)?.type ?? 'expense';
+    const type = categories.find((c) => c.id === b.categoryId)?.type ?? 'expense';
     const spent = (type === 'income' ? earnedByCategory : spentByCategory)[b.categoryId] ?? 0;
     const limit = effectiveLimit(b, monthStr);
     return {

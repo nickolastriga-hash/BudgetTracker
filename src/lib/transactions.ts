@@ -62,6 +62,22 @@ export function deleteTransaction(id: string): Promise<void> {
   });
 }
 
+// Moves every transaction in one category to another — the reassign half of
+// deleting a category (see lib/categories.ts#deleteCategory).
+export function reassignTransactionsCategory(fromId: string, toId: string): Promise<number> {
+  return enqueue(async () => {
+    const transactions = await getTransactions();
+    let moved = 0;
+    const next = transactions.map((t) => {
+      if (t.categoryId !== fromId) return t;
+      moved += 1;
+      return { ...t, categoryId: toId };
+    });
+    if (moved > 0) await saveTransactions(next);
+    return moved;
+  });
+}
+
 export function transactionsForMonth(transactions: Transaction[], monthStr: string): Transaction[] {
   return transactions.filter((t) => t.date.startsWith(monthStr));
 }

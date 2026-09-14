@@ -1,3 +1,4 @@
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
@@ -7,7 +8,17 @@ import { ColorPicker, IconPicker, resolveIcon } from '@/components/icon-color-pi
 import { ThemedText } from '@/components/themed-text';
 import { CardRadius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { addCategory, CATEGORY_COLORS, getCategories, updateCategory, type CategoryIcon } from '@/lib/categories';
+import {
+  addCategory,
+  CATEGORY_COLORS,
+  deleteCategory,
+  getCategories,
+  isFallbackCategory,
+  updateCategory,
+  type CategoryIcon,
+} from '@/lib/categories';
+import { getRecurring } from '@/lib/recurring';
+import { getTransactions } from '@/lib/transactions';
 
 export default function CategoryEditorScreen() {
   const theme = useTheme();
@@ -27,10 +38,14 @@ export default function CategoryEditorScreen() {
   // suggestion instead of being written to state on every keystroke — same
   // pattern as HabitTracker's add-habit icon picker.
   const [icon, setIcon] = useState<CategoryIcon | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  // How much would move to "Other" on delete — shown in the button's own
+  // copy so the reassignment isn't a surprise.
+  const [usage, setUsage] = useState({ transactions: 0, recurring: 0 });
 
   useEffect(() => {
     if (!id) return;
-    getCategories().then((categories) => {
+    Promise.all([getCategories(), getTransactions(), getRecurring()]).then(([categories, transactions, recurring]) => {
       const existing = categories.find((c) => c.id === id);
       if (existing) {
         setName(existing.name);
@@ -40,12 +55,33 @@ export default function CategoryEditorScreen() {
         // as deliberately set rather than re-suggesting from the name.
         setIcon(existing.icon);
       }
+      setUsage({
+        transactions: transactions.filter((t) => t.categoryId === id).length,
+        recurring: recurring.filter((r) => r.categoryId === id).length,
+      });
       setLoaded(true);
     });
   }, [id]);
 
   const displayIcon = resolveIcon(icon, name);
   const canSave = name.trim().length > 0;
+  const canDelete = isEditing && !!id && !isFallbackCategory(id);
+  const otherName = categoryType === 'income' ? 'Other Income' : 'Other';
+  const usageParts = [
+    usage.transactions > 0 && `${usage.transactions} transaction${usage.transactions === 1 ? '' : 's'}`,
+    usage.recurring > 0 && `${usage.recurring} recurring`,
+  ].filter(Boolean);
+  const deleteHint =
+    usageParts.length > 0 ? `${usageParts.join(' and ')} will move to ${otherName}.` : `Nothing uses this category yet.`;
+
+  async function handleDelete() {
+    if (!confirmingDelete) {
+      setConfirmingDelete(true);
+      return;
+    }
+    if (id) await deleteCategory(id);
+    router.back();
+  }
 
   async function handleSave() {
     if (!canSave) return;
@@ -102,6 +138,20 @@ export default function CategoryEditorScreen() {
             Save
           </ThemedText>
         </Pressable>
+
+        {canDelete && (
+          <View style={styles.deleteBlock}>
+            <Pressable onPress={handleDelete} style={styles.deleteButton}>
+              <MaterialIcons name="delete-outline" size={18} color={theme.destructive} />
+              <ThemedText type="small" themeColor="destructive">
+                {confirmingDelete ? 'Tap again to delete' : 'Delete category'}
+              </ThemedText>
+            </Pressable>
+            <ThemedText type="small" themeColor="textTertiary" style={styles.deleteHint}>
+              {deleteHint}
+            </ThemedText>
+          </View>
+        )}
       </ScrollView>
     </>
   );
@@ -129,5 +179,18 @@ const styles = StyleSheet.create({
   },
   saveButtonText: {
     color: '#ffffff',
+  },
+  deleteBlock: {
+    gap: 2,
+  },
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: Spacing.two,
+  },
+  deleteHint: {
+    textAlign: 'center',
   },
 });

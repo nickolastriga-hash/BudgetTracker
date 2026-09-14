@@ -2,12 +2,17 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import type { ComponentProps } from 'react';
 
+import { removeBudget } from '@/lib/budgets';
+import { reassignRecurringCategory } from '@/lib/recurring';
+import { reassignTransactionsCategory } from '@/lib/transactions';
+
 // Categories are AsyncStorage-backed (seeded from DEFAULT_CATEGORIES on first
 // read) rather than a fixed list, so users can add their own and edit any
 // category's icon/color/name — including the seeded defaults, which are
-// just ordinary rows after the first seed, not special-cased. There's no
-// delete yet: Transaction.categoryId/Budget.categoryId are foreign keys with
-// no reassignment UI, see TODO.md.
+// just ordinary rows after the first seed, not special-cased. Deleting one
+// reassigns its transactions/recurring series to that type's "Other"
+// catch-all (see deleteCategory), which is why the two "Other" rows
+// themselves can't be deleted.
 export type CategoryType = 'expense' | 'income';
 export type CategoryIcon = ComponentProps<typeof MaterialIcons>['name'];
 
@@ -102,6 +107,42 @@ export function updateCategory(id: string, data: Partial<Pick<Category, 'name' |
     const categories = await getCategories();
     const next = categories.map((c) => (c.id === id ? { ...c, ...data } : c));
     await saveCategories(next);
+  });
+}
+
+// The seeded catch-all each type's deleted categories fall back to.
+export const FALLBACK_CATEGORY_ID: Record<CategoryType, string> = {
+  expense: 'other_expense',
+  income: 'other_income',
+};
+
+export function isFallbackCategory(id: string): boolean {
+  return id === FALLBACK_CATEGORY_ID.expense || id === FALLBACK_CATEGORY_ID.income;
+}
+
+// Removes a category and moves everything that referenced it onto its
+// type's "Other" catch-all: transactions and recurring series are
+// reassigned (history is kept, just recategorized), while its budget is
+// dropped outright — merging a deleted category's limit into Other's would
+// silently change a number the user never set. Resolves to how many
+// transactions moved, for the UI's own confirmation copy.
+export function deleteCategory(id: string): Promise<number> {
+  return enqueue(async () => {
+    if (isFallbackCategory(id)) throw new Error('The "Other" categories cannot be deleted.');
+    const categories = await getCategories();
+    const target = categories.find((c) => c.id === id);
+    if (!target) return 0;
+    const fallbackId = FALLBACK_CATEGORY_ID[target.type];
+    if (!categories.some((c) => c.id === fallbackId)) {
+      throw new Error('The "Other" category this would move into is missing.');
+    }
+    const [moved] = await Promise.all([
+      reassignTransactionsCategory(id, fallbackId),
+      reassignRecurringCategory(id, fallbackId),
+      removeBudget(id),
+    ]);
+    await saveCategories(categories.filter((c) => c.id !== id));
+    return moved;
   });
 }
 

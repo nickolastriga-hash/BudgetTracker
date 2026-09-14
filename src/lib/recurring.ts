@@ -126,6 +126,16 @@ export function deleteRecurring(id: string): Promise<void> {
   });
 }
 
+// Same reassign-on-delete as transactions.ts — a series keeps generating,
+// just into the fallback category from here on.
+export function reassignRecurringCategory(fromId: string, toId: string): Promise<void> {
+  return enqueue(async () => {
+    const items = await getRecurring();
+    if (!items.some((r) => r.categoryId === fromId)) return;
+    await saveRecurring(items.map((r) => (r.categoryId === fromId ? { ...r, categoryId: toId } : r)));
+  });
+}
+
 // Amount/category/note plus a full RecurringFrequencySpec — the caller
 // always passes a complete spec for whichever frequency the series should
 // have *after* this edit (frequency included), not a sparse patch, so
