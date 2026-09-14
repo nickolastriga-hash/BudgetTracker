@@ -14,11 +14,17 @@ import { SettingsButton } from '@/components/settings-button';
 import { ThemedText } from '@/components/themed-text';
 import { TransactionRow } from '@/components/transaction-row';
 import { TrendsCard } from '@/components/trends-card';
+import { UpcomingBillsCard } from '@/components/upcoming-bills-card';
+import { WealthSummaryCard } from '@/components/wealth-summary-card';
 import { BottomTabInset, CardRadius, CardShadow, MaxContentWidth, Spacing } from '@/constants/theme';
+import { useCurrency } from '@/hooks/use-currency';
 import { useTheme } from '@/hooks/use-theme';
 import { effectiveLimit, getBudgetProgress, getBudgets, type Budget, type BudgetProgress } from '@/lib/budgets';
 import { getCategories, getCategory, type Category } from '@/lib/categories';
 import { monthsBetween, rangeBounds, shiftAnchor, toMonthStr, type RangeType } from '@/lib/date-range';
+import { DEFAULT_PLAN_SETTINGS, getDebts, getPlanSettings, type Debt, type DebtPlanSettings } from '@/lib/debts';
+import { getGoals, type SavingsGoal } from '@/lib/goals';
+import { getAccounts, type Account } from '@/lib/net-worth';
 import { getRecurring, isActiveRecurring, type RecurringTransaction } from '@/lib/recurring';
 import {
   byCategoryTotalsInRange,
@@ -29,9 +35,6 @@ import {
   type TransactionType,
 } from '@/lib/transactions';
 
-function formatAmount(amount: number) {
-  return amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
 
 // Compares this period's figure against the equivalent previous period
 // (previous month/year, per whatever shiftAnchor(-1) resolves to).
@@ -136,6 +139,7 @@ function BreakdownPanel({
   onSelectKey: (key: string | null) => void;
 }) {
   const theme = useTheme();
+  const { format } = useCurrency();
   const selectedOther = selectedKey === RING_OTHER_KEY ? ringSegments.find((s) => s.key === RING_OTHER_KEY) : undefined;
   const selectedCategory =
     selectedKey && selectedKey !== RING_OTHER_KEY ? breakdown.find((e) => e.categoryId === selectedKey) : undefined;
@@ -164,7 +168,7 @@ function BreakdownPanel({
               adjustsFontSizeToFit
               minimumFontScale={0.6}
               style={styles.ringAmount}>
-              ${formatAmount(selectedOther.amount)}
+              {format(selectedOther.amount)}
             </ThemedText>
             <ThemedText
               type="small"
@@ -186,7 +190,7 @@ function BreakdownPanel({
               adjustsFontSizeToFit
               minimumFontScale={0.6}
               style={styles.ringAmount}>
-              ${formatAmount(selectedCategory.amount)}
+              {format(selectedCategory.amount)}
             </ThemedText>
             <ThemedText
               type="small"
@@ -220,7 +224,7 @@ function BreakdownPanel({
               adjustsFontSizeToFit
               minimumFontScale={0.6}
               style={styles.ringAmount}>
-              ${formatAmount(breakdownTotal)}
+              {format(breakdownTotal)}
             </ThemedText>
             <ThemedText
               type="small"
@@ -285,6 +289,7 @@ function BreakdownPanel({
 
 export default function HomeScreen() {
   const theme = useTheme();
+  const { format } = useCurrency();
   const insets = useSafeAreaInsets();
   // No 'custom' or 'week' option here (unlike Transactions'/Trends' own
   // range navs) — both removed per feedback; Home's range nav is Month/Year
@@ -308,6 +313,10 @@ export default function HomeScreen() {
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [recurring, setRecurring] = useState<RecurringTransaction[]>([]);
+  const [goals, setGoals] = useState<SavingsGoal[]>([]);
+  const [debts, setDebts] = useState<Debt[]>([]);
+  const [plan, setPlan] = useState<DebtPlanSettings>(DEFAULT_PLAN_SETTINGS);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [pickerVisible, setPickerVisible] = useState(false);
   // Kept separate per side (rather than one shared selection) so switching
   // pages doesn't clear whatever was tapped on the other one.
@@ -323,12 +332,25 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
-      Promise.all([getTransactions(), getBudgets(), getCategories(), getRecurring()]).then(([t, b, c, r]) => {
+      Promise.all([
+        getTransactions(),
+        getBudgets(),
+        getCategories(),
+        getRecurring(),
+        getGoals(),
+        getDebts(),
+        getPlanSettings(),
+        getAccounts(),
+      ]).then(([t, b, c, r, g, d, p, a]) => {
         if (!cancelled) {
           setTransactions(t);
           setBudgets(b);
           setCategories(c);
           setRecurring(r);
+          setGoals(g);
+          setDebts(d);
+          setPlan(p);
+          setAccounts(a);
         }
       });
       return () => {
@@ -583,7 +605,7 @@ export default function HomeScreen() {
                 </ThemedText>
               </View>
               <ThemedText type="smallBold" themeColor="success">
-                ${formatAmount(totals.income)}
+                {format(totals.income)}
               </ThemedText>
               <DeltaLabel delta={incomeDelta} />
             </View>
@@ -595,7 +617,7 @@ export default function HomeScreen() {
                 </ThemedText>
               </View>
               <ThemedText type="smallBold" themeColor="destructive">
-                ${formatAmount(totals.expense)}
+                {format(totals.expense)}
               </ThemedText>
               <DeltaLabel delta={expenseDelta} />
             </View>
@@ -604,7 +626,7 @@ export default function HomeScreen() {
                 Net
               </ThemedText>
               <ThemedText type="smallBold" themeColor={netPositive ? 'success' : 'destructive'}>
-                ${formatAmount(totals.net)}
+                {format(totals.net)}
               </ThemedText>
               <DeltaLabel delta={netDelta} />
             </View>
@@ -621,6 +643,10 @@ export default function HomeScreen() {
             </View>
           )}
         </View>
+
+        {/* Not range-scoped, unlike everything else on Home — always the
+            real next 7 days from today, since that's when bills are due. */}
+        <UpcomingBillsCard recurring={recurring} categories={categories} />
 
         {/* The former Trends tab, as a card (2026-09-13 — its tab slot went
             to Wealth). Reads Home's own navigated range, so it has no range
@@ -664,10 +690,13 @@ export default function HomeScreen() {
                       <View style={styles.budgetHeader}>
                         <ThemedText type="small">{category.name}</ThemedText>
                         <ThemedText type="small" themeColor="textSecondary">
-                          ${formatAmount(bp.spent)} / ${formatAmount(bp.limit)}
+                          {format(bp.spent)} / {format(bp.limit)}
                         </ThemedText>
                       </View>
-                      <ProgressBar percent={bp.percent} color={category.color} type={bp.type} />
+                      {/* Accent, not the category color, so the bar reads as a
+                          status light — blue under 80%, amber, then red — rather
+                          than one arbitrary hue per row (2026-09-14). */}
+                      <ProgressBar percent={bp.percent} color={theme.accent} type={bp.type} />
                     </View>
                     {i < expenseBudgetProgress.length - 1 && (
                       <View style={[styles.divider, { backgroundColor: theme.border }]} />
@@ -704,7 +733,7 @@ export default function HomeScreen() {
                       <View style={styles.budgetHeader}>
                         <ThemedText type="small">{category.name}</ThemedText>
                         <ThemedText type="small" themeColor="textSecondary">
-                          ${formatAmount(bp.spent)} / ${formatAmount(bp.limit)}
+                          {format(bp.spent)} / {format(bp.limit)}
                         </ThemedText>
                       </View>
                       <ProgressBar percent={bp.percent} color={category.color} type={bp.type} />
@@ -718,6 +747,8 @@ export default function HomeScreen() {
             </View>
           </View>
         )}
+
+        <WealthSummaryCard goals={goals} debts={debts} plan={plan} accounts={accounts} />
 
         <View style={styles.section}>
           <ThemedText type="small" themeColor="textSecondary" style={styles.sectionTitle}>

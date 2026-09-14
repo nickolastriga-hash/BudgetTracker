@@ -10,6 +10,7 @@ import {
   ScrollView,
   SectionList,
   StyleSheet,
+  TextInput,
   useWindowDimensions,
   View,
 } from 'react-native';
@@ -23,6 +24,7 @@ import { SettingsButton } from '@/components/settings-button';
 import { ThemedText } from '@/components/themed-text';
 import { TransactionRow } from '@/components/transaction-row';
 import { BottomTabInset, CardRadius, CardShadow, MaxContentWidth, Spacing } from '@/constants/theme';
+import { useCurrency } from '@/hooks/use-currency';
 import { useTheme } from '@/hooks/use-theme';
 import { categoriesForType, getCategories, getCategory, type Category } from '@/lib/categories';
 import {
@@ -49,9 +51,10 @@ type TransactionFilter = {
 
 const EMPTY_FILTER: TransactionFilter = { type: 'all', categoryIds: [] };
 
-// Generic over anything with a type + categoryId (a Transaction or a
-// RecurringTransaction) so the one filter narrows the Recurring page too.
-function applyTransactionFilter<T extends { type: TransactionType; categoryId: string }>(
+// Generic over anything with a type + categoryId (+ optional note) — a
+// Transaction or a RecurringTransaction — so the one filter narrows the
+// Recurring page too.
+function applyTransactionFilter<T extends { type: TransactionType; categoryId: string; note?: string }>(
   transactions: T[],
   filter: TransactionFilter
 ): T[] {
@@ -59,6 +62,19 @@ function applyTransactionFilter<T extends { type: TransactionType; categoryId: s
     if (filter.type !== 'all' && t.type !== filter.type) return false;
     if (filter.categoryIds.length > 0 && !filter.categoryIds.includes(t.categoryId)) return false;
     return true;
+  });
+}
+
+// Free-text search (the header's magnifier), separate from the funnel's
+// type/category filter: matches the note or the category's name,
+// case-insensitively, so "coffee" finds a note and "Groceries" finds a
+// category without the user having to know which one they typed.
+function applySearch<T extends { categoryId: string; note?: string }>(items: T[], query: string, categories: Category[]): T[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return items;
+  return items.filter((t) => {
+    if (t.note?.toLowerCase().includes(q)) return true;
+    return getCategory(categories, t.categoryId)?.name.toLowerCase().includes(q) ?? false;
   });
 }
 
@@ -230,6 +246,7 @@ function RecurringRow({
   onEdit: () => void;
 }) {
   const theme = useTheme();
+  const { format } = useCurrency();
   // Two-tap confirm kept local to the row rather than lifted to the screen —
   // avoids tracking "which row is confirming" in parent state.
   const [confirming, setConfirming] = useState(false);
@@ -273,7 +290,7 @@ function RecurringRow({
         </View>
         <View style={styles.recurringRowEnd}>
           <ThemedText type="default" style={[styles.recurringAmount, { color: typeColor }]}>
-            {isExpense ? '-' : '+'}${item.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {(isExpense ? '-' : '+') + format(item.amount)}
           </ThemedText>
           <View style={styles.recurringRowActions}>
             {/* Routes into add-transaction.tsx's own Edit control on this
@@ -326,6 +343,7 @@ function monthlyEquivalent(item: RecurringTransaction): number {
 // sync.
 function RecurringSummary({ items }: { items: RecurringTransaction[] }) {
   const theme = useTheme();
+  const { format } = useCurrency();
   let expenseMonthly = 0;
   let incomeMonthly = 0;
   for (const item of items) {
@@ -346,7 +364,7 @@ function RecurringSummary({ items }: { items: RecurringTransaction[] }) {
         <View style={styles.recurringSummaryTotals}>
           {expenseMonthly > 0 && (
             <ThemedText type="smallBold" themeColor="destructive">
-              -${expenseMonthly.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mo
+              {'-' + format(expenseMonthly)}/mo
             </ThemedText>
           )}
           {expenseMonthly > 0 && incomeMonthly > 0 && (
@@ -356,7 +374,7 @@ function RecurringSummary({ items }: { items: RecurringTransaction[] }) {
           )}
           {incomeMonthly > 0 && (
             <ThemedText type="smallBold" themeColor="success">
-              +${incomeMonthly.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mo
+              {'+' + format(incomeMonthly)}/mo
             </ThemedText>
           )}
         </View>
@@ -479,6 +497,8 @@ export default function TransactionsScreen() {
   const [pickerVisible, setPickerVisible] = useState(false);
   const [filterVisible, setFilterVisible] = useState(false);
   const [filter, setFilter] = useState<TransactionFilter>(EMPTY_FILTER);
+  const [searchVisible, setSearchVisible] = useState(false);
+  const [query, setQuery] = useState('');
   const pageWidth = useWindowDimensions().width;
   const pagerRef = useRef<ScrollView>(null);
   const pages = PAGES;
@@ -522,9 +542,24 @@ export default function TransactionsScreen() {
     if (customRange?.end) setPickerVisible(false);
   }
 
-  const filteredTransactions = useMemo(() => applyTransactionFilter(transactions, filter), [transactions, filter]);
-  const filteredRecurring = useMemo(() => applyTransactionFilter(recurring, filter), [recurring, filter]);
+  const filteredTransactions = useMemo(
+    () => applySearch(applyTransactionFilter(transactions, filter), query, categories),
+    [transactions, filter, query, categories]
+  );
+  const filteredRecurring = useMemo(
+    () => applySearch(applyTransactionFilter(recurring, filter), query, categories),
+    [recurring, filter, query, categories]
+  );
   const hasFilter = filter.type !== 'all' || filter.categoryIds.length > 0;
+  const hasQuery = query.trim().length > 0;
+
+  function toggleSearch() {
+    // Closing the search bar also clears it — a hidden query silently
+    // narrowing the list would be the worst kind of "where did my
+    // transactions go".
+    if (searchVisible) setQuery('');
+    setSearchVisible((v) => !v);
+  }
 
   const groups = useMemo(() => {
     const inRange = transactionsInRange(filteredTransactions, start, end).sort((a, b) => (a.date < b.date ? 1 : -1));
@@ -560,7 +595,8 @@ export default function TransactionsScreen() {
   const sections = groups.map(([date, items]) => ({ date, data: [items] }));
   const rangeNoun =
     rangeType === 'week' ? 'week' : rangeType === 'year' ? 'year' : rangeType === 'custom' ? 'range' : 'month';
-  const emptyMessage = hasFilter ? `No matching transactions this ${rangeNoun}.` : `No transactions this ${rangeNoun}.`;
+  const emptyMessage =
+    hasFilter || hasQuery ? `No matching transactions this ${rangeNoun}.` : `No transactions this ${rangeNoun}.`;
 
   // The pager's List page, for every rangeType.
   const transactionList = (
@@ -617,6 +653,16 @@ export default function TransactionsScreen() {
               <View style={styles.headerButtons}>
                 <Pressable
                   hitSlop={10}
+                  onPress={toggleSearch}
+                  accessibilityLabel={searchVisible ? 'Close search' : 'Search transactions'}
+                  style={[
+                    styles.filterButton,
+                    searchVisible ? { backgroundColor: theme.accent } : { backgroundColor: theme.accent + '26' },
+                  ]}>
+                  <MaterialIcons name={searchVisible ? 'search-off' : 'search'} size={18} color={searchVisible ? '#ffffff' : theme.accent} />
+                </Pressable>
+                <Pressable
+                  hitSlop={10}
                   onPress={() => setFilterVisible(true)}
                   style={[
                     styles.filterButton,
@@ -629,6 +675,28 @@ export default function TransactionsScreen() {
               </View>
             }
           />
+
+          {searchVisible && (
+            <View style={[styles.searchRow, { backgroundColor: theme.backgroundElement }]}>
+              <MaterialIcons name="search" size={18} color={theme.textTertiary} />
+              <TextInput
+                value={query}
+                onChangeText={setQuery}
+                placeholder="Search notes and categories"
+                placeholderTextColor={theme.textTertiary}
+                autoFocus
+                autoCorrect={false}
+                returnKeyType="search"
+                clearButtonMode="while-editing"
+                style={[styles.searchInput, { color: theme.text }]}
+              />
+              {hasQuery && Platform.OS !== 'ios' && (
+                <Pressable hitSlop={10} onPress={() => setQuery('')} accessibilityLabel="Clear search">
+                  <MaterialIcons name="cancel" size={18} color={theme.textTertiary} />
+                </Pressable>
+              )}
+            </View>
+          )}
 
           {/* The range nav doesn't apply to the Recurring page (a series
               isn't period-scoped) — hidden there, but still laid out
@@ -733,7 +801,7 @@ export default function TransactionsScreen() {
                 <RecurringView
                   items={filteredRecurring}
                   categories={categories}
-                  hasFilter={hasFilter}
+                  hasFilter={hasFilter || hasQuery}
                   bottomPadding={bottomPadding}
                   onStop={handleStopRecurring}
                   onEdit={handleEditRecurring}
@@ -807,6 +875,19 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    paddingHorizontal: Spacing.three,
+    borderRadius: 999,
+    height: 40,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    paddingVertical: 0,
   },
   filterDot: {
     position: 'absolute',
