@@ -8,6 +8,7 @@ import { CategoryBadge } from '@/components/category-badge';
 import { SegmentedControl } from '@/components/segmented-control';
 import { ThemedText } from '@/components/themed-text';
 import { CardRadius, CardShadow, Spacing } from '@/constants/theme';
+import { useCurrency } from '@/hooks/use-currency';
 import { useTheme } from '@/hooks/use-theme';
 import { categoriesForType, getCategories, type Category, type CategoryType } from '@/lib/categories';
 import { shortDateLabel } from '@/lib/date-range';
@@ -174,6 +175,7 @@ function CalendarPicker({
 
 export default function AddTransactionScreen() {
   const theme = useTheme();
+  const { symbol } = useCurrency();
   const insets = useSafeAreaInsets();
   const { id, repeat: repeatParam } = useLocalSearchParams<{ id?: string; repeat?: string }>();
   const isEditing = !!id;
@@ -369,7 +371,7 @@ export default function AddTransactionScreen() {
             input box next to it. */}
         <Pressable onPress={() => amountInputRef.current?.focus()} style={styles.amountRow}>
           <ThemedText type="title" style={[styles.currencySign, { color: typeColor }]}>
-            $
+            {symbol}
           </ThemedText>
           <TextInput
             ref={amountInputRef}

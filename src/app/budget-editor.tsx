@@ -8,6 +8,7 @@ import { CategoryBadge } from '@/components/category-badge';
 import { EditorHeader } from '@/components/editor-header';
 import { ThemedText } from '@/components/themed-text';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { useCurrency } from '@/hooks/use-currency';
 import { useTheme } from '@/hooks/use-theme';
 import {
   applyLimit,
@@ -39,18 +40,14 @@ function monthsInYear(year: number) {
   return Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`);
 }
 
-function formatAmount(amount: number) {
-  return amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
 
-function formatCompact(amount: number) {
-  return `$${Math.round(amount).toLocaleString()}`;
-}
 
 const thisMonth = toMonthStr(new Date());
 
 export default function BudgetEditorScreen() {
   const theme = useTheme();
+  const { format } = useCurrency();
+  const formatWhole = (amount: number) => format(amount, { decimals: 0 });
   const insets = useSafeAreaInsets();
   const { id, month } = useLocalSearchParams<{ id: string; month?: string }>();
   // The month Budgets was navigated to when this row was tapped — everything
@@ -121,13 +118,13 @@ export default function BudgetEditorScreen() {
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + Spacing.six }]}>
         <View>
           <ThemedText type="small" themeColor="textSecondary">
-            ${formatAmount(spent)} {isIncome ? 'earned' : 'spent'} of $
-            {formatAmount(budget ? effectiveLimit(budget, viewedMonth) : 0)} {isIncome ? 'goal ' : ''}
+            {format(spent)} {isIncome ? 'earned' : 'spent'} of{' '}
+            {format(budget ? effectiveLimit(budget, viewedMonth) : 0)} {isIncome ? 'goal ' : ''}
             {viewedMonth === thisMonth ? 'this month' : `in ${monthLabel(viewedMonth)}`}
           </ThemedText>
           {upcoming && (
             <ThemedText type="small" themeColor="accent">
-              Changing to {formatCompact(upcoming.limit)} in {monthLabel(upcoming.startMonth)}
+              Changing to {formatWhole(upcoming.limit)} in {monthLabel(upcoming.startMonth)}
             </ThemedText>
           )}
         </View>
@@ -182,7 +179,7 @@ export default function BudgetEditorScreen() {
                       <ThemedText type="small" themeColor="textSecondary">
                         {monthShort(monthStr)}
                       </ThemedText>
-                      <ThemedText type="smallBold">{limit != null && limit > 0 ? formatCompact(limit) : '-'}</ThemedText>
+                      <ThemedText type="smallBold">{limit != null && limit > 0 ? formatWhole(limit) : '-'}</ThemedText>
                     </Pressable>
                   );
                 })}

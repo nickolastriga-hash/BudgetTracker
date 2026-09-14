@@ -8,6 +8,7 @@ import { CategoryBadge } from '@/components/category-badge';
 import { EditorHeader } from '@/components/editor-header';
 import { ThemedText } from '@/components/themed-text';
 import { CardRadius, MaxContentWidth, Spacing } from '@/constants/theme';
+import { useCurrency } from '@/hooks/use-currency';
 import { useTheme } from '@/hooks/use-theme';
 import { categoriesForType, getCategories, type Category } from '@/lib/categories';
 import { MONTH_NAMES, shortDateLabel } from '@/lib/date-range';
@@ -98,6 +99,7 @@ function frequencySpec(frequency: RecurringFrequency, dayOfMonth: number, month:
 // that isn't about the series.
 export default function EditRecurringScreen() {
   const theme = useTheme();
+  const { symbol } = useCurrency();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
 
@@ -222,7 +224,7 @@ export default function EditRecurringScreen() {
           </ThemedText>
           <View style={styles.amountRow}>
             <ThemedText type="default" style={[styles.currencySign, { color: theme.textSecondary }]}>
-              $
+              {symbol}
             </ThemedText>
             <TextInput
               value={amount}

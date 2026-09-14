@@ -5,6 +5,7 @@ import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
 
 import { APP_LOCK_STORAGE_KEY } from '@/lib/app-lock';
+import { CURRENCY_STORAGE_KEY } from '@/lib/currency';
 import { toDateStr } from '@/lib/date-range';
 
 // A backup is every '@budgettracker/*' AsyncStorage key, value kept as its
@@ -12,11 +13,11 @@ import { toDateStr } from '@/lib/date-range';
 // new lib module's key is picked up the moment it exists (goals/debts/
 // accounts all landed this way). Device-level settings are excluded: the
 // app-lock config (a PIN hash has no business leaving the device, and a
-// restore shouldn't flip the lock) and the theme preference (a "how this
-// phone looks" choice, not data).
+// restore shouldn't flip the lock), the theme preference, and the currency
+// display setting ("how this phone shows things" choices, not data).
 const APP_PREFIX = '@budgettracker/';
 const THEME_PREFERENCE_KEY = '@budgettracker/theme-preference';
-const EXCLUDED_KEYS = new Set([APP_LOCK_STORAGE_KEY, THEME_PREFERENCE_KEY]);
+const EXCLUDED_KEYS = new Set([APP_LOCK_STORAGE_KEY, THEME_PREFERENCE_KEY, CURRENCY_STORAGE_KEY]);
 
 export interface BackupFile {
   app: 'BudgetTracker';

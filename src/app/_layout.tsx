@@ -13,6 +13,7 @@ import { useEffect } from 'react';
 import { LockScreen } from '@/components/lock-screen';
 import { Colors } from '@/constants/theme';
 import { AppLockProvider } from '@/hooks/use-app-lock';
+import { CurrencyProvider } from '@/hooks/use-currency';
 import { ThemePreferenceProvider, useThemePreference } from '@/hooks/use-theme-preference';
 import { generateDueTransactions } from '@/lib/recurring';
 
@@ -75,9 +76,11 @@ function RootLayoutInner() {
 export default function RootLayout() {
   return (
     <ThemePreferenceProvider>
-      <AppLockProvider>
-        <RootLayoutInner />
-      </AppLockProvider>
+      <CurrencyProvider>
+        <AppLockProvider>
+          <RootLayoutInner />
+        </AppLockProvider>
+      </CurrencyProvider>
     </ThemePreferenceProvider>
   );
 }

@@ -5,23 +5,18 @@ import { CumulativeTrendChart, type TrendPoint } from '@/components/cumulative-t
 import { SegmentedControl } from '@/components/segmented-control';
 import { ThemedText } from '@/components/themed-text';
 import { CardRadius, CardShadow, Spacing } from '@/constants/theme';
+import { useCurrency } from '@/hooks/use-currency';
 import { useTheme } from '@/hooks/use-theme';
 import { effectiveLimit, type Budget } from '@/lib/budgets';
 import { getCategory, type Category } from '@/lib/categories';
 import { daysBetween, monthsBetween, toDateStr } from '@/lib/date-range';
 import { transactionsInRange, type Transaction, type TransactionType } from '@/lib/transactions';
 
-function formatAmount(amount: number) {
-  return amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
 
 // Net's actual/budget totals can go negative (unlike Expense/Income, which
-// never do) — plain `$${formatAmount(amount)}` would render a negative as
+// never do) — plain `${format(amount)}` would render a negative as
 // "$-2,838.91" (toLocaleString puts the minus after the digits start), so
 // the sign needs to move in front of the dollar sign instead.
-function formatSigned(amount: number) {
-  return `${amount < 0 ? '-' : ''}$${formatAmount(Math.abs(amount))}`;
-}
 
 function shortDateLabel(dateStr: string) {
   return new Date(`${dateStr}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
@@ -100,6 +95,7 @@ function TrendPanel({
   onScrubEnd: () => void;
 }) {
   const theme = useTheme();
+  const { format } = useCurrency();
   const actualTotal = points[points.length - 1]?.actual ?? 0;
   const diff = budgetTotal !== null ? actualTotal - budgetTotal : null;
   // For expenses, under budget (diff < 0) is the good outcome; for income
@@ -114,7 +110,7 @@ function TrendPanel({
           <ThemedText type="small" themeColor="textSecondary">
             {label} actual
           </ThemedText>
-          <ThemedText style={[styles.panelTotal, { color: lineColor }]}>{formatSigned(actualTotal)}</ThemedText>
+          <ThemedText style={[styles.panelTotal, { color: lineColor }]}>{format(actualTotal)}</ThemedText>
         </View>
         {budgetTotal !== null && (
           <View style={styles.panelBudgetColumn}>
@@ -122,12 +118,12 @@ function TrendPanel({
               Budgeted
             </ThemedText>
             <ThemedText type="smallBold" themeColor="textSecondary">
-              {formatSigned(budgetTotal)}
+              {format(budgetTotal)}
             </ThemedText>
             {diff !== null && diff !== 0 && (
               <View style={[styles.diffPill, { backgroundColor: (diffIsGood ? theme.success : theme.destructive) + '1a' }]}>
                 <ThemedText type="small" themeColor={diffIsGood ? 'success' : 'destructive'} style={styles.diffPillText}>
-                  {diff >= 0 ? '+' : '−'}${formatAmount(Math.abs(diff))}
+                  {diff >= 0 ? '+' : '−'}{format(Math.abs(diff))}
                 </ThemedText>
               </View>
             )}
@@ -143,7 +139,7 @@ function TrendPanel({
         width={width}
         height={180}
         lineColor={lineColor}
-        formatValue={formatSigned}
+        formatValue={format}
         formatDate={shortDateLabel}
         onScrubStart={onScrubStart}
         onScrubEnd={onScrubEnd}

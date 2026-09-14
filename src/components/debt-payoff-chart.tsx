@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import Svg, { Circle, Defs, Line, LinearGradient, Polygon, Polyline, Stop } from 'react-native-svg';
 
 import { ThemedText } from '@/components/themed-text';
+import { useCurrency } from '@/hooks/use-currency';
 import { useTheme } from '@/hooks/use-theme';
 import type { Debt, PayoffMonth } from '@/lib/debts';
 
@@ -47,6 +48,7 @@ export function DebtPayoffChart({
   onScrubEnd?: () => void;
 }) {
   const theme = useTheme();
+  const { compact } = useCurrency();
   const containerRef = useRef<ViewType>(null);
   const containerLeftRef = useRef(0);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
@@ -270,11 +272,6 @@ function niceStep(rough: number) {
   return factor * power;
 }
 
-function compact(v: number) {
-  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(v % 1_000_000 === 0 ? 0 : 1)}M`;
-  if (v >= 1000) return `$${(v / 1000).toFixed(v % 1000 === 0 ? 0 : 1)}k`;
-  return `$${v}`;
-}
 
 function shortMonth(m: number) {
   return new Date(2000, m - 1, 1).toLocaleDateString(undefined, { month: 'short' });

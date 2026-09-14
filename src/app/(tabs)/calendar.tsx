@@ -11,6 +11,7 @@ import { SettingsButton } from '@/components/settings-button';
 import { ThemedText } from '@/components/themed-text';
 import { TransactionRow } from '@/components/transaction-row';
 import { BottomTabInset, CardRadius, CardShadow, MaxContentWidth, Spacing } from '@/constants/theme';
+import { useCurrency } from '@/hooks/use-currency';
 import { useTheme } from '@/hooks/use-theme';
 import { getCategories, getCategory, type Category } from '@/lib/categories';
 import {
@@ -61,6 +62,7 @@ function CalendarView({
   bottomPadding: number;
 }) {
   const theme = useTheme();
+  const { compact } = useCurrency();
   const monthStr = toMonthStr(month);
   const todayStr = toDateStr(new Date());
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
@@ -151,7 +153,7 @@ function CalendarView({
                       themeColor={isSelected ? 'text' : 'destructive'}
                       style={[styles.daySpend, isSelected && styles.daySpendSelected]}
                       numberOfLines={1}>
-                      -${expense >= 1000 ? `${Math.round(expense / 100) / 10}k` : Math.round(expense)}
+                      {'-' + compact(expense)}
                     </ThemedText>
                   )}
                   {income > 0 && (
@@ -160,7 +162,7 @@ function CalendarView({
                       themeColor={isSelected ? 'text' : 'success'}
                       style={[styles.daySpend, isSelected && styles.daySpendSelected]}
                       numberOfLines={1}>
-                      +${income >= 1000 ? `${Math.round(income / 100) / 10}k` : Math.round(income)}
+                      {'+' + compact(income)}
                     </ThemedText>
                   )}
                 </View>
@@ -232,6 +234,7 @@ function WeekCalendarView({
   bottomPadding: number;
 }) {
   const theme = useTheme();
+  const { compact } = useCurrency();
   const monthStr = toMonthStr(month);
   const todayStr = toDateStr(new Date());
   const todayWeekStart = toDateStr(startOfWeek(new Date()));
@@ -349,7 +352,7 @@ function WeekCalendarView({
                             themeColor={isSelected ? 'text' : 'destructive'}
                             style={[styles.daySpend, isSelected && styles.daySpendSelected]}
                             numberOfLines={1}>
-                            -${expense >= 1000 ? `${Math.round(expense / 100) / 10}k` : Math.round(expense)}
+                            {'-' + compact(expense)}
                           </ThemedText>
                         )}
                         {income > 0 && (
@@ -358,7 +361,7 @@ function WeekCalendarView({
                             themeColor={isSelected ? 'text' : 'success'}
                             style={[styles.daySpend, isSelected && styles.daySpendSelected]}
                             numberOfLines={1}>
-                            +${income >= 1000 ? `${Math.round(income / 100) / 10}k` : Math.round(income)}
+                            {'+' + compact(income)}
                           </ThemedText>
                         )}
                       </View>
@@ -428,6 +431,7 @@ function YearCalendarView({
   bottomPadding: number;
 }) {
   const theme = useTheme();
+  const { compact } = useCurrency();
   const thisMonthStr = toMonthStr(new Date());
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
 
@@ -505,7 +509,7 @@ function YearCalendarView({
                           themeColor={isSelected ? 'text' : 'destructive'}
                           style={[styles.daySpend, isSelected && styles.daySpendSelected]}
                           numberOfLines={1}>
-                          -${expense >= 1000 ? `${Math.round(expense / 100) / 10}k` : Math.round(expense)}
+                          {'-' + compact(expense)}
                         </ThemedText>
                       )}
                       {income > 0 && (
@@ -514,7 +518,7 @@ function YearCalendarView({
                           themeColor={isSelected ? 'text' : 'success'}
                           style={[styles.daySpend, isSelected && styles.daySpendSelected]}
                           numberOfLines={1}>
-                          +${income >= 1000 ? `${Math.round(income / 100) / 10}k` : Math.round(income)}
+                          {'+' + compact(income)}
                         </ThemedText>
                       )}
                       {expense === 0 && income === 0 && (

@@ -10,6 +10,7 @@ import { ColorPicker, IconPicker, resolveIcon } from '@/components/icon-color-pi
 import { ProgressBar } from '@/components/progress-bar';
 import { ThemedText } from '@/components/themed-text';
 import { CardRadius, MaxContentWidth, Spacing } from '@/constants/theme';
+import { useCurrency } from '@/hooks/use-currency';
 import { useTheme } from '@/hooks/use-theme';
 import { CATEGORY_COLORS, type CategoryIcon } from '@/lib/categories';
 import { MONTH_NAMES, toDateStr, toMonthStr } from '@/lib/date-range';
@@ -24,9 +25,6 @@ import {
   type SavingsGoal,
 } from '@/lib/goals';
 
-function formatAmount(amount: number) {
-  return amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
 
 function monthStrLabel(monthStr: string) {
   const [y, m] = monthStr.split('-').map(Number);
@@ -46,6 +44,7 @@ function defaultTargetMonth() {
 
 export default function GoalEditorScreen() {
   const theme = useTheme();
+  const { format, symbol } = useCurrency();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const isEditing = !!id;
@@ -159,7 +158,7 @@ export default function GoalEditorScreen() {
                 Saved so far
               </ThemedText>
               <ThemedText type="smallBold">
-                ${formatAmount(progress.saved)} / ${formatAmount(goal.targetAmount)}
+                {format(progress.saved)} / {format(goal.targetAmount)}
               </ThemedText>
             </View>
             <ProgressBar percent={progress.percent} color={color} type="income" />
@@ -168,9 +167,9 @@ export default function GoalEditorScreen() {
                 ? 'Goal reached'
                 : progress.neededPerMonth !== null && goal.targetMonth
                   ? progress.monthsLeft === 0
-                    ? `Deadline passed, $${formatAmount(progress.remaining)} still to go`
-                    : `$${formatAmount(progress.neededPerMonth)}/mo to reach it by ${monthStrLabel(goal.targetMonth)}`
-                  : `$${formatAmount(progress.remaining)} to go`}
+                    ? `Deadline passed, ${format(progress.remaining)} still to go`
+                    : `${format(progress.neededPerMonth)}/mo to reach it by ${monthStrLabel(goal.targetMonth)}`
+                  : `${format(progress.remaining)} to go`}
             </ThemedText>
           </View>
         )}
@@ -183,7 +182,7 @@ export default function GoalEditorScreen() {
             <View style={styles.contributeRow}>
               <View style={[styles.amountInputWrap, { borderColor: theme.border, backgroundColor: theme.card }]}>
                 <ThemedText type="default" themeColor="textSecondary">
-                  $
+                  {symbol}
                 </ThemedText>
                 <TextInput
                   value={contributionAmount}
@@ -218,7 +217,7 @@ export default function GoalEditorScreen() {
                         {shortDate(c.date)}
                       </ThemedText>
                       <ThemedText type="smallBold" themeColor={c.amount >= 0 ? 'success' : 'destructive'}>
-                        {c.amount >= 0 ? '+' : '-'}${formatAmount(Math.abs(c.amount))}
+                        {c.amount >= 0 ? '+' : '-'}{format(Math.abs(c.amount))}
                       </ThemedText>
                       <Pressable hitSlop={8} onPress={() => handleRemoveContribution(c.id)}>
                         <MaterialIcons name="close" size={18} color={theme.textTertiary} />

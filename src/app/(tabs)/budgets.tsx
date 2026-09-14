@@ -20,6 +20,7 @@ import { SegmentedControl } from '@/components/segmented-control';
 import { SettingsButton } from '@/components/settings-button';
 import { ThemedText } from '@/components/themed-text';
 import { BottomTabInset, CardRadius, CardShadow, MaxContentWidth, Spacing } from '@/constants/theme';
+import { useCurrency } from '@/hooks/use-currency';
 import { useTheme } from '@/hooks/use-theme';
 import { getBudgetProgress, getBudgets, type Budget } from '@/lib/budgets';
 import { categoriesForType, getCategories, type Category } from '@/lib/categories';
@@ -35,9 +36,6 @@ function monthLabel(monthStr: string) {
   return new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 }
 
-function formatAmount(amount: number) {
-  return amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
 
 // Same shape as Home/Transactions' own MonthYearPickerModal — duplicated
 // rather than shared per the no-premature-abstraction rule (this makes 3
@@ -125,6 +123,7 @@ function MonthYearPickerModal({
 
 export default function BudgetsScreen() {
   const theme = useTheme();
+  const { format } = useCurrency();
   const insets = useSafeAreaInsets();
   const [month, setMonth] = useState(() => new Date());
   const [pickerVisible, setPickerVisible] = useState(false);
@@ -281,7 +280,7 @@ export default function BudgetsScreen() {
                       Total Budgeted
                     </ThemedText>
                     <ThemedText type="smallBold">
-                      ${formatAmount(totalExpenseSpent)} / ${formatAmount(totalExpenseLimit)}
+                      {format(totalExpenseSpent)} / {format(totalExpenseLimit)}
                     </ThemedText>
                   </View>
                   <ProgressBar percent={totalExpenseSpent / totalExpenseLimit} color={theme.destructive} type="expense" />
@@ -317,7 +316,7 @@ export default function BudgetsScreen() {
                             <ThemedText type="small">{category.name}</ThemedText>
                             {progress ? (
                               <ThemedText type="small" themeColor="textSecondary">
-                                ${formatAmount(progress.spent)} / ${formatAmount(progress.limit)}
+                                {format(progress.spent)} / {format(progress.limit)}
                               </ThemedText>
                             ) : (
                               <ThemedText type="small" themeColor="accent">
@@ -326,7 +325,7 @@ export default function BudgetsScreen() {
                             )}
                             {upcoming && (
                               <ThemedText type="small" themeColor="accent">
-                                Changing to ${formatAmount(upcoming.limit)} in {monthLabel(upcoming.startMonth)}
+                                Changing to {format(upcoming.limit)} in {monthLabel(upcoming.startMonth)}
                               </ThemedText>
                             )}
                           </View>
@@ -363,7 +362,7 @@ export default function BudgetsScreen() {
                       Income Goals
                     </ThemedText>
                     <ThemedText type="smallBold">
-                      ${formatAmount(totalIncomeEarned)} / ${formatAmount(totalIncomeLimit)}
+                      {format(totalIncomeEarned)} / {format(totalIncomeLimit)}
                     </ThemedText>
                   </View>
                   <ProgressBar percent={totalIncomeEarned / totalIncomeLimit} color={theme.success} type="income" />
@@ -399,7 +398,7 @@ export default function BudgetsScreen() {
                             <ThemedText type="small">{category.name}</ThemedText>
                             {progress ? (
                               <ThemedText type="small" themeColor="textSecondary">
-                                ${formatAmount(progress.spent)} / ${formatAmount(progress.limit)}
+                                {format(progress.spent)} / {format(progress.limit)}
                               </ThemedText>
                             ) : (
                               <ThemedText type="small" themeColor="accent">
@@ -408,7 +407,7 @@ export default function BudgetsScreen() {
                             )}
                             {upcoming && (
                               <ThemedText type="small" themeColor="accent">
-                                Changing to ${formatAmount(upcoming.limit)} in {monthLabel(upcoming.startMonth)}
+                                Changing to {format(upcoming.limit)} in {monthLabel(upcoming.startMonth)}
                               </ThemedText>
                             )}
                           </View>

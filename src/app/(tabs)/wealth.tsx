@@ -22,6 +22,7 @@ import { SegmentedControl } from '@/components/segmented-control';
 import { SettingsButton } from '@/components/settings-button';
 import { ThemedText } from '@/components/themed-text';
 import { BottomTabInset, CardRadius, CardShadow, MaxContentWidth, Spacing } from '@/constants/theme';
+import { useCurrency } from '@/hooks/use-currency';
 import { useTheme } from '@/hooks/use-theme';
 import { toDateStr } from '@/lib/date-range';
 import {
@@ -47,15 +48,9 @@ import {
 type WealthView = 'goals' | 'debts' | 'networth';
 const VIEWS: WealthView[] = ['goals', 'debts', 'networth'];
 
-function formatAmount(amount: number) {
-  return amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
 
 // Net worth can go negative — same sign-before-the-dollar treatment as
 // TrendsCard's own formatSigned.
-function formatSigned(amount: number) {
-  return `${amount < 0 ? '-' : ''}$${formatAmount(Math.abs(amount))}`;
-}
 
 function monthStrLabel(monthStr: string) {
   const [y, m] = monthStr.split('-').map(Number);
@@ -106,6 +101,7 @@ function NetWorthChart({ history, width, height, color }: { history: NetWorthSna
 
 export default function WealthScreen() {
   const theme = useTheme();
+  const { format, symbol } = useCurrency();
   const insets = useSafeAreaInsets();
   const pageWidth = useWindowDimensions().width;
   const pagerRef = useRef<ScrollView>(null);
@@ -273,7 +269,7 @@ export default function WealthScreen() {
                     Total saved
                   </ThemedText>
                   <ThemedText type="smallBold">
-                    ${formatAmount(totalGoalSaved)} / ${formatAmount(totalGoalTarget)}
+                    {format(totalGoalSaved)} / {format(totalGoalTarget)}
                   </ThemedText>
                 </View>
                 <ProgressBar percent={totalGoalTarget > 0 ? totalGoalSaved / totalGoalTarget : 0} color={theme.success} type="income" />
@@ -310,7 +306,7 @@ export default function WealthScreen() {
                           <View style={styles.rowTextGroup}>
                             <ThemedText type="small">{goal.name}</ThemedText>
                             <ThemedText type="small" themeColor="textSecondary">
-                              ${formatAmount(p.saved)} / ${formatAmount(goal.targetAmount)}
+                              {format(p.saved)} / {format(goal.targetAmount)}
                             </ThemedText>
                             {reached ? (
                               <ThemedText type="small" themeColor="success">
@@ -320,7 +316,7 @@ export default function WealthScreen() {
                               <ThemedText type="small" themeColor={p.monthsLeft === 0 ? 'destructive' : 'accent'}>
                                 {p.monthsLeft === 0
                                   ? `Deadline passed (${monthStrLabel(goal.targetMonth)})`
-                                  : `by ${monthStrLabel(goal.targetMonth)} · $${formatAmount(p.neededPerMonth)}/mo`}
+                                  : `by ${monthStrLabel(goal.targetMonth)} · ${format(p.neededPerMonth)}/mo`}
                               </ThemedText>
                             ) : null}
                           </View>
@@ -352,13 +348,13 @@ export default function WealthScreen() {
                     <ThemedText type="small" themeColor="textSecondary">
                       Total owed
                     </ThemedText>
-                    <ThemedText style={[styles.heroAmount, { color: theme.destructive }]}>${formatAmount(totalDebt)}</ThemedText>
+                    <ThemedText style={[styles.heroAmount, { color: theme.destructive }]}>{format(totalDebt)}</ThemedText>
                   </View>
                   <View style={styles.summaryRight}>
                     <ThemedText type="small" themeColor="textSecondary">
                       Minimums
                     </ThemedText>
-                    <ThemedText type="smallBold">${formatAmount(totalMin)}/mo</ThemedText>
+                    <ThemedText type="smallBold">{format(totalMin)}/mo</ThemedText>
                   </View>
                 </View>
 
@@ -385,7 +381,7 @@ export default function WealthScreen() {
                   </ThemedText>
                   <View style={[styles.extraInputWrap, { borderColor: theme.border, backgroundColor: theme.background }]}>
                     <ThemedText type="small" themeColor="textSecondary">
-                      $
+                      {symbol}
                     </ThemedText>
                     <TextInput
                       value={extraDraft}
@@ -419,13 +415,13 @@ export default function WealthScreen() {
                             Debt-free {monthStrLabel(payoff.debtFreeMonth)}
                           </ThemedText>
                           <ThemedText type="small" themeColor="textSecondary">
-                            {payoff.months} {payoff.months === 1 ? 'month' : 'months'} · ${formatAmount(payoff.totalInterest)} in interest
+                            {payoff.months} {payoff.months === 1 ? 'month' : 'months'} · {format(payoff.totalInterest)} in interest
                           </ThemedText>
                           {showBaseline && (
                             <ThemedText type="small" themeColor="textTertiary">
                               {minimumsOnly.unreachable
                                 ? 'Minimums only: never paid off'
-                                : `Minimums only: ${minimumsOnly.months} months, $${formatAmount(minimumsOnly.totalInterest)} in interest`}
+                                : `Minimums only: ${minimumsOnly.months} months, ${format(minimumsOnly.totalInterest)} in interest`}
                             </ThemedText>
                           )}
                         </>
@@ -443,7 +439,7 @@ export default function WealthScreen() {
                       width={payoffChartWidth}
                       height={200}
                       formatMonth={monthStrLabel}
-                      formatValue={(v) => `$${formatAmount(v)}`}
+                      formatValue={format}
                       onScrubStart={() => setIsScrubbing(true)}
                       onScrubEnd={() => setIsScrubbing(false)}
                     />
@@ -495,7 +491,7 @@ export default function WealthScreen() {
                           <View style={styles.rowTextGroup}>
                             <ThemedText type="small">{debt.name}</ThemedText>
                             <ThemedText type="small" themeColor="textSecondary">
-                              {debt.apr}% APR · ${formatAmount(debt.minPayment)}/mo min
+                              {debt.apr}% APR · {format(debt.minPayment)}/mo min
                             </ThemedText>
                             {debt.balance <= 0 ? (
                               <ThemedText type="small" themeColor="success">
@@ -508,7 +504,7 @@ export default function WealthScreen() {
                             ) : null}
                           </View>
                           <ThemedText type="smallBold" themeColor={debt.balance > 0 ? 'destructive' : 'success'} style={styles.rowAmount}>
-                            ${formatAmount(debt.balance)}
+                            {format(debt.balance)}
                           </ThemedText>
                           <MaterialIcons name="chevron-right" size={22} color={theme.textTertiary} />
                         </View>
@@ -533,7 +529,7 @@ export default function WealthScreen() {
                 Net worth
               </ThemedText>
               <ThemedText style={[styles.heroAmount, styles.heroAmountLarge, { color: netWorth >= 0 ? theme.accent : theme.destructive }]}>
-                {formatSigned(netWorth)}
+                {format(netWorth)}
               </ThemedText>
               <View style={styles.netWorthSplit}>
                 <View style={styles.netWorthSplitItem}>
@@ -542,7 +538,7 @@ export default function WealthScreen() {
                     Assets
                   </ThemedText>
                   <ThemedText type="smallBold" themeColor="success">
-                    ${formatAmount(totalAssets)}
+                    {format(totalAssets)}
                   </ThemedText>
                 </View>
                 <View style={styles.netWorthSplitItem}>
@@ -551,7 +547,7 @@ export default function WealthScreen() {
                     Liabilities
                   </ThemedText>
                   <ThemedText type="smallBold" themeColor="destructive">
-                    ${formatAmount(totalLiabilities)}
+                    {format(totalLiabilities)}
                   </ThemedText>
                 </View>
               </View>
@@ -617,7 +613,7 @@ export default function WealthScreen() {
                                 {account.name}
                               </ThemedText>
                               <ThemedText type="smallBold" style={styles.rowAmount}>
-                                ${formatAmount(account.balance)}
+                                {format(account.balance)}
                               </ThemedText>
                               <MaterialIcons name="chevron-right" size={22} color={theme.textTertiary} />
                             </View>
@@ -667,7 +663,7 @@ export default function WealthScreen() {
                                 )}
                               </View>
                               <ThemedText type="smallBold" themeColor="destructive" style={styles.rowAmount}>
-                                ${formatAmount(entry.item.balance)}
+                                {format(entry.item.balance)}
                               </ThemedText>
                               <MaterialIcons name="chevron-right" size={22} color={theme.textTertiary} />
                             </View>

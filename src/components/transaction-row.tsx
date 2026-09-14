@@ -4,14 +4,12 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { CategoryBadge } from '@/components/category-badge';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
+import { useCurrency } from '@/hooks/use-currency';
 import { useTheme } from '@/hooks/use-theme';
 import type { Category } from '@/lib/categories';
 import { shortDateLabel } from '@/lib/date-range';
 import type { Transaction } from '@/lib/transactions';
 
-function formatAmount(amount: number) {
-  return amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
 
 // A plain row, not its own card — meant to sit inside a screen's grouped-list
 // container (see the `group`/`divider` styles in index.tsx/transactions.tsx).
@@ -44,6 +42,7 @@ export function TransactionRow({
   showDate?: boolean;
 }) {
   const theme = useTheme();
+  const { format } = useCurrency();
   const isExpense = transaction.type === 'expense';
   // The badge keeps the category's own custom color — the expense/income cue
   // instead comes from an "Expense"/"Income" text pill paired with the amount
@@ -94,7 +93,7 @@ export function TransactionRow({
           </ThemedText>
         </View>
         <ThemedText type="default" style={[styles.amount, { color: typeColor }]}>
-          {isExpense ? '-' : '+'}${formatAmount(transaction.amount)}
+          {(isExpense ? '-' : '+') + format(transaction.amount)}
         </ThemedText>
       </View>
       <MaterialIcons name="chevron-right" size={20} color={theme.textTertiary} />

@@ -293,7 +293,13 @@ src/
                           (defaulting to expense) set by whichever Budgets
                           section's `+` button was tapped, so there's still no
                           in-form type toggle; editing keeps the category's
-                          existing type. No delete yet, see TODO.md.
+                          existing type. Edit mode ends with a two-tap
+                          "Delete category" (2026-09-14) plus a hint line
+                          stating what will move ("2 transactions and 1
+                          recurring will move to Other."), hidden for the
+                          two "Other" catch-alls — see the "Categories are
+                          AsyncStorage-backed" convention bullet for the
+                          reassignment rules.
     budget-editor.tsx     Per-category budget modal, reached by tapping a row on
                           Budgets (`headerShown: false` in _layout.tsx — builds
                           its own header: category name left, a circular "X"
@@ -393,6 +399,20 @@ src/
                           once a PIN actually exists.
 
   lib/
+    currency.ts             Display-only currency + number-locale setting
+                          (2026-09-14): CURRENCIES (20 codes, each with a
+                          symbol, decimals, and prefix/suffix position),
+                          LOCALES ('system' + 15 tags whose separators
+                          actually differ), CurrencySettings, formatMoney
+                          ("$1,234.56", "-$5.00" with the sign in front of
+                          the symbol, "1.234,56 €"), formatMoneyCompact
+                          ("$1.2k" for chart axes / calendar cells). No
+                          conversion — amounts stay unitless numbers, this
+                          only decides how they're drawn. An unsupported
+                          locale tag on a minimal Intl falls back to the
+                          device default rather than throwing. Persisted
+                          under '@budgettracker/currency', which backup.ts
+                          excludes like the theme preference.
     goals.ts                SavingsGoal CRUD + contributions (2026-09-13),
                           same write-queue shape as budgets.ts. A goal's
                           "saved" is the sum of its hand-entered
@@ -748,6 +768,30 @@ src/
                           just flags `unreachable`, so the baseline always
                           spans the plan's own months instead of
                           flat-lining at a truncated value. Height 200.
+    upcoming-bills-card.tsx  UpcomingBillsCard (2026-09-14) — Home's "next 7
+                          days" strip of recurring series, windowed off the
+                          same lib/recurring.ts#nextDueDate the Transactions
+                          tab's Recurring page sorts by. Not range-scoped
+                          (always the real next week from today). Section
+                          title + a red "$X due this week" pill, one row per
+                          series (note or category name, "Tomorrow"/"Wed,
+                          Sep 16" + an "in Nd" pill, signed amount, tap →
+                          edit-recurring.tsx), and an "expected in / going
+                          out" footer when both types land. Returns null
+                          when no series exist at all; an "event-available"
+                          empty card when some exist but none are due.
+    wealth-summary-card.tsx  WealthSummaryCard (2026-09-14, the TODO.md
+                          follow-up) — Home's one-glance Wealth card: net
+                          worth headline (assets − liabilities − debts, same
+                          merge as the Wealth tab; green/red by sign) over
+                          two tiles, Goals ("1 of 2 reached", total saved)
+                          and Debts ("Debt-free Apr 2030" via
+                          simulatePayoff, or "All paid off" / "No debts
+                          tracked" / "Payments below interest", plus total
+                          owed). The whole card is a Pressable into
+                          /wealth. Returns null until at least one
+                          goal/debt/account exists. Home loads goals, debts,
+                          plan settings, and accounts on focus for it.
     trends-card.tsx          TrendsCard (2026-09-13) — everything the Trends
                           tab used to render below its range nav (the
                           Expenses/Income/Net toggle + dots, the three-page
@@ -1030,7 +1074,12 @@ src/
                           prop (default 'expense') that decides the over-100%
                           fill color — destructive red for expense (over
                           budget, bad), success green for income (goal
-                          reached, good).
+                          reached, good). Expense bars also turn
+                          `theme.warning` amber from 80% (exported
+                          `BUDGET_WARNING_THRESHOLD`, 2026-09-14) so a
+                          nearly-spent budget stands out before it's blown;
+                          income has no warning band, since nearing a goal
+                          isn't a problem.
     transaction-row.tsx      One transaction list row (icon, category, note,
                           signed amount) — shared by Home's recent list and the
                           Transactions tab. Takes a resolved `category` prop
@@ -1069,6 +1118,22 @@ src/
                           changed 2026-09-17 — TODO.md's note about this
                           being missing, unlike HabitTracker, no longer
                           applies.
+  hooks/use-currency.tsx   CurrencyProvider + useCurrency() (2026-09-14) —
+                          same AsyncStorage-backed provider shape as
+                          use-theme-preference, mounted in _layout.tsx
+                          inside ThemePreferenceProvider. Returns
+                          `{ settings, setSettings, symbol, format, compact }`;
+                          every screen/component that shows an amount calls
+                          `const { format } = useCurrency()` and renders
+                          `{format(x)}` — the per-file `formatAmount` /
+                          `formatSigned` helpers and every hardcoded `$` are
+                          gone (the sweep was mechanical: `${formatAmount(x)}`
+                          → `{format(x)}`). `symbol` is the bare sign next to
+                          amount inputs; `compact` is for calendar cells and
+                          the payoff chart's axis. Set from Settings'
+                          "CURRENCY" section: two rows (Currency, Number
+                          format) each opening an OptionPickerModal whose
+                          rows show a live sample amount.
   hooks/use-theme-preference.tsx  ThemePreferenceProvider + useThemePreference()
                           (added 2026-09-17, matching HabitTracker's own hook
                           of the same name) — an in-app Light/Dark/Auto
@@ -1159,10 +1224,16 @@ src/
 - **Categories are AsyncStorage-backed and user-editable** (`lib/categories.ts`) — name/icon/color
   can be changed for any category, including the seeded defaults, via `category-editor.tsx` (Budgets'
   `+` button to add, long-press a row to edit). `type` is deliberately not editable through that
-  screen — see its own entry above. There's still no delete: `Category.id` is a foreign key from
-  both `Transaction` and `Budget`, so removing one needs to decide what happens to existing
-  references (reassign to "Other" is the obvious default — mirrors how HabitTracker never actually
-  deletes a habit's history either). See TODO.md.
+  screen — see its own entry above. **Delete landed 2026-09-14**: `lib/categories.ts#deleteCategory`
+  reassigns the category's transactions (`transactions.ts#reassignTransactionsCategory`) and
+  recurring series (`recurring.ts#reassignRecurringCategory`) to that type's seeded catch-all
+  (`FALLBACK_CATEGORY_ID`: `other_expense`/`other_income`), drops its budget outright (merging a
+  deleted limit into Other's would silently change a number the user never set), then removes the
+  row — history is kept, just recategorized, same spirit as HabitTracker never deleting a habit's
+  history. The two "Other" rows themselves refuse deletion (`isFallbackCategory`), and the editor
+  hides the button for them. `budgets.ts` imports from `categories.ts` type-only now (it inlines the
+  one `getCategory` call it had) so `categories.ts` can import `removeBudget` without a runtime
+  cycle.
 - **Every screen that displays a category loads `Category[]` itself and passes it into
   `getCategory`/`categoriesForType`** rather than importing a fixed array — these two helpers take
   the loaded list as their first argument now. If you add a new screen that shows a category, load
@@ -1519,6 +1590,13 @@ src/
   near-identical copy — see the "Trends tab" bullet below and those two files' own Folder Structure
   entries above. Home's and Transactions' screens now import from there instead of redefining any of
   it locally.
+- **Transactions search (added 2026-09-14)** — a magnifier button left of the funnel toggles a pill
+  search row under the title (autofocused; the button flips to `search-off` and fills accent while
+  open). `applySearch` runs after `applyTransactionFilter` on both List and Recurring, matching the
+  note or the category's name case-insensitively — so "coffee" finds a note and "Groceries" a
+  category. Closing the row clears the query too, so a hidden query can never silently narrow the
+  list. Separate from the funnel's filter state (its badge doesn't reflect the query; the open row
+  is the cue), but both feed the same "No matching transactions" empty state.
 - **Transactions filter (added 2026-08-29)** — a funnel button next to `SettingsButton` in the header
   (fills solid `theme.accent` with a small destructive dot badge when a filter is active, otherwise
   the same soft-accent-circle look as `SettingsButton`) opens `FilterModal`: an "All/Expenses/Income"
@@ -1579,8 +1657,19 @@ src/
   data the way repeated demo-data runs already do. Two-tap confirm on Restore in Settings, and the
   subtitle tells the user to back up first. Keys are enumerated by the '@budgettracker/' prefix at
   runtime, so any new lib module's storage is covered without touching backup.ts — the only thing to
-  remember when adding a device-level setting (like the theme preference) is to add its key to
-  backup.ts's `EXCLUDED_KEYS`.
+  remember when adding a device-level setting (like the theme preference, or the currency setting
+  added 2026-09-14) is to add its key to backup.ts's `EXCLUDED_KEYS`.
+- **Currency is a display setting, not data (2026-09-14)** — Settings' CURRENCY section picks a
+  symbol (20 currencies, `lib/currency.ts#CURRENCIES`) and a number-format locale separately, so
+  someone can show "1.234,56 €" or "€1,234.56" as they prefer. Nothing is converted and nothing is
+  stored on a transaction; switching currency just relabels every existing amount. That's the
+  deliberate v1 reading of TODO.md's old "multi-currency" item: one ledger, one currency, your
+  choice of which. The one rule for new code: never write a literal `$` in UI copy — take `format`
+  (or `symbol`/`compact`) from `useCurrency()`.
+- **Home gained Upcoming Bills and Wealth cards (2026-09-14)** — see their Folder Structure entries.
+  Order on Home is now dashboard → UPCOMING BILLS → TRENDS → EXPENSE BUDGETS → INCOME GOALS →
+  WEALTH → RECENT TRANSACTIONS. Both cards hide themselves entirely when there's nothing to show
+  (no recurring series / no goals, debts, or accounts) rather than rendering an empty shell.
 - **Trends moved into Home as `TrendsCard` (2026-09-13)** — the bullet below still describes the
   chart mechanics accurately; what changed: it reads Home's own Month/Year range (so no Week, and the
   Custom option the tab used to offer is gone with it), sits in a "TRENDS" section between the

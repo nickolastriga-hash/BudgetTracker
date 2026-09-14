@@ -1,16 +1,18 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router } from 'expo-router';
 import { useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SegmentedControl } from '@/components/segmented-control';
 import { ThemedText } from '@/components/themed-text';
 import { CardRadius, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useAppLock } from '@/hooks/use-app-lock';
+import { useCurrency } from '@/hooks/use-currency';
 import { useTheme } from '@/hooks/use-theme';
 import { useThemePreference } from '@/hooks/use-theme-preference';
 import { exportBackup, importBackup } from '@/lib/backup';
+import { CURRENCIES, currencyOption, formatMoney, LOCALES } from '@/lib/currency';
 import { generateDemoData } from '@/lib/demo-data';
 
 function SettingsRow({
@@ -59,6 +61,8 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const { preference, setPreference } = useThemePreference();
   const appLock = useAppLock();
+  const currency = useCurrency();
+  const [picker, setPicker] = useState<'currency' | 'locale' | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState<string | null>(null);
@@ -135,6 +139,25 @@ export default function SettingsScreen() {
             ]}
             value={preference}
             onChange={setPreference}
+          />
+        </View>
+
+        <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+          CURRENCY
+        </ThemedText>
+        <View style={sectionStyle}>
+          <SettingsRow
+            icon="attach-money"
+            label="Currency"
+            subtitle={`${currencyOption(currency.settings.currency).name} (${currency.symbol})`}
+            onPress={() => setPicker('currency')}
+          />
+          <View style={[styles.divider, { backgroundColor: theme.border }]} />
+          <SettingsRow
+            icon="pin"
+            label="Number format"
+            subtitle={`${LOCALES.find((l) => l.tag === currency.settings.locale)?.name ?? 'Device default'} · ${currency.format(1234.5)}`}
+            onPress={() => setPicker('locale')}
           />
         </View>
 
@@ -238,7 +261,95 @@ export default function SettingsScreen() {
           </ThemedText>
         )}
       </ScrollView>
+
+      <OptionPickerModal
+        visible={picker === 'currency'}
+        title="Currency"
+        options={CURRENCIES.map((c) => ({
+          value: c.code,
+          label: `${c.name} (${c.code})`,
+          detail: formatMoney(1234.5, { currency: c.code, locale: currency.settings.locale }),
+        }))}
+        value={currency.settings.currency}
+        onSelect={(code) => {
+          currency.setSettings({ currency: code });
+          setPicker(null);
+        }}
+        onClose={() => setPicker(null)}
+      />
+      <OptionPickerModal
+        visible={picker === 'locale'}
+        title="Number format"
+        options={LOCALES.map((l) => ({
+          value: l.tag,
+          label: l.name,
+          detail: formatMoney(1234567.89, { currency: currency.settings.currency, locale: l.tag }),
+        }))}
+        value={currency.settings.locale}
+        onSelect={(tag) => {
+          currency.setSettings({ locale: tag });
+          setPicker(null);
+        }}
+        onClose={() => setPicker(null)}
+      />
     </View>
+  );
+}
+
+// A scrollable single-select list in a centered card — same modal shell as
+// Transactions' FilterModal (animationType "none", see that file for why).
+// Each row shows a live sample amount so the effect of a choice is visible
+// before it's made.
+function OptionPickerModal({
+  visible,
+  title,
+  options,
+  value,
+  onSelect,
+  onClose,
+}: {
+  visible: boolean;
+  title: string;
+  options: { value: string; label: string; detail: string }[];
+  value: string;
+  onSelect: (value: string) => void;
+  onClose: () => void;
+}) {
+  const theme = useTheme();
+  return (
+    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
+      <Pressable style={styles.modalBackdrop} onPress={onClose}>
+        <Pressable style={[styles.pickerCard, { backgroundColor: theme.card, borderColor: theme.border }]} onPress={() => {}}>
+          <View style={styles.pickerHeader}>
+            <ThemedText type="smallBold">{title}</ThemedText>
+            <Pressable hitSlop={10} onPress={onClose} accessibilityLabel="Close">
+              <MaterialIcons name="close" size={22} color={theme.textSecondary} />
+            </Pressable>
+          </View>
+          <ScrollView style={styles.pickerScroll}>
+            {options.map((o, i) => {
+              const selected = o.value === value;
+              return (
+                <View key={o.value}>
+                  <Pressable
+                    onPress={() => onSelect(o.value)}
+                    style={({ pressed }) => [styles.pickerRow, { backgroundColor: pressed ? theme.backgroundElement : 'transparent' }]}>
+                    <View style={styles.rowLabelGroup}>
+                      <ThemedText type="default">{o.label}</ThemedText>
+                      <ThemedText type="small" themeColor="textSecondary">
+                        {o.detail}
+                      </ThemedText>
+                    </View>
+                    {selected && <MaterialIcons name="check" size={20} color={theme.accent} />}
+                  </Pressable>
+                  {i < options.length - 1 && <View style={[styles.divider, styles.pickerDivider, { backgroundColor: theme.border }]} />}
+                </View>
+              );
+            })}
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -290,5 +401,39 @@ const styles = StyleSheet.create({
   },
   resultText: {
     paddingHorizontal: Spacing.two,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.four,
+  },
+  pickerCard: {
+    width: '100%',
+    maxWidth: 420,
+    maxHeight: '80%',
+    borderRadius: CardRadius,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+  },
+  pickerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: Spacing.three,
+  },
+  pickerScroll: {
+    flexGrow: 0,
+  },
+  pickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two + 2,
+  },
+  pickerDivider: {
+    marginLeft: Spacing.three,
   },
 });

@@ -14,10 +14,10 @@ transactions, all local-only. Deliberately deferred:
   CLAUDE.md's `categories.ts` bullet). Left as a deliberate neutral-catch-all choice, not an oversight
   — revisit if that still reads as "there's a grey category" in practice.
 - **Accounts / cloud backup** — no sign-in, no sync. Everything lives in AsyncStorage on-device only.
-- **Category delete/reassignment** — categories are now editable (name/icon/color, via long-press
-  in Budgets or `+` to add new) and AsyncStorage-backed (`lib/categories.ts`), but there's still no
-  delete. Deleting needs a decision about what happens to a deleted category's existing
-  transactions/budget (reassign to "Other" is the obvious default) — not built yet.
+- ~~**Category delete/reassignment**~~ — done (2026-09-14): `lib/categories.ts#deleteCategory`
+  moves the category's transactions and recurring series to that type's "Other", drops its budget,
+  and removes the row; reached from the category editor's two-tap Delete. The two "Other" rows can't
+  be deleted. See CLAUDE.md's "Categories are AsyncStorage-backed" bullet.
 - ~~**Weekly/biweekly recurring transactions**~~ — done (2026-09-03): `RecurringTransaction` is now
   a discriminated union on `frequency` (`monthly` | `weekly` | `biweekly`); add-transaction.tsx's
   checkbox became "Repeat" plus a Weekly/Biweekly/Monthly segmented toggle (Monthly still the
@@ -28,7 +28,10 @@ transactions, all local-only. Deliberately deferred:
   Budgets gained its own month nav (2026-08-29) so a past/future month's spent-vs-limit can be
   *reviewed*, but that's still reading the same flat-limit-plus-overrides model, not storing a
   distinct record per month.
-- **Multi-currency** — amounts are unitless numbers rendered with a hardcoded `$`.
+- ~~**Multi-currency**~~ — mostly done (2026-09-14) as a display setting: Settings → CURRENCY picks
+  a symbol and a number-format locale (`lib/currency.ts`, `hooks/use-currency.tsx`), and every
+  amount in the app renders through `useCurrency().format`. Still single-currency: no per-transaction
+  currency and no conversion, by design. See CLAUDE.md's "Currency is a display setting" bullet.
 - ~~**Light/Dark/Auto override**~~ — done (2026-09-17): `hooks/use-theme-preference.tsx`
   (`ThemePreferenceProvider`/`useThemePreference`), matching HabitTracker's own hook of the same
   name — an AsyncStorage-backed preference, defaulting to `'system'` (the old always-follows-OS
@@ -40,8 +43,8 @@ transactions, all local-only. Deliberately deferred:
 - **Wealth follow-ups (2026-09-13)** — savings goals, debt payoff planner, and net worth are all
   hand-entered (see CLAUDE.md's "Wealth tab data is hand-entered" bullet). Open ideas, none started:
   a goal contribution optionally logging a matching transaction; a debt payment doing the same; net
-  worth history sampled on a schedule rather than only when the page opens; a Home card summarizing
-  Wealth (net worth headline + goals/debts one-liners).
+  worth history sampled on a schedule rather than only when the page opens. ~~A Home card
+  summarizing Wealth~~ — done 2026-09-14 (`components/wealth-summary-card.tsx`).
 - **Trends lost its Custom range** — with Trends now a card on Home (Month/Year only), the
   Week/Custom range types the old tab could show are gone. Revisit if a custom-range cumulative chart
   is missed.

@@ -10,13 +10,11 @@ import { ColorPicker, IconPicker, resolveIcon } from '@/components/icon-color-pi
 import { ProgressBar } from '@/components/progress-bar';
 import { ThemedText } from '@/components/themed-text';
 import { CardRadius, MaxContentWidth, Spacing } from '@/constants/theme';
+import { useCurrency } from '@/hooks/use-currency';
 import { useTheme } from '@/hooks/use-theme';
 import { CATEGORY_COLORS, type CategoryIcon } from '@/lib/categories';
 import { addDebt, deleteDebt, getDebts, recordPayment, updateDebt, type Debt } from '@/lib/debts';
 
-function formatAmount(amount: number) {
-  return amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
 
 function parseNumber(text: string): number | null {
   const n = parseFloat(text);
@@ -25,6 +23,7 @@ function parseNumber(text: string): number | null {
 
 export default function DebtEditorScreen() {
   const theme = useTheme();
+  const { format, symbol } = useCurrency();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const isEditing = !!id;
@@ -143,12 +142,12 @@ export default function DebtEditorScreen() {
                 Paid down
               </ThemedText>
               <ThemedText type="smallBold">
-                ${formatAmount(Math.max(0, debt.originalBalance - debt.balance))} of ${formatAmount(debt.originalBalance)}
+                {format(Math.max(0, debt.originalBalance - debt.balance))} of {format(debt.originalBalance)}
               </ThemedText>
             </View>
             <ProgressBar percent={paidDown} color={color} type="income" />
             <ThemedText type="small" themeColor={debt.balance <= 0 ? 'success' : 'textSecondary'}>
-              {debt.balance <= 0 ? 'Paid off' : `$${formatAmount(debt.balance)} remaining`}
+              {debt.balance <= 0 ? 'Paid off' : `${format(debt.balance)} remaining`}
             </ThemedText>
           </View>
         )}
@@ -161,7 +160,7 @@ export default function DebtEditorScreen() {
             <View style={styles.payRow}>
               <View style={[styles.amountInputWrap, { borderColor: theme.border, backgroundColor: theme.card }]}>
                 <ThemedText type="default" themeColor="textSecondary">
-                  $
+                  {symbol}
                 </ThemedText>
                 <TextInput
                   value={paymentAmount}
