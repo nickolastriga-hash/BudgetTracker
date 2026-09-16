@@ -12,7 +12,14 @@ import { ThemedText } from '@/components/themed-text';
 import { CardRadius, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useCurrency } from '@/hooks/use-currency';
 import { useTheme } from '@/hooks/use-theme';
-import { CATEGORY_COLORS, type CategoryIcon } from '@/lib/categories';
+import {
+  CATEGORY_COLORS,
+  FALLBACK_CATEGORY_ID,
+  categoriesForType,
+  getCategories,
+  type Category,
+  type CategoryIcon,
+} from '@/lib/categories';
 import { MONTH_NAMES, toDateStr, toMonthStr } from '@/lib/date-range';
 import {
   addContribution,
@@ -59,6 +66,9 @@ export default function GoalEditorScreen() {
   const [color, setColor] = useState<string>(CATEGORY_COLORS[3]);
   const [icon, setIcon] = useState<CategoryIcon | null>(null);
   const [contributionAmount, setContributionAmount] = useState('');
+  const [logContributions, setLogContributions] = useState(false);
+  const [contributionCategoryId, setContributionCategoryId] = useState<string | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   // Re-reads just the goal record after a contribution change — the form
@@ -68,7 +78,8 @@ export default function GoalEditorScreen() {
   }
 
   useEffect(() => {
-    getGoals().then((goals) => {
+    Promise.all([getGoals(), getCategories()]).then(([goals, loadedCategories]) => {
+      setCategories(loadedCategories);
       if (!id) {
         // Next unused palette slot (starting from green) so each new goal
         // gets its own color by default, same idea as debt-editor.
@@ -87,10 +98,14 @@ export default function GoalEditorScreen() {
         }
         setColor(existing.color);
         setIcon(existing.icon);
+        setLogContributions(!!existing.logContributions);
+        setContributionCategoryId(existing.contributionCategoryId ?? null);
       }
       setLoaded(true);
     });
   }, [id]);
+
+  const expenseCategories = categoriesForType(categories, 'expense');
 
   const parsedTarget = parseFloat(targetAmount);
   const canSave = name.trim().length > 0 && !Number.isNaN(parsedTarget) && parsedTarget > 0;
@@ -118,6 +133,25 @@ export default function GoalEditorScreen() {
     await addContribution(id, sign * parsedContribution, toDateStr(new Date()));
     setContributionAmount('');
     await reloadGoal(id);
+  }
+
+  // Saved as soon as it's changed, not on Save — money can be added without
+  // ever tapping Save, and addContribution reads the choice off the record.
+  async function handleToggleLogContributions(value: boolean) {
+    if (!id) return;
+    const fallback = expenseCategories.some((c) => c.id === FALLBACK_CATEGORY_ID.expense)
+      ? FALLBACK_CATEGORY_ID.expense
+      : (expenseCategories[0]?.id ?? null);
+    const categoryId = contributionCategoryId ?? fallback;
+    setLogContributions(value);
+    setContributionCategoryId(categoryId);
+    await updateGoal(id, { logContributions: value, contributionCategoryId: categoryId ?? undefined });
+  }
+
+  async function handlePickContributionCategory(categoryId: string) {
+    if (!id) return;
+    setContributionCategoryId(categoryId);
+    await updateGoal(id, { contributionCategoryId: categoryId });
   }
 
   async function handleRemoveContribution(contributionId: string) {
@@ -208,6 +242,42 @@ export default function GoalEditorScreen() {
                 <MaterialIcons name="remove" size={20} color={canContribute ? '#ffffff' : theme.textTertiary} />
               </Pressable>
             </View>
+            <View style={styles.logRow}>
+              <View style={styles.logRowText}>
+                <ThemedText type="small">Also log as a transaction</ThemedText>
+                <ThemedText type="small" themeColor="textTertiary">
+                  {logContributions
+                    ? 'Adding money logs an expense, withdrawing logs income. Removing one below removes its transaction.'
+                    : 'Only the goal changes. Turn on to add a transaction too.'}
+                </ThemedText>
+              </View>
+              <Switch
+                value={logContributions}
+                onValueChange={handleToggleLogContributions}
+                trackColor={{ false: theme.backgroundSelected, true: theme.accent }}
+                thumbColor="#ffffff"
+              />
+            </View>
+            {logContributions && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>
+                {expenseCategories.map((category) => {
+                  const isSelected = category.id === contributionCategoryId;
+                  return (
+                    <Pressable
+                      key={category.id}
+                      onPress={() => handlePickContributionCategory(category.id)}
+                      style={[
+                        styles.categoryChip,
+                        { borderColor: isSelected ? theme.destructive : theme.border },
+                        isSelected && { backgroundColor: theme.destructive + '1A' },
+                      ]}>
+                      <CategoryBadge category={category} size={26} type="expense" />
+                      <ThemedText type="small">{category.name}</ThemedText>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            )}
             {contributions.length > 0 && (
               <View style={[styles.group, { backgroundColor: theme.card, borderColor: theme.border }]}>
                 {contributions.map((c, i) => (
@@ -405,6 +475,30 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  logRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.three,
+  },
+  logRowText: {
+    flex: 1,
+    gap: 2,
+  },
+  categoryRow: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+  },
+  categoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    paddingVertical: Spacing.two,
+    paddingHorizontal: Spacing.two,
+    paddingRight: Spacing.three,
+    borderRadius: Spacing.three,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   group: {
     borderRadius: CardRadius,

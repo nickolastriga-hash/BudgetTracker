@@ -1,7 +1,7 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CategoryBadge } from '@/components/category-badge';
@@ -12,7 +12,14 @@ import { ThemedText } from '@/components/themed-text';
 import { CardRadius, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useCurrency } from '@/hooks/use-currency';
 import { useTheme } from '@/hooks/use-theme';
-import { CATEGORY_COLORS, type CategoryIcon } from '@/lib/categories';
+import {
+  CATEGORY_COLORS,
+  FALLBACK_CATEGORY_ID,
+  categoriesForType,
+  getCategories,
+  type Category,
+  type CategoryIcon,
+} from '@/lib/categories';
 import { addDebt, deleteDebt, getDebts, recordPayment, updateDebt, type Debt } from '@/lib/debts';
 
 
@@ -38,6 +45,9 @@ export default function DebtEditorScreen() {
   const [color, setColor] = useState<string>(CATEGORY_COLORS[0]);
   const [icon, setIcon] = useState<CategoryIcon | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
+  const [logPayments, setLogPayments] = useState(false);
+  const [paymentCategoryId, setPaymentCategoryId] = useState<string | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   // Re-reads just the debt record (and the balance field it drives) after a
@@ -50,7 +60,8 @@ export default function DebtEditorScreen() {
   }
 
   useEffect(() => {
-    getDebts().then((debts) => {
+    Promise.all([getDebts(), getCategories()]).then(([debts, loadedCategories]) => {
+      setCategories(loadedCategories);
       if (!id) {
         // A fresh debt starts on the next unused palette slot rather than
         // always the first — the payoff chart stacks debts by color, so two
@@ -68,10 +79,14 @@ export default function DebtEditorScreen() {
         setMinPayment(String(existing.minPayment));
         setColor(existing.color);
         setIcon(existing.icon);
+        setLogPayments(!!existing.logPayments);
+        setPaymentCategoryId(existing.paymentCategoryId ?? null);
       }
       setLoaded(true);
     });
   }, [id]);
+
+  const expenseCategories = categoriesForType(categories, 'expense');
 
   const parsedBalance = parseNumber(balance);
   const parsedApr = parseNumber(apr);
@@ -110,6 +125,26 @@ export default function DebtEditorScreen() {
     await recordPayment(id, parsedPayment);
     setPaymentAmount('');
     await reloadDebt(id);
+  }
+
+  // The logging choice is saved as soon as it's changed, not on Save — a
+  // payment can be recorded without ever tapping Save, and recordPayment
+  // reads the choice off the stored record.
+  async function handleToggleLogPayments(value: boolean) {
+    if (!id) return;
+    const fallback = expenseCategories.some((c) => c.id === FALLBACK_CATEGORY_ID.expense)
+      ? FALLBACK_CATEGORY_ID.expense
+      : (expenseCategories[0]?.id ?? null);
+    const categoryId = paymentCategoryId ?? fallback;
+    setLogPayments(value);
+    setPaymentCategoryId(categoryId);
+    await updateDebt(id, { logPayments: value, paymentCategoryId: categoryId ?? undefined });
+  }
+
+  async function handlePickPaymentCategory(categoryId: string) {
+    if (!id) return;
+    setPaymentCategoryId(categoryId);
+    await updateDebt(id, { paymentCategoryId: categoryId });
   }
 
   async function handleDelete() {
@@ -180,9 +215,42 @@ export default function DebtEditorScreen() {
                 </ThemedText>
               </Pressable>
             </View>
-            <ThemedText type="small" themeColor="textTertiary">
-              Reduces the balance below. Log the payment itself as a transaction separately if you track it that way.
-            </ThemedText>
+            <View style={styles.logRow}>
+              <View style={styles.logRowText}>
+                <ThemedText type="small">Also log as a transaction</ThemedText>
+                <ThemedText type="small" themeColor="textTertiary">
+                  {logPayments
+                    ? 'Each payment adds an expense dated today.'
+                    : 'Only the balance changes. Turn on to add an expense too.'}
+                </ThemedText>
+              </View>
+              <Switch
+                value={logPayments}
+                onValueChange={handleToggleLogPayments}
+                trackColor={{ false: theme.backgroundSelected, true: theme.accent }}
+                thumbColor="#ffffff"
+              />
+            </View>
+            {logPayments && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>
+                {expenseCategories.map((category) => {
+                  const isSelected = category.id === paymentCategoryId;
+                  return (
+                    <Pressable
+                      key={category.id}
+                      onPress={() => handlePickPaymentCategory(category.id)}
+                      style={[
+                        styles.categoryChip,
+                        { borderColor: isSelected ? theme.destructive : theme.border },
+                        isSelected && { backgroundColor: theme.destructive + '1A' },
+                      ]}>
+                      <CategoryBadge category={category} size={26} type="expense" />
+                      <ThemedText type="small">{category.name}</ThemedText>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            )}
           </View>
         )}
 
@@ -360,6 +428,30 @@ const styles = StyleSheet.create({
   },
   payButtonText: {
     color: '#ffffff',
+  },
+  logRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.three,
+  },
+  logRowText: {
+    flex: 1,
+    gap: 2,
+  },
+  categoryRow: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+  },
+  categoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    paddingVertical: Spacing.two,
+    paddingHorizontal: Spacing.two,
+    paddingRight: Spacing.three,
+    borderRadius: Spacing.three,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   saveButton: {
     paddingVertical: Spacing.three,

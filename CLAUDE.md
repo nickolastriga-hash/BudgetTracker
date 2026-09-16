@@ -1645,6 +1645,20 @@ src/
   isn't entered twice. Net-worth history is sampled lazily whenever the Net Worth page loads (one
   point per day something changed), not on every balance write — same on-read spirit as
   generateDueTransactions.
+- **Payments can log transactions, per goal/debt (2026-09-14)** — the one deliberate crack in the
+  "hand-entered" rule above, and opt-in: `Debt.logPayments`/`paymentCategoryId` and
+  `SavingsGoal.logContributions`/`contributionCategoryId`, set from an "Also log as a transaction"
+  Switch in each editor's RECORD A PAYMENT / ADD MONEY section (edit mode only, since that's the only
+  place a payment happens), which reveals a horizontal expense-category chip row (defaults to
+  `other_expense`). The choice writes to the record the moment it's flipped, not on Save, because
+  `lib/debts.ts#recordPayment` and `lib/goals.ts#addContribution` read it off the stored record and a
+  payment can be made without ever tapping Save. A debt payment writes an expense dated today, note
+  "Payment: <name>", and nothing links it back (there's no payment record on a Debt), so undoing one
+  is two manual steps. A goal contribution writes an expense ("Savings: <name>") and stores the
+  transaction's id on the `GoalContribution`, so removing the contribution (the × in the list) deletes
+  its transaction too; a withdrawal writes the matching *income* into `other_income` ("Withdrawal:
+  <name>"), not a negative expense, so the ledger nets out. Both lib modules now import
+  `lib/transactions.ts` (which imports nothing, so no cycle); their write-queues stay separate.
 - **App lock (2026-09-13)** — off by default; Settings' App lock Switch routes through `set-pin.tsx`
   (the toggle only reads on once a PIN exists) and turning it off is immediate, since the session
   already got past the lock screen. Face ID/Touch ID/fingerprint when the device has enrolled

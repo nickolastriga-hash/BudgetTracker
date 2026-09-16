@@ -2,15 +2,21 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type { CategoryIcon } from '@/lib/categories';
 import { toDateStr, toMonthStr } from '@/lib/date-range';
+import { addTransaction, deleteTransaction } from '@/lib/transactions';
 
 // A savings goal is a target amount saved toward by hand ("Add money"), not
 // derived from transactions — a goal is money set aside, which the
 // expense/income ledger deliberately doesn't model (moving $200 into an
-// emergency fund isn't an expense). Same lib shape as budgets.ts.
+// emergency fund isn't an expense). Same lib shape as budgets.ts. The
+// reverse direction is opt-in per goal: with `logContributions` on, adding
+// money also writes an expense transaction in `contributionCategoryId`
+// (and a withdrawal writes the matching income, so the ledger nets out),
+// for someone who budgets their savings like any other monthly outgoing.
 export interface GoalContribution {
   id: string;
   date: string; // YYYY-MM-DD
   amount: number; // negative = withdrawal
+  transactionId?: string; // the ledger entry this contribution wrote, removed with it
 }
 
 export interface SavingsGoal {
@@ -22,6 +28,8 @@ export interface SavingsGoal {
   targetMonth?: string; // YYYY-MM — optional deadline
   contributions: GoalContribution[];
   createdAt: string; // YYYY-MM-DD
+  logContributions?: boolean;
+  contributionCategoryId?: string; // expense category a contribution's transaction lands in
 }
 
 const STORAGE_KEY = '@budgettracker/goals';
@@ -47,7 +55,10 @@ async function saveGoals(goals: SavingsGoal[]): Promise<void> {
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(goals));
 }
 
-export type GoalFields = Pick<SavingsGoal, 'name' | 'icon' | 'color' | 'targetAmount' | 'targetMonth'>;
+export type GoalFields = Pick<
+  SavingsGoal,
+  'name' | 'icon' | 'color' | 'targetAmount' | 'targetMonth' | 'logContributions' | 'contributionCategoryId'
+>;
 
 export function addGoal(data: GoalFields): Promise<SavingsGoal> {
   return enqueue(async () => {
@@ -72,10 +83,27 @@ export function deleteGoal(id: string): Promise<void> {
   });
 }
 
+// A withdrawal's transaction is income, not a negative expense, so it lands
+// in the income catch-all rather than the goal's chosen expense category.
+const WITHDRAWAL_CATEGORY_ID = 'other_income';
+
 export function addContribution(goalId: string, amount: number, date: string): Promise<void> {
   return enqueue(async () => {
     const goals = await getGoals();
+    const goal = goals.find((g) => g.id === goalId);
+    if (!goal) return;
     const contribution: GoalContribution = { id: newId(), amount, date };
+    if (goal.logContributions && goal.contributionCategoryId) {
+      const isWithdrawal = amount < 0;
+      const transaction = await addTransaction({
+        type: isWithdrawal ? 'income' : 'expense',
+        amount: Math.abs(amount),
+        categoryId: isWithdrawal ? WITHDRAWAL_CATEGORY_ID : goal.contributionCategoryId,
+        date,
+        note: `${isWithdrawal ? 'Withdrawal' : 'Savings'}: ${goal.name}`,
+      });
+      contribution.transactionId = transaction.id;
+    }
     await saveGoals(
       goals.map((g) => (g.id === goalId ? { ...g, contributions: [...g.contributions, contribution] } : g))
     );
@@ -85,11 +113,13 @@ export function addContribution(goalId: string, amount: number, date: string): P
 export function removeContribution(goalId: string, contributionId: string): Promise<void> {
   return enqueue(async () => {
     const goals = await getGoals();
+    const removed = goals.find((g) => g.id === goalId)?.contributions.find((c) => c.id === contributionId);
     await saveGoals(
       goals.map((g) =>
         g.id === goalId ? { ...g, contributions: g.contributions.filter((c) => c.id !== contributionId) } : g
       )
     );
+    if (removed?.transactionId) await deleteTransaction(removed.transactionId);
   });
 }
 

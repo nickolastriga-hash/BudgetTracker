@@ -2,11 +2,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type { CategoryIcon } from '@/lib/categories';
 import { toDateStr, toMonthStr } from '@/lib/date-range';
+import { addTransaction } from '@/lib/transactions';
 
 // A debt is tracked by its current balance, updated by hand (edit the
 // balance, or "Record a payment") — not derived from expense transactions,
 // since a card payment is already logged as whatever it bought, and a loan
 // payment splits into principal/interest the ledger has no way to know.
+// The reverse direction is opt-in per debt: with `logPayments` on, "Record a
+// payment" also writes an expense transaction in `paymentCategoryId`, for
+// someone who treats a loan payment as a monthly outgoing like any other.
 export interface Debt {
   id: string;
   name: string;
@@ -17,6 +21,8 @@ export interface Debt {
   apr: number; // annual percentage rate, e.g. 19.99
   minPayment: number; // per month
   createdAt: string; // YYYY-MM-DD
+  logPayments?: boolean;
+  paymentCategoryId?: string; // expense category the logged transaction lands in
 }
 
 // Snowball pays the smallest balance first (quick wins), avalanche the
@@ -50,7 +56,10 @@ async function saveDebts(debts: Debt[]): Promise<void> {
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(debts));
 }
 
-export type DebtFields = Pick<Debt, 'name' | 'icon' | 'color' | 'originalBalance' | 'balance' | 'apr' | 'minPayment'>;
+export type DebtFields = Pick<
+  Debt,
+  'name' | 'icon' | 'color' | 'originalBalance' | 'balance' | 'apr' | 'minPayment' | 'logPayments' | 'paymentCategoryId'
+>;
 
 export function addDebt(data: DebtFields): Promise<Debt> {
   return enqueue(async () => {
@@ -79,10 +88,25 @@ export function deleteDebt(id: string): Promise<void> {
   });
 }
 
+// Reduces the balance, and, when the debt opted in, logs the payment as an
+// expense transaction dated today. There's no payment record of its own to
+// link the transaction back to (unlike a goal contribution), so undoing a
+// payment means editing the balance and deleting the transaction separately.
 export function recordPayment(id: string, amount: number): Promise<void> {
   return enqueue(async () => {
     const debts = await getDebts();
+    const debt = debts.find((d) => d.id === id);
+    if (!debt) return;
     await saveDebts(debts.map((d) => (d.id === id ? { ...d, balance: Math.max(0, d.balance - amount) } : d)));
+    if (debt.logPayments && debt.paymentCategoryId) {
+      await addTransaction({
+        type: 'expense',
+        amount,
+        categoryId: debt.paymentCategoryId,
+        date: toDateStr(new Date()),
+        note: `Payment: ${debt.name}`,
+      });
+    }
   });
 }
 

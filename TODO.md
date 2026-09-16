@@ -41,10 +41,12 @@ transactions, all local-only. Deliberately deferred:
   DATA, `lib/backup.ts`) — that's for not losing data, not for spreadsheets; a per-transaction CSV for
   reporting is still open.
 - **Wealth follow-ups (2026-09-13)** — savings goals, debt payoff planner, and net worth are all
-  hand-entered (see CLAUDE.md's "Wealth tab data is hand-entered" bullet). Open ideas, none started:
-  a goal contribution optionally logging a matching transaction; a debt payment doing the same; net
-  worth history sampled on a schedule rather than only when the page opens. ~~A Home card
-  summarizing Wealth~~ — done 2026-09-14 (`components/wealth-summary-card.tsx`).
+  hand-entered (see CLAUDE.md's "Wealth tab data is hand-entered" bullet). Still open: net worth
+  history sampled on a schedule rather than only when the page opens. ~~A goal contribution
+  optionally logging a matching transaction; a debt payment doing the same~~ — done 2026-09-14, an
+  "Also log as a transaction" Switch per goal/debt in their editors (see CLAUDE.md's "Payments can
+  log transactions" bullet). ~~A Home card summarizing Wealth~~ — done 2026-09-14
+  (`components/wealth-summary-card.tsx`).
 - **Trends lost its Custom range** — with Trends now a card on Home (Month/Year only), the
   Week/Custom range types the old tab could show are gone. Revisit if a custom-range cumulative chart
   is missed.
