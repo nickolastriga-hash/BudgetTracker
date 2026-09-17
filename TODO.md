@@ -40,9 +40,11 @@ transactions, all local-only. Deliberately deferred:
   name — an AsyncStorage-backed preference, defaulting to `'system'` (the old always-follows-OS
   behavior), with `'light'`/`'dark'` pinning it. Set from Settings' new "APPEARANCE" section. See
   CLAUDE.md's `hooks/use-theme-preference.tsx` and Settings bullets.
-- **Export / CSV** — no *CSV* export yet. A full JSON backup/restore landed 2026-09-13 (Settings →
-  DATA, `lib/backup.ts`) — that's for not losing data, not for spreadsheets; a per-transaction CSV for
-  reporting is still open.
+- ~~**Export / CSV**~~ — done (2026-09-17): `lib/csv-export.ts#exportTransactionsCsv`, an "Export as
+  CSV" row in Settings → DATA next to the JSON backup. One row per transaction (date, type, category
+  name, amount, note, a Yes/No recurring flag), sorted chronologically. Same native-share-vs-web-
+  download split as `lib/backup.ts`'s own export, but unrelated to it otherwise — this is a one-way,
+  human-readable spreadsheet export, not a backup format `importBackup` can read back.
 - **Wealth follow-ups (2026-09-13)** — savings goals, debt payoff planner, and net worth are all
   hand-entered (see CLAUDE.md's "Wealth tab data is hand-entered" bullet). Still open: net worth
   history sampled on a schedule rather than only when the page opens. ~~A goal contribution

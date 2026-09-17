@@ -387,8 +387,12 @@ src/
                           — plus, once enabled, a "Use Face ID/Fingerprint"
                           Switch when the device has enrolled biometrics and
                           a "Change PIN" row) and a "DATA" section (Back up
-                          to file / Restore from file, the latter two-tap;
-                          both via lib/backup.ts). `SettingsRow` takes an
+                          to file / Restore from file, the latter two-tap,
+                          both via lib/backup.ts; an "Export as CSV" row
+                          between them, added 2026-09-17, via
+                          lib/csv-export.ts — a one-way spreadsheet export,
+                          unrelated to the JSON backup format Restore reads).
+                          `SettingsRow` takes an
                           optional `right` node that replaces its chevron —
                           how the Switch rows are built.
     account.tsx            Sign up / log in / log out (2026-09-17, Firebase
@@ -549,6 +553,17 @@ src/
                           pickers mis-type .json and would hide it), text
                           read via the native `File` class or the web
                           `File` object.
+    csv-export.ts           exportTransactionsCsv() (2026-09-17) — every
+                          transaction as CSV (date, type, category name,
+                          amount, note, a Yes/No recurring flag via
+                          recurring.ts#isActiveRecurring), sorted
+                          chronologically. Same native-share-vs-web-download
+                          split as backup.ts's exportBackup, reusing its
+                          exported `ExportOutcome` type rather than
+                          redefining an identical one — but otherwise
+                          unrelated: this is a one-way, human-readable
+                          export, not something importBackup could ever
+                          read back.
     firebase.ts             Firebase app + Auth singleton (2026-09-17),
                           structure copied from HabitTracker's own file of
                           the same name. `auth` is exported as `Auth`;

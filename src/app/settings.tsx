@@ -14,6 +14,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { useThemePreference } from '@/hooks/use-theme-preference';
 import { exportBackup, importBackup } from '@/lib/backup';
 import { CURRENCIES, currencyOption, formatMoney, LOCALES } from '@/lib/currency';
+import { exportTransactionsCsv } from '@/lib/csv-export';
 import { generateDemoData } from '@/lib/demo-data';
 
 function SettingsRow({
@@ -101,6 +102,23 @@ export default function SettingsScreen() {
       );
     } catch (e) {
       setDataResult({ text: e instanceof Error ? e.message : 'Backup failed.', ok: false });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleExportCsv() {
+    setBusy(true);
+    setDataResult(null);
+    try {
+      const outcome = await exportTransactionsCsv();
+      setDataResult(
+        outcome === 'unavailable'
+          ? { text: 'Sharing isn’t available on this device.', ok: false }
+          : { text: outcome === 'downloaded' ? 'CSV downloaded.' : 'CSV ready to save or send.', ok: true }
+      );
+    } catch (e) {
+      setDataResult({ text: e instanceof Error ? e.message : 'Export failed.', ok: false });
     } finally {
       setBusy(false);
     }
@@ -240,6 +258,14 @@ export default function SettingsScreen() {
             subtitle="Saves everything (transactions, budgets, categories, recurring, goals, debts, net worth) as one JSON file you can keep anywhere."
             disabled={busy}
             onPress={handleBackup}
+          />
+          <View style={[styles.divider, { backgroundColor: theme.border }]} />
+          <SettingsRow
+            icon="table-chart"
+            label={busy ? 'Working…' : 'Export as CSV'}
+            subtitle="Every transaction as a spreadsheet-ready CSV file, for reporting or your own analysis."
+            disabled={busy}
+            onPress={handleExportCsv}
           />
           <View style={[styles.divider, { backgroundColor: theme.border }]} />
           <SettingsRow
