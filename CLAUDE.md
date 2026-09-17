@@ -88,8 +88,13 @@ system to show a profile for; opens `app/settings.tsx`, see its own bullet below
   the pinned `+` → `account-editor.tsx`. The former Trends content (an Expenses/Income/Net pager of
   `CumulativeTrendChart`s) lives on Home now as `components/trends-card.tsx` — see the "Trends tab"
   convention bullet below, whose mechanics still apply.
-All data is local — `AsyncStorage` only, no accounts, no sync. That's a deliberate v1 scope
-decision, not an oversight; see [TODO.md](TODO.md) for what's intentionally deferred.
+All data is local — `AsyncStorage` only, no sync. That was a deliberate v1 scope decision; as of
+2026-09-17 there's an optional account (Settings → Account, Firebase Auth: email/password + Google +
+Apple, matching HabitTracker's own Account screen) — this is Phase 1 of the same staged rollout
+HabitTracker used (see TODO.md's "Accounts / cloud backup"): signing in establishes an identity but
+doesn't touch your data yet. Data sync/backup is a deliberately separate future phase, not built yet
+— the existing JSON backup/restore (`lib/backup.ts`) is unrelated and still the only way to move data
+between devices. See [TODO.md](TODO.md) for what else is intentionally deferred.
 
 ## Tech Stack
 
@@ -154,6 +159,24 @@ fighting the compiler's own memoization rather than helping).
   (added 2026-09-13) for JSON backup/restore — see `lib/backup.ts`. On web, backup is a Blob download
   and restore reads the picked `File` directly; neither sharing nor the native `File` class is touched
   there.
+- **firebase (`@firebase/auth`) + `@react-native-google-signin/google-signin` + `expo-apple-authentication`**
+  (added 2026-09-17) for the optional Settings → Account sign-in — see `lib/firebase.ts`/`lib/auth.ts`/
+  `hooks/use-auth.tsx`/`app/account.tsx`, copied structure-for-structure from HabitTracker's own
+  Firebase Auth setup (see that project's CLAUDE.md if this needs revisiting). Auth is imported from
+  the scoped `@firebase/auth` package, not the friendlier `firebase/auth` — the top-level `firebase`
+  wrapper's `"./auth"` export has no `"react-native"` condition, so it always resolves to the browser
+  build (missing `getReactNativePersistence`) regardless of platform; `@firebase/auth` does define
+  that condition. `getReactNativePersistence`'s own import still needs a `@ts-expect-error` even from
+  the scoped package — its exports map lists a generic `"types"` key ahead of its `"react-native"`
+  one, so TypeScript's *type* resolution picks the generic (web-only) declaration file regardless of
+  the `customConditions: ["react-native"]` Expo's tsconfig sets for the real Metro resolution; the
+  function is genuinely there at runtime, just not in the `.d.ts` TypeScript reaches for. Google/Apple
+  native sign-in need a dev-client build (`eas.json`, added the same day) — neither works in Expo Go.
+  Uses a separate Firebase project from HabitTracker's (`budgettracker-443b5`) so the two apps' users
+  stay isolated, but the same Apple Developer team/Sign-in-with-Apple key (`S9ZMRL29U6`, originally
+  provisioned for HabitTracker) — Apple keys can serve multiple App IDs under one team, so this one's
+  configured App IDs were extended to cover `com.nicktriga.budgettracker` too rather than minting a
+  new key.
 - **@expo/vector-icons** (`MaterialIcons`) for all icons — category icons, tab icons (via
   `NativeTabs.Trigger.VectorIcon` on native, plain `<MaterialIcons>` in the web tab bar), and UI
   chrome. iOS tab icons additionally use SF Symbols via the `sf` prop.
@@ -335,7 +358,14 @@ src/
                           _layout.tsx (native title "Settings", auto back
                           button) — no in-content title of its own, unlike
                           add-transaction/category-editor which follow the
-                          same convention. An "APPEARANCE" section (added
+                          same convention. An "ACCOUNT" section (2026-09-17,
+                          first section, matching HabitTracker's own
+                          placement) is a single row into account.tsx (see
+                          its own entry below) — subtitle is the signed-in
+                          email, or "Sign In" in accent color when signed
+                          out (a `subtitleColor` prop added to this file's
+                          local `SettingsRow` just for this row). An
+                          "APPEARANCE" section (added
                           2026-09-17) is the standard 3-option
                           SegmentedControl (Light/Dark/Auto,
                           `light-mode`/`dark-mode`/`brightness-auto` icons)
@@ -361,6 +391,40 @@ src/
                           both via lib/backup.ts). `SettingsRow` takes an
                           optional `right` node that replaces its chevron —
                           how the Switch rows are built.
+    account.tsx            Sign up / log in / log out (2026-09-17, Firebase
+                          Auth: email/password + native Google/Apple
+                          Sign-In — see lib/auth.ts), reached from Settings'
+                          Account row. Not to be confused with
+                          account-editor.tsx below (a net-worth Account for
+                          the Wealth tab, unrelated). Own EditorHeader
+                          (title "Account", an X `router.back()`), same
+                          shape as every other `headerShown: false` editor
+                          here — HabitTracker's own version of this screen
+                          instead uses a plain back-link/ScrollView with no
+                          i18n dependency, both adapted here since this app
+                          has neither `EditorHeader`'s absence nor a
+                          translation layer to preserve. Signed out: email +
+                          password fields, forgot-password link, a
+                          Log in/Sign up mode toggle, a divider, "Continue
+                          with Google", and (iOS only, gated on
+                          `AppleAuthentication.isAvailableAsync()`) Apple's
+                          own `AppleAuthenticationButton` — App Store
+                          Guidelines require Apple's own button component
+                          there, not a custom-styled Pressable like Google's.
+                          Signed in: email, a Log out button, and a two-tap
+                          Delete account (HabitTracker's version uses
+                          `Alert.alert` for this confirm; this app's own
+                          convention is two-tap instead, see add-transaction
+                          Delete, so that's what this screen uses too).
+                          `GoogleSignin.configure({webClientId})` runs from
+                          a mount effect, not module top level — expo-router
+                          eagerly requires every file under app/ at startup,
+                          so a top-level call would run on every launch
+                          whether this screen was ever opened or not, with
+                          no try/catch around it. Signing in doesn't touch
+                          any app data yet — see the Project Overview's own
+                          note on this being Phase 1 of a staged rollout,
+                          same as HabitTracker's.
     goal-editor.tsx        Add/edit a SavingsGoal (2026-09-13), reached from
                           Wealth's Goals page. Own EditorHeader (see
                           components/editor-header.tsx), name, target
@@ -485,6 +549,35 @@ src/
                           pickers mis-type .json and would hide it), text
                           read via the native `File` class or the web
                           `File` object.
+    firebase.ts             Firebase app + Auth singleton (2026-09-17),
+                          structure copied from HabitTracker's own file of
+                          the same name. `auth` is exported as `Auth`;
+                          `getReactNativePersistence(AsyncStorage)` backs
+                          native sessions so login survives an app restart,
+                          `getAuth(app)` (browser persistence) backs web.
+                          Imports from the scoped `@firebase/auth` package
+                          rather than `firebase/auth` — see the Tech Stack
+                          bullet above for why, including the
+                          `@ts-expect-error` `getReactNativePersistence`
+                          itself still needs. `firebaseConfig` is this
+                          app's own project (`budgettracker-443b5`), not
+                          HabitTracker's — deliberately separate so the two
+                          apps' signed-in users don't overlap. No Firestore
+                          export yet (HabitTracker's does, for its own
+                          Phase 3 cloud backup) — this app has no data-sync
+                          phase built, so nothing needs it.
+    auth.ts                 Email/password + Google/Apple-credential sign
+                          up/in/out, sendPasswordReset (swallows
+                          auth/user-not-found so the UI can't be used to
+                          enumerate accounts), deleteCurrentUser (surfaces
+                          auth/requires-recent-login as a friendly re-login
+                          prompt), onAuthStateChanged subscription, friendly
+                          error mapping (2026-09-17, verbatim copy of
+                          HabitTracker's lib/auth.ts of the same name, minus
+                          its deleteCloudBackup call in account deletion —
+                          this app has no cloud backup to clean up yet). No
+                          data-layer coupling — nothing else in this app
+                          knows or cares whether a user is signed in.
     date-range.ts           Week/Month/Year/Custom range machinery (RangeType,
                           CustomRange, rangeBounds, shiftAnchor,
                           shiftCustomRange, daysBetween, monthsBetween, plus
@@ -1180,6 +1273,16 @@ src/
                           be a third way in this app never verified.
                           expo-local-authentication's web shim reports no
                           hardware, so web is PIN-only with no branch.
+  hooks/use-auth.tsx       AuthProvider + useAuth() (2026-09-17, verbatim
+                          structure from HabitTracker's own hook of the
+                          same name) — exposes { user, loading } off
+                          Firebase's onAuthStateChanged, mounted from
+                          src/app/_layout.tsx inside
+                          ThemePreferenceProvider (same nesting position as
+                          AppLockProvider/CurrencyProvider). `loading`
+                          starts true so account.tsx shows a neutral
+                          spinner instead of flashing "signed out" before a
+                          persisted session restores on launch.
 ```
 
 ## Important Conventions
