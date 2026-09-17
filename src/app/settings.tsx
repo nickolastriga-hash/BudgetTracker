@@ -6,8 +6,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SegmentedControl } from '@/components/segmented-control';
 import { ThemedText } from '@/components/themed-text';
-import { CardRadius, MaxContentWidth, Spacing } from '@/constants/theme';
+import { CardRadius, MaxContentWidth, Spacing, type ThemeColor } from '@/constants/theme';
 import { useAppLock } from '@/hooks/use-app-lock';
+import { useAuth } from '@/hooks/use-auth';
 import { useCurrency } from '@/hooks/use-currency';
 import { useTheme } from '@/hooks/use-theme';
 import { useThemePreference } from '@/hooks/use-theme-preference';
@@ -19,6 +20,7 @@ function SettingsRow({
   icon,
   label,
   subtitle,
+  subtitleColor,
   disabled,
   onPress,
   right,
@@ -26,6 +28,9 @@ function SettingsRow({
   icon: React.ComponentProps<typeof MaterialIcons>['name'];
   label: string;
   subtitle?: string;
+  // Colors the subtitle accent instead of textSecondary — used for Account's
+  // "Sign In" row so it reads as an affordance, not a neutral status label.
+  subtitleColor?: ThemeColor;
   disabled?: boolean;
   onPress?: () => void;
   // Replaces the trailing chevron — a Switch, for the toggle rows.
@@ -46,7 +51,7 @@ function SettingsRow({
       <View style={styles.rowLabelGroup}>
         <ThemedText type="default">{label}</ThemedText>
         {subtitle && (
-          <ThemedText type="small" themeColor="textSecondary">
+          <ThemedText type="small" themeColor={subtitleColor ?? 'textSecondary'}>
             {subtitle}
           </ThemedText>
         )}
@@ -59,6 +64,7 @@ function SettingsRow({
 export default function SettingsScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const { preference, setPreference } = useThemePreference();
   const appLock = useAppLock();
   const currency = useCurrency();
@@ -127,6 +133,19 @@ export default function SettingsScreen() {
           styles.content,
           { paddingTop: insets.top + Spacing.three, paddingBottom: insets.bottom + Spacing.six },
         ]}>
+        <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+          ACCOUNT
+        </ThemedText>
+        <View style={sectionStyle}>
+          <SettingsRow
+            icon="account-circle"
+            label="Account"
+            subtitle={user ? (user.email ?? 'Signed in') : 'Sign In'}
+            subtitleColor={user ? undefined : 'accent'}
+            onPress={() => router.push('/account')}
+          />
+        </View>
+
         <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
           APPEARANCE
         </ThemedText>

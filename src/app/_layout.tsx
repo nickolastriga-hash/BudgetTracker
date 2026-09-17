@@ -13,6 +13,7 @@ import { useEffect } from 'react';
 import { LockScreen } from '@/components/lock-screen';
 import { Colors } from '@/constants/theme';
 import { AppLockProvider } from '@/hooks/use-app-lock';
+import { AuthProvider } from '@/hooks/use-auth';
 import { CurrencyProvider } from '@/hooks/use-currency';
 import { ThemePreferenceProvider, useThemePreference } from '@/hooks/use-theme-preference';
 import { generateDueTransactions } from '@/lib/recurring';
@@ -54,6 +55,7 @@ function RootLayoutInner() {
         <Stack.Screen name="budget-editor" options={{ headerShown: false, presentation: 'modal' }} />
         <Stack.Screen name="edit-recurring" options={{ headerShown: false, presentation: 'modal' }} />
         <Stack.Screen name="settings" options={{ headerShown: true, presentation: 'modal', title: 'Settings' }} />
+        <Stack.Screen name="account" options={{ headerShown: false, presentation: 'modal' }} />
         <Stack.Screen name="goal-editor" options={{ headerShown: false, presentation: 'modal' }} />
         <Stack.Screen name="debt-editor" options={{ headerShown: false, presentation: 'modal' }} />
         <Stack.Screen name="account-editor" options={{ headerShown: false, presentation: 'modal' }} />
@@ -76,11 +78,13 @@ function RootLayoutInner() {
 export default function RootLayout() {
   return (
     <ThemePreferenceProvider>
-      <CurrencyProvider>
-        <AppLockProvider>
-          <RootLayoutInner />
-        </AppLockProvider>
-      </CurrencyProvider>
+      <AuthProvider>
+        <CurrencyProvider>
+          <AppLockProvider>
+            <RootLayoutInner />
+          </AppLockProvider>
+        </CurrencyProvider>
+      </AuthProvider>
     </ThemePreferenceProvider>
   );
 }
