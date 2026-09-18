@@ -1,7 +1,7 @@
 import { useId, useRef, useState } from 'react';
 import type { GestureResponderEvent, View as ViewType } from 'react-native';
 import { StyleSheet, View } from 'react-native';
-import Svg, { Circle, Defs, Line, LinearGradient, Polygon, Polyline, Stop } from 'react-native-svg';
+import Svg, { Circle, Defs, Line, LinearGradient, Path, Stop } from 'react-native-svg';
 
 import { ThemedText } from '@/components/themed-text';
 import { useCurrency } from '@/hooks/use-currency';
@@ -27,13 +27,51 @@ const EDGE_GAP_PX = 28;
 // the smallest one that still fits within the available tick budget wins.
 const TICK_INTERVALS_MONTHS = [3, 6, 12, 24, 36, 60, 120, 180, 300, 600];
 
-// Balance-over-time for a payoff plan: one stacked band per debt (in the
-// plan's attack order, current target on top, so the top edge is the total
-// owed and each band visibly melts to nothing at its payoff month) plus a
-// dashed "minimums only" line over the same months for comparison. Press
-// and drag to read any month. Same touch-layer / measureInWindow / pager-
-// disabling approach as CumulativeTrendChart — see that file for the full
-// reasoning behind each of those choices; none of it is repeated here.
+type Point = { x: number; y: number };
+
+// Catmull-Rom-to-cubic-Bezier conversion — turns the (potentially hundreds
+// of) straight monthly segments a payoff schedule naturally produces into
+// one flowing curve, the single change that most moves this chart from
+// "spreadsheet line chart" toward how a modern finance app draws a balance
+// over time. Returns just the "C x1,y1 x2,y2 x,y ..." commands (no leading
+// M), so callers can prefix whichever starting point (and fill/stroke
+// treatment) they need. A stray payoff-month kink in the underlying data
+// (a debt clearing frees up budget, visibly changing the payoff rate) reads
+// as a soft bend rather than a sharp corner — a deliberate, common
+// stylization for this kind of chart, not a loss of accuracy: the
+// underlying monthly values themselves are untouched, and the scrub/callout
+// below always snaps to a real data point regardless of how the curve
+// between two points is drawn.
+function curveCommands(points: Point[]): string {
+  if (points.length < 2) return '';
+  if (points.length === 2) return ` L${points[1].x},${points[1].y}`;
+  let d = '';
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[Math.max(i - 1, 0)];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[Math.min(i + 2, points.length - 1)];
+    const c1x = p1.x + (p2.x - p0.x) / 6;
+    const c1y = p1.y + (p2.y - p0.y) / 6;
+    const c2x = p2.x - (p3.x - p1.x) / 6;
+    const c2y = p2.y - (p3.y - p1.y) / 6;
+    d += ` C${c1x},${c1y} ${c2x},${c2y} ${p2.x},${p2.y}`;
+  }
+  return d;
+}
+
+function curvePath(points: Point[]): string {
+  return `M${points[0].x},${points[0].y}${curveCommands(points)}`;
+}
+
+// Balance-over-time for a payoff plan: one stacked, smoothly-curved band per
+// debt (in the plan's attack order, current target on top, so the top edge
+// is the total owed and each band visibly melts to nothing at its payoff
+// month) plus a dashed "minimums only" line over the same months for
+// comparison. Press and drag to read any month. Same touch-layer /
+// measureInWindow / pager-disabling approach as CumulativeTrendChart — see
+// that file for the full reasoning behind each of those choices; none of it
+// is repeated here.
 //
 // Long horizons are the norm here (a 25-year plan is 300 points), so the
 // chart carries its own dollar gridlines and year ticks — without them a
@@ -125,13 +163,15 @@ export function DebtPayoffChart({
     cumulative.push(schedule.map((entry, i) => (below ? below[i] : 0) + (entry.balances[stack[k].id] ?? 0)));
   }
   const bands = stack.map((debt, k) => {
-    const top = cumulative[k];
-    const bottom = cumulative[k - 1];
-    const forward = schedule.map((_, i) => `${xFor(i)},${yFor(top[i])}`);
-    const backward = schedule.map((_, i) => `${xFor(n - 1 - i)},${yFor(bottom ? bottom[n - 1 - i] : 0)}`);
-    // The band's own top edge, drawn as a line so adjacent bands separate
-    // cleanly even where two debts share a color.
-    return { debt, points: [...forward, ...backward].join(' '), edge: forward.join(' ') };
+    const top: Point[] = schedule.map((_, i) => ({ x: xFor(i), y: yFor(cumulative[k][i]) }));
+    const below = cumulative[k - 1];
+    const bottom: Point[] = schedule.map((_, i) => ({ x: xFor(n - 1 - i), y: yFor(below ? below[n - 1 - i] : 0) }));
+    // Fill: the smoothed top curve forward, a straight drop to the bottom
+    // curve's own level, then the smoothed bottom curve backward, closed.
+    const fillPath = `${curvePath(top)} L${bottom[0].x},${bottom[0].y}${curveCommands(bottom)} Z`;
+    // The band's own top edge, stroked separately so adjacent bands
+    // separate cleanly even where two debts share a color.
+    return { debt, fillPath, edgePath: curvePath(top) };
   });
 
   // X ticks: the smallest "nice" calendar interval whose resulting tick
@@ -163,8 +203,8 @@ export function DebtPayoffChart({
         <Defs>
           {bands.map((b) => (
             <LinearGradient key={b.debt.id} id={`${idBase}-${b.debt.id}`} x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0" stopColor={b.debt.color} stopOpacity={0.95} />
-              <Stop offset="1" stopColor={b.debt.color} stopOpacity={0.6} />
+              <Stop offset="0" stopColor={b.debt.color} stopOpacity={1} />
+              <Stop offset="1" stopColor={b.debt.color} stopOpacity={0.4} />
             </LinearGradient>
           ))}
         </Defs>
@@ -184,20 +224,20 @@ export function DebtPayoffChart({
         ))}
 
         {bands.map((b) => (
-          <Polygon key={b.debt.id} points={b.points} fill={`url(#${idBase}-${b.debt.id})`} />
+          <Path key={b.debt.id} d={b.fillPath} fill={`url(#${idBase}-${b.debt.id})`} />
         ))}
         {bands.map((b) => (
-          <Polyline key={`edge-${b.debt.id}`} points={b.edge} fill="none" stroke={theme.card} strokeWidth={1.5} strokeLinejoin="round" />
+          <Path key={`edge-${b.debt.id}`} d={b.edgePath} fill="none" stroke={theme.card} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
         ))}
 
         {baselineInDomain && (
-          <Polyline
-            points={baselineInDomain.map((v, i) => `${xFor(i)},${yFor(v)}`).join(' ')}
+          <Path
+            d={curvePath(baselineInDomain.map((v, i) => ({ x: xFor(i), y: yFor(v) })))}
             fill="none"
             stroke={theme.textSecondary}
             strokeWidth={1.5}
-            strokeDasharray="5,4"
-            strokeLinejoin="round"
+            strokeDasharray="1,7"
+            strokeLinecap="round"
           />
         )}
 
@@ -231,9 +271,14 @@ export function DebtPayoffChart({
               y1={plotTop}
               y2={plotBottom}
               stroke={theme.textSecondary}
-              strokeWidth={1}
-              strokeDasharray="3,3"
+              strokeWidth={1.5}
+              strokeDasharray="1,5"
+              strokeLinecap="round"
             />
+            {/* A soft halo behind the solid dot — the two-circle "hovered
+                point" treatment most modern chart libraries use, standing
+                in for the single flat dot this used to be. */}
+            <Circle cx={xFor(activeIndex)} cy={yFor(active.total)} r={9} fill={theme.text} fillOpacity={0.16} />
             <Circle cx={xFor(activeIndex)} cy={yFor(active.total)} r={4.5} fill={theme.text} stroke={theme.card} strokeWidth={1.5} />
           </>
         )}
@@ -325,7 +370,6 @@ function niceStep(rough: number) {
   return factor * power;
 }
 
-
 function shortMonth(m: number) {
   return new Date(2000, m - 1, 1).toLocaleDateString(undefined, { month: 'short' });
 }
@@ -359,16 +403,16 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 4,
     width: CALLOUT_WIDTH,
-    borderRadius: 10,
+    borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    gap: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    gap: 2,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.14,
+    shadowRadius: 6,
+    elevation: 4,
   },
   calloutSmall: {
     fontSize: 11,

@@ -940,6 +940,36 @@ src/
                           confirmed both the pill fixes the on-fill overlap
                           and the new tick spacing reads cleanly at that
                           width.
+                          **Curve smoothing, same day, immediate follow-up**
+                          — the pass above fixed the real bugs but kept the
+                          same underlying shape, which didn't read as a
+                          redesign per further feedback. Every band's top
+                          edge (and the dashed minimums-only comparison
+                          line) switched from a straight-segment
+                          `Polygon`/`Polyline` through every monthly point
+                          to one smooth curve — a small Catmull-Rom-to-
+                          cubic-Bezier helper (`curveCommands`/`curvePath`)
+                          building an SVG `<Path>` `d` string instead. This
+                          is the single change that does the most to move
+                          the chart from "spreadsheet line chart" toward how
+                          a modern finance app draws a balance over time; a
+                          payoff-month kink in the underlying data (a debt
+                          clearing frees up budget, genuinely changing the
+                          payoff rate) now reads as a soft bend rather than
+                          a sharp corner, a common and accepted stylization
+                          for this kind of chart — the monthly values
+                          themselves are unchanged, and the scrub/callout
+                          still always snaps to a real data point regardless
+                          of how the curve between two points is drawn.
+                          Gradient stops also deepened (0.95/0.6 alpha →
+                          1/0.4) for more contrast, and the edge stroke
+                          width bumped 1.5→2 to read clearly against the
+                          richer fill. The scrub indicator gained the same
+                          two-circle "halo behind a solid dot" treatment
+                          most chart libraries use (a `fillOpacity={0.16}`
+                          ring behind the existing solid one) instead of a
+                          single flat dot, and the callout's corner radius
+                          grew 10→14 with a bit more padding to match.
     upcoming-bills-card.tsx  UpcomingBillsCard (2026-09-14) — Home's "next 7
                           days" strip of recurring series, windowed off the
                           same lib/recurring.ts#nextDueDate the Transactions
