@@ -827,6 +827,29 @@ src/
                           at this data volume (~200-300 rows across both
                           years), would need revisiting if the range or
                           per-month density grew much larger.
+                          **Seeds Wealth data too (2026-09-18)** — per
+                          feedback that Wealth had nothing to demo, three
+                          `seedGoals`/`seedDebts`/`seedAccounts` helpers add
+                          a fixed, hand-picked set of savings goals ("Emergency
+                          Fund", "Vacation", "New Laptop" — one already at
+                          100%+, for a "Goal reached" example), debts
+                          ("Credit Card"/"Car Loan"/"Student Loan", spanning
+                          a range of APRs so the payoff planner has
+                          something to snowball/avalanche between), and
+                          net-worth accounts (three assets + a "Mortgage"
+                          liability, so the Net Worth screen's liabilities
+                          group shows both a manual entry and the
+                          "From Debts" merged ones at once). Fixed values
+                          rather than randomized like the transaction
+                          backfill above — a believable name/number spread
+                          reads better for a demo than random ones would.
+                          Colors offset the same way each editor's own
+                          "next unused palette slot" default does (goal
+                          `CATEGORY_COLORS` start at index 3, debt at 0,
+                          account at 6 — see those screens' own bullets),
+                          computed off each list's length *before* seeding
+                          so a demo entry lands on the same color a
+                          hand-added one would have gotten right after it.
 
   components/
     debt-payoff-chart.tsx    DebtPayoffChart (2026-09-13, same-day follow-up
@@ -1458,15 +1481,17 @@ src/
   required dropping their `overflow: 'hidden'` (shadows get clipped by it) — the only cost is a
   square instead of rounded corner on the first/last row's press-highlight, not worth the
   wrapper-View complexity to avoid.
-- **Settings + demo data (added 2026-08-26, extended 2026-08-31 and 2026-09-03, trimmed 2026-09-10)**
-  — `app/settings.tsx`, reached via `SettingsButton` on every tab. "Generate demo data"
+- **Settings + demo data (added 2026-08-26, extended 2026-08-31, 2026-09-03, and 2026-09-18, trimmed
+  2026-09-10)** — `app/settings.tsx`, reached via `SettingsButton` on every tab. "Generate demo data"
   (`lib/demo-data.ts#generateDemoData`, renamed from `generateYearToDateDemoData`), a
   two-tap-confirmed button that backfills random transactions across two ranges — this year's Jan 1
   through today, plus (2026-08-31, per feedback that Trends' Year view had nothing prior to compare
   against) all of last year — and sets a handful of both expense budgets *and* income goals
   (2026-08-31; previously expense-only) — for demoing/testing without hand-entering months of data.
-  Purely additive (never clears/dedupes), so repeated taps pile up rather than reset; there's no
-  companion "clear demo data" yet, see TODO.md. A "RECURRING" section briefly sat above it
+  Also seeds a fixed set of sample savings goals, debts, and net-worth accounts (2026-09-18, per
+  feedback that Wealth had nothing to demo) — see `lib/demo-data.ts`'s own Folder Structure entry for
+  what exactly gets added. Purely additive (never clears/dedupes), so repeated taps pile up rather
+  than reset; there's no companion "clear demo data" yet, see TODO.md. A "RECURRING" section briefly sat above it
   (2026-09-03: a single row into app/recurring.tsx, its subtitle a live "N active" count) — removed
   2026-09-10 once that screen's content moved into the Transactions tab's Recurring page (see the "A
   standalone Bills tab" bullet above); Settings is back to just the one section.

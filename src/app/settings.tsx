@@ -85,9 +85,11 @@ export default function SettingsScreen() {
     setConfirming(false);
     setGenerating(true);
     setResult(null);
-    const { transactions, budgets } = await generateDemoData();
+    const { transactions, budgets, goals, debts, accounts } = await generateDemoData();
     setGenerating(false);
-    setResult(`Added ${transactions} transactions and set ${budgets} budgets/goals.`);
+    setResult(
+      `Added ${transactions} transactions, set ${budgets} budgets/goals, and added ${goals} savings goals, ${debts} debts, and ${accounts} accounts.`
+    );
   }
 
   async function handleBackup() {
@@ -295,7 +297,7 @@ export default function SettingsScreen() {
                   ? 'Tap again to generate'
                   : 'Generate demo data'
             }
-            subtitle="Adds random expense/income transactions for this year to date plus all of last year, and sets a handful of expense budgets and income goals. Doesn't touch or remove anything already there, so it's safe to run more than once, but repeats will pile up."
+            subtitle="Adds random expense/income transactions for this year to date plus all of last year, sets a handful of expense budgets and income goals, and adds a few sample savings goals, debts, and net-worth accounts. Doesn't touch or remove anything already there, so it's safe to run more than once, but repeats will pile up."
             disabled={generating}
             onPress={handleGenerate}
           />
