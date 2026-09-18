@@ -899,6 +899,47 @@ src/
                           just flags `unreachable`, so the baseline always
                           spans the plan's own months instead of
                           flat-lining at a truncated value. Height 200.
+                          **Axis overlap + a modernization pass (2026-09-18)**
+                          — per feedback that the chart "looked old school"
+                          and had labels overlapping. Two real bugs, not
+                          just polish: (1) the y-axis `$Xk` gridline labels
+                          were plain text with no backdrop, so one landing
+                          over a debt's colored band (any plan with a large
+                          top band, not just an edge case) read as
+                          low-contrast or outright illegible — fixed with a
+                          small `theme.card` pill behind each one, same
+                          "halo behind a label that might sit over anything"
+                          idea as a map pin's own label. (2) the x-axis tick
+                          interval was chosen off point-count brackets (`n
+                          <= 84 ? 12 : n <= 180 ? 24 : 60`) with no idea how
+                          wide the chart actually rendered, and only checked
+                          crowding against the *right* fixed end-label, never
+                          the left "Today" one — a long horizon on a narrow
+                          phone chart could still pack more ticks than the
+                          width could legibly hold. Replaced with
+                          `MIN_TICK_PX`-budgeted interval selection (the
+                          smallest of `TICK_INTERVALS_MONTHS` — quarterly up
+                          to every 50 years — whose resulting tick count
+                          fits `plotWidth / MIN_TICK_PX`) plus a symmetric
+                          `EDGE_GAP_PX` crowding check on both ends, so
+                          spacing is correct at any chart width and any plan
+                          length instead of only the specific `n` ranges the
+                          old brackets happened to have been tuned against.
+                          Visual refresh alongside: gridlines and the bottom
+                          axis/tick marks switched from solid `theme.border`
+                          hairlines to a soft dotted style (`1,5`) with round
+                          caps — closer to how Victory/Recharts draw a grid
+                          by default, less like a spreadsheet's own ruled
+                          lines — and `PADDING_TOP` 14→20 so the topmost
+                          gridline's pill isn't flush against the card's own
+                          edge. Reproduced and verified via the Browser pane
+                          at a 375px mobile width against a synthetic
+                          25-year mortgage-scale debt (the demo data's own
+                          3 debts alone don't run long enough to have
+                          exercised the old bracket's failure mode) —
+                          confirmed both the pill fixes the on-fill overlap
+                          and the new tick spacing reads cleanly at that
+                          width.
     upcoming-bills-card.tsx  UpcomingBillsCard (2026-09-14) — Home's "next 7
                           days" strip of recurring series, windowed off the
                           same lib/recurring.ts#nextDueDate the Transactions

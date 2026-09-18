@@ -8,11 +8,24 @@ import { useCurrency } from '@/hooks/use-currency';
 import { useTheme } from '@/hooks/use-theme';
 import type { Debt, PayoffMonth } from '@/lib/debts';
 
-const PADDING_TOP = 14;
+const PADDING_TOP = 20;
 const PADDING_BOTTOM = 4;
 const PADDING_X = 2;
 const AXIS_HEIGHT = 18;
 const CALLOUT_WIDTH = 176;
+// Minimum horizontal space a single x-axis tick label needs (text plus
+// breathing room) — used to size how many ticks actually fit, rather than
+// picking an interval off the point count alone. A fixed px budget per tick
+// generalizes to any chart width and any plan length, where the old
+// point-count brackets didn't: a 25-year plan on a narrow phone screen could
+// still end up with more ticks than the width could legibly hold.
+const MIN_TICK_PX = 50;
+// Keeps a tick from crowding the fixed "Today"/end-date labels at the axis's
+// own edges.
+const EDGE_GAP_PX = 28;
+// "Nice" calendar intervals, in months, from quarterly up to every 50 years —
+// the smallest one that still fits within the available tick budget wins.
+const TICK_INTERVALS_MONTHS = [3, 6, 12, 24, 36, 60, 120, 180, 300, 600];
 
 // Balance-over-time for a payoff plan: one stacked band per debt (in the
 // plan's attack order, current target on top, so the top edge is the total
@@ -121,13 +134,20 @@ export function DebtPayoffChart({
     return { debt, points: [...forward, ...backward].join(' '), edge: forward.join(' ') };
   });
 
-  // X ticks: a tidy calendar interval that leaves labels room to breathe at
-  // any horizon (quarters for a short plan, every 5 years for a 25-year one).
-  const tickEvery = n <= 15 ? 3 : n <= 30 ? 6 : n <= 84 ? 12 : n <= 180 ? 24 : 60;
+  // X ticks: the smallest "nice" calendar interval whose resulting tick
+  // count still fits the chart's actual pixel width, so a long horizon on a
+  // narrow phone screen thins itself out instead of packing labels past the
+  // point of legibility (a fixed point-count bracket, what this used to be,
+  // doesn't account for how wide the chart actually rendered).
+  const maxTicks = Math.max(1, Math.floor(plotWidth / MIN_TICK_PX));
+  const tickEvery =
+    TICK_INTERVALS_MONTHS.find((interval) => Math.floor((n - 1) / interval) <= maxTicks) ??
+    TICK_INTERVALS_MONTHS[TICK_INTERVALS_MONTHS.length - 1];
   const ticks: { i: number; label: string }[] = [];
   for (let i = tickEvery; i < n - 1; i += tickEvery) {
-    // Skip a tick that would crowd the fixed end label.
-    if ((n - 1 - i) / (n - 1) < 0.09) break;
+    const x = xFor(i);
+    if (width - x < EDGE_GAP_PX) break; // too close to the fixed end label
+    if (x < EDGE_GAP_PX) continue; // too close to the fixed "Today" label
     const [y, m] = schedule[i].month.split('-');
     ticks.push({ i, label: tickEvery >= 12 ? y : `${shortMonth(Number(m))} ’${y.slice(2)}` });
   }
@@ -150,7 +170,17 @@ export function DebtPayoffChart({
         </Defs>
 
         {gridValues.map((v) => (
-          <Line key={v} x1={PADDING_X} x2={width - PADDING_X} y1={yFor(v)} y2={yFor(v)} stroke={theme.border} strokeWidth={1} />
+          <Line
+            key={v}
+            x1={PADDING_X}
+            x2={width - PADDING_X}
+            y1={yFor(v)}
+            y2={yFor(v)}
+            stroke={theme.border}
+            strokeWidth={1}
+            strokeDasharray="1,5"
+            strokeLinecap="round"
+          />
         ))}
 
         {bands.map((b) => (
@@ -171,9 +201,26 @@ export function DebtPayoffChart({
           />
         )}
 
-        <Line x1={PADDING_X} x2={width - PADDING_X} y1={plotBottom} y2={plotBottom} stroke={theme.border} strokeWidth={1} />
+        <Line
+          x1={PADDING_X}
+          x2={width - PADDING_X}
+          y1={plotBottom}
+          y2={plotBottom}
+          stroke={theme.border}
+          strokeWidth={1.5}
+          strokeLinecap="round"
+        />
         {ticks.map((t) => (
-          <Line key={t.i} x1={xFor(t.i)} x2={xFor(t.i)} y1={plotBottom} y2={plotBottom + 4} stroke={theme.textTertiary} strokeWidth={1} />
+          <Line
+            key={t.i}
+            x1={xFor(t.i)}
+            x2={xFor(t.i)}
+            y1={plotBottom}
+            y2={plotBottom + 4}
+            stroke={theme.border}
+            strokeWidth={1.5}
+            strokeLinecap="round"
+          />
         ))}
 
         {activeIndex !== null && active && (
@@ -206,12 +253,18 @@ export function DebtPayoffChart({
 
       {/* Labels are ThemedText, not SVG text — same split as every other
           chart in the app. Gridline labels sit just above their line, on
-          the left; tick labels are centered under their tick. */}
+          the left, each on a small `theme.card` pill — a plain label here
+          would otherwise sit directly on top of whichever debt's colored
+          band happens to pass under that gridline, reading as low-contrast
+          or outright illegible once a band fill and a grey label overlap.
+          Tick labels are centered under their tick. */}
       {gridValues.map((v) => (
-        <View key={v} pointerEvents="none" style={[styles.gridLabel, { top: yFor(v) - 13 }]}>
-          <ThemedText type="small" themeColor="textTertiary" style={styles.miniLabel}>
-            {compact(v)}
-          </ThemedText>
+        <View key={v} pointerEvents="none" style={[styles.gridLabelWrap, { top: yFor(v) - 9 }]}>
+          <View style={[styles.gridLabelPill, { backgroundColor: theme.card }]}>
+            <ThemedText type="small" themeColor="textSecondary" style={styles.miniLabel}>
+              {compact(v)}
+            </ThemedText>
+          </View>
         </View>
       ))}
       <View pointerEvents="none" style={[styles.axisLabel, { left: 0, top: plotBottom + 3 }]}>
@@ -285,9 +338,15 @@ const styles = StyleSheet.create({
   centered: {
     textAlign: 'center',
   },
-  gridLabel: {
+  gridLabelWrap: {
     position: 'absolute',
-    left: PADDING_X + 2,
+    left: PADDING_X,
+  },
+  gridLabelPill: {
+    borderRadius: 5,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    alignSelf: 'flex-start',
   },
   axisLabel: {
     position: 'absolute',
