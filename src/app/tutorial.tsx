@@ -61,13 +61,13 @@ const SLIDES: Slide[] = [
   {
     icon: 'waving-hand',
     title: 'Welcome',
-    body: 'BudgetTracker keeps your money on your phone. Nothing is uploaded unless you back it up yourself, and there is no bank sync to set up.',
-    points: ['Log what you spend and earn', 'Set limits per category', 'Track savings, debts and net worth'],
+    body: 'Take charge of your money in a few taps a day. Everything lives right here on your device, ready the moment you open the app.',
+    points: ['See where your money goes', 'Set a limit for any category', 'Grow savings and clear debt'],
   },
   {
     icon: 'home',
     title: 'Home',
-    body: 'Your month at a glance. The ring breaks your spending down by category, and the cards below it cover trends, upcoming bills, budgets and wealth.',
+    body: 'Your whole month at a glance. The ring shows where your spending went, with trends, upcoming bills and your budgets just below.',
     points: ['Tap a ring segment to focus a category', 'Use the arrows to look at another month', 'Tap + to log a transaction'],
     mock: {
       caption: 'September 2026',
@@ -82,8 +82,8 @@ const SLIDES: Slide[] = [
   {
     icon: 'receipt-long',
     title: 'Transactions',
-    body: 'Every transaction, grouped by date. Switch between a week, month, year or a custom range.',
-    points: ['Search by note or category', 'Filter by type or category', 'Swipe to the Recurring page for repeating items'],
+    body: 'Every transaction, neatly grouped by date. View a week, a month, a year, or pick any range you like.',
+    points: ['Search by note or category', 'Filter to just what you need', 'Swipe across for repeating items'],
     mock: {
       caption: 'Fri, Sep 18',
       rows: [
@@ -96,8 +96,8 @@ const SLIDES: Slide[] = [
   {
     icon: 'event-repeat',
     title: 'Recurring',
-    body: 'Rent, subscriptions and anything else that repeats. Set it once and each occurrence is added for you the next time you open the app.',
-    points: ['Weekly through yearly, or a custom interval', 'Edit or stop a series any time', 'Home shows what is due in the next 7 days'],
+    body: 'Rent, subscriptions and anything else on repeat. Set it up once and every occurrence is logged for you automatically.',
+    points: ['Weekly through yearly, or your own interval', 'Adjust or end a series whenever you like', 'Home flags what is due in the next 7 days'],
     mock: {
       caption: 'Due this week',
       rows: [
@@ -110,8 +110,8 @@ const SLIDES: Slide[] = [
   {
     icon: 'pie-chart',
     title: 'Budgets',
-    body: 'Give a category a monthly limit and watch the bar fill. Income categories work the same way as goals to reach.',
-    points: ['Amber at 80%, red once over', 'Change a limit for one month or from now on', 'Swipe between expenses and income'],
+    body: 'Give a category a monthly limit and watch the bar fill as you spend. Income categories work the same way, as targets to reach.',
+    points: ['Turns amber at 80%, red once you pass it', 'Adjust a limit for one month or for good', 'Swipe between spending and income'],
     mock: {
       caption: 'Expense budgets',
       rows: [
@@ -124,8 +124,8 @@ const SLIDES: Slide[] = [
   {
     icon: 'savings',
     title: 'Wealth',
-    body: 'Savings goals, a debt payoff plan and your net worth. These are entered by hand, since there is no bank connection.',
-    points: ['Goals track what you have set aside', 'Debts get a snowball payoff plan and chart', 'Net worth adds up accounts minus debts'],
+    body: 'Savings goals, a debt payoff plan and your net worth, all in one place. You keep the numbers up to date, so they always reflect the full picture.',
+    points: ['Watch each savings goal fill up', 'Get a snowball plan and a payoff date', 'See your net worth at a glance'],
     mock: {
       caption: 'Goals and debts',
       rows: [
@@ -138,8 +138,8 @@ const SLIDES: Slide[] = [
   {
     icon: 'settings',
     title: 'Make it yours',
-    body: 'Settings has the rest: currency, light or dark, a PIN lock, backups, and demo data if you want to try things out first.',
-    points: ['Back up to a file or the cloud', 'Export transactions as CSV', 'Open this tutorial again any time'],
+    body: 'Settings is where you make the app yours. Pick your currency, go light or dark, add a PIN, and keep your data safely backed up.',
+    points: ['Back up to a file or the cloud', 'Export your transactions as a spreadsheet', 'Try it out first with demo data'],
     mock: {
       caption: 'Settings',
       rows: [

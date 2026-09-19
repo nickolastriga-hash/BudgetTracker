@@ -213,7 +213,7 @@ export default function SettingsScreen() {
           <SettingsRow
             icon="school"
             label="How BudgetTracker works"
-            subtitle="A quick tour of each tab. Shown once on the first launch, and here whenever you want it again."
+            subtitle="A quick tour of the app."
             onPress={() => router.push('/tutorial')}
           />
         </View>
