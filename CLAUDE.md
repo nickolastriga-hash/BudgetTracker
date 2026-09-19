@@ -440,10 +440,9 @@ src/
                           first (best-effort, in lib/auth.ts).
     goal-editor.tsx        Add/edit a SavingsGoal (2026-09-13), reached from
                           Wealth's Goals page. Own EditorHeader (see
-                          components/editor-header.tsx) — the goal's name
-                          lives in that header behind a pencil (2026-09-19,
-                          per feedback), not as a "Name" field in the form,
-                          which this screen no longer has. Target
+                          components/editor-header.tsx), name (first field —
+                          an in-header pencil was tried 2026-09-19 and
+                          reverted the same day), target
                           amount, an optional deadline (a Switch revealing a
                           year-nav + 12-month grid, same shape as
                           budget-editor's), then the shared ColorPicker/
@@ -470,9 +469,7 @@ src/
                           just the goal record (`reloadGoal`), not the form
                           fields, so unsaved edits survive.
     debt-editor.tsx        Add/edit a Debt (2026-09-13), from Wealth's Debts
-                          page or a "From Debts" liability row. The name
-                          lives in the header behind a pencil (2026-09-19,
-                          same as goal-editor),
+                          page or a "From Debts" liability row. Name,
                           current balance, starting balance (optional —
                           blank means "same as current"; saving clamps it to
                           at least the current balance so paydown never
@@ -485,9 +482,8 @@ src/
     account-editor.tsx     Add/edit a net-worth Account (2026-09-13). An
                           Asset/Liability SegmentedControl (preset by
                           `?kind=` from the Net Worth page's per-section Add
-                          links; the pinned + opens it as asset); the name
-                          lives in the header behind a pencil (2026-09-19,
-                          same as goal-editor and debt-editor),
+                          links; the pinned + opens it as asset). Name is the
+                          first field, above that toggle (2026-09-19),
                           balance, color, icon, two-tap Delete. Edit mode
                           adds an "ADD OR DEDUCT" row (2026-09-19: amount +
                           green add / red deduct, persisted immediately,
@@ -1081,13 +1077,10 @@ src/
                           budget-editor's inline version (budget-editor and
                           edit-recurring migrated onto it the same day). The
                           X carries accessibilityLabel="Close". Passing
-                          `onChangeTitle` (2026-09-19, used by goal-editor,
-                          debt-editor and account-editor) makes the title
-                          the name field: a
-                          pencil beside it swaps the text for an autofocused
-                          TextInput that commits on blur/submit, so the form
-                          below doesn't need its own "Name" row. Callers that
-                          omit it are unchanged.
+                          An `onChangeTitle` pencil variant was
+                          added and reverted on 2026-09-19 — see the file's
+                          own comment; a dedicated first-position Name field
+                          won out.
     icon-color-picker.tsx    ColorPicker + IconPicker + resolveIcon
                           (2026-09-13) — category-editor's swatch row and
                           AI-suggested/manual-grid icon picker, extracted for

@@ -204,9 +204,7 @@ export default function GoalEditorScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       <EditorHeader
-        title={name}
-        onChangeTitle={setName}
-        titlePlaceholder={isEditing ? 'Goal name' : 'New savings goal'}
+        title={isEditing ? name || 'Edit Goal' : 'New Savings Goal'}
         badge={<CategoryBadge category={{ icon: displayIcon, color }} size={30} />}
       />
 
@@ -398,6 +396,19 @@ export default function GoalEditorScreen() {
             )}
           </View>
         )}
+
+        <View style={styles.field}>
+          <ThemedText type="small" themeColor="textSecondary">
+            Name
+          </ThemedText>
+          <TextInput
+            value={name}
+            onChangeText={setName}
+            placeholder="Emergency fund, Vacation, New laptop…"
+            placeholderTextColor={theme.textTertiary}
+            style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.card }]}
+          />
+        </View>
 
         <View style={styles.field}>
           <ThemedText type="small" themeColor="textSecondary">

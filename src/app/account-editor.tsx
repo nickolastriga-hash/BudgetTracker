@@ -95,15 +95,26 @@ export default function AccountEditorScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       <EditorHeader
-        title={name}
-        onChangeTitle={setName}
-        titlePlaceholder={isEditing ? 'Account name' : kind === 'asset' ? 'New asset' : 'New liability'}
+        title={isEditing ? name || 'Edit Account' : kind === 'asset' ? 'New Asset' : 'New Liability'}
         badge={<CategoryBadge category={{ icon: displayIcon, color }} size={30} />}
       />
 
       <ScrollView
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + Spacing.six }]}
         keyboardShouldPersistTaps="handled">
+        <View style={styles.field}>
+          <ThemedText type="small" themeColor="textSecondary">
+            Name
+          </ThemedText>
+          <TextInput
+            value={name}
+            onChangeText={setName}
+            placeholder={kind === 'asset' ? 'Checking, Savings, Car, Home…' : 'Mortgage, Personal loan…'}
+            placeholderTextColor={theme.textTertiary}
+            style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.card }]}
+          />
+        </View>
+
         <SegmentedControl
           options={[
             { value: 'asset', label: 'Asset', icon: 'trending-up', color: theme.success },

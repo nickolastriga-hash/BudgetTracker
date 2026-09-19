@@ -1,7 +1,7 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { router } from 'expo-router';
-import { useState, type ReactNode } from 'react';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import type { ReactNode } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -13,60 +13,23 @@ import { useTheme } from '@/hooks/use-theme';
 // on the right. Started life inline in budget-editor.tsx, copied verbatim
 // into edit-recurring.tsx, and extracted (2026-09-13) once the goal/debt/
 // account editors would've made copies 3-5.
-export function EditorHeader({
-  title,
-  badge,
-  onChangeTitle,
-  titlePlaceholder,
-}: {
-  title: string;
-  badge?: ReactNode;
-  // Passing this makes the title itself the name field: a pencil beside it
-  // swaps the text for an input, so the form below doesn't need its own
-  // "Name" row (2026-09-19, goal-editor first).
-  onChangeTitle?: (next: string) => void;
-  titlePlaceholder?: string;
-}) {
+//
+// An editable-title variant (an `onChangeTitle` prop rendering a pencil that
+// swapped the title for an input, so the form needed no "Name" row) existed
+// briefly on 2026-09-19 and was reverted the same day, per feedback: a
+// dedicated Name field, first among the form's own fields, reads more
+// clearly than a pencil tucked into the header.
+export function EditorHeader({ title, badge }: { title: string; badge?: ReactNode }) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const [editingTitle, setEditingTitle] = useState(false);
 
   return (
     <View style={[styles.header, { paddingTop: insets.top + Spacing.two, borderBottomColor: theme.border }]}>
       <View style={styles.titleGroup}>
         {badge}
-        {onChangeTitle && editingTitle ? (
-          <TextInput
-            value={title}
-            onChangeText={onChangeTitle}
-            placeholder={titlePlaceholder}
-            placeholderTextColor={theme.textTertiary}
-            autoFocus
-            returnKeyType="done"
-            onSubmitEditing={() => setEditingTitle(false)}
-            onBlur={() => setEditingTitle(false)}
-            style={[styles.title, styles.titleInput, { color: theme.text, borderBottomColor: theme.accent }]}
-          />
-        ) : (
-          <>
-            <ThemedText
-              type="default"
-              themeColor={title ? undefined : 'textTertiary'}
-              style={styles.title}
-              numberOfLines={1}>
-              {title || titlePlaceholder || ''}
-            </ThemedText>
-            {onChangeTitle && (
-              <Pressable
-                onPress={() => setEditingTitle(true)}
-                hitSlop={10}
-                accessibilityLabel="Edit name"
-                style={styles.editButton}>
-                <MaterialIcons name="edit" size={16} color={theme.accent} />
-              </Pressable>
-            )}
-          </>
-        )}
+        <ThemedText type="default" style={styles.title} numberOfLines={1}>
+          {title}
+        </ThemedText>
       </View>
       <Pressable
         onPress={() => router.back()}
@@ -99,14 +62,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     flexShrink: 1,
-  },
-  titleInput: {
-    flex: 1,
-    paddingVertical: 2,
-    borderBottomWidth: 1,
-  },
-  editButton: {
-    padding: 2,
   },
   closeButton: {
     width: 32,
