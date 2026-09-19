@@ -34,7 +34,6 @@ import {
   simulatePayoff,
   type Debt,
   type DebtPlanSettings,
-  type PayoffStrategy,
 } from '@/lib/debts';
 import { getGoals, goalProgress, type SavingsGoal } from '@/lib/goals';
 import {
@@ -186,7 +185,7 @@ export default function WealthScreen() {
   // "Minimums only" comparison for the chart's dashed line and the caption
   // under the plan result. Only worth showing when it's actually slower
   // than the plan — with one debt and no extra, the two are identical.
-  const minimumsOnly = simulateMinimumsOnly(debts, plan.strategy);
+  const minimumsOnly = simulateMinimumsOnly(debts);
   const showBaseline =
     !payoff.unreachable && activeDebts.length > 0 && (minimumsOnly.unreachable || minimumsOnly.months > payoff.months);
 
@@ -359,19 +358,8 @@ export default function WealthScreen() {
 
                 <View style={[styles.cardDivider, { backgroundColor: theme.border }]} />
 
-                <SegmentedControl
-                  options={[
-                    { value: 'snowball', label: 'Snowball', icon: 'ac-unit' },
-                    { value: 'avalanche', label: 'Avalanche', icon: 'landslide' },
-                  ]}
-                  value={plan.strategy}
-                  onChange={(strategy: PayoffStrategy) => updatePlan({ strategy })}
-                  style={styles.strategyToggle}
-                />
                 <ThemedText type="small" themeColor="textTertiary" style={styles.strategyCaption}>
-                  {plan.strategy === 'snowball'
-                    ? 'Smallest balance first, for quick wins that keep you going.'
-                    : 'Highest APR first, for the least total interest.'}
+                  Smallest balance first, for quick wins that keep you going.
                 </ThemedText>
 
                 <View style={styles.extraRow}>
@@ -776,9 +764,6 @@ const styles = StyleSheet.create({
   pillText: {
     fontSize: 11,
     fontWeight: '600',
-  },
-  strategyToggle: {
-    maxWidth: 260,
   },
   strategyCaption: {
     textAlign: 'center',

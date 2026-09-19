@@ -25,19 +25,17 @@ export interface Debt {
   paymentCategoryId?: string; // expense category the logged transaction lands in
 }
 
-// Snowball pays the smallest balance first (quick wins), avalanche the
-// highest APR first (least total interest) — the two standard strategies
-// every payoff planner offers.
-export type PayoffStrategy = 'snowball' | 'avalanche';
-
+// Snowball only: smallest balance first, for the quick wins that keep people
+// going. An avalanche (highest APR first) option existed until 2026-09-19 and
+// was removed as an unwanted choice to have to make; git history has it if it
+// is ever wanted back.
 export interface DebtPlanSettings {
-  strategy: PayoffStrategy;
   extraMonthly: number; // on top of every debt's minimum, aimed at the current target
 }
 
 const STORAGE_KEY = '@budgettracker/debts';
 const PLAN_STORAGE_KEY = '@budgettracker/debt-plan';
-export const DEFAULT_PLAN_SETTINGS: DebtPlanSettings = { strategy: 'snowball', extraMonthly: 0 };
+export const DEFAULT_PLAN_SETTINGS: DebtPlanSettings = { extraMonthly: 0 };
 
 let writeQueue: Promise<unknown> = Promise.resolve();
 function enqueue<T>(fn: () => Promise<T>): Promise<T> {
@@ -137,9 +135,8 @@ export interface PayoffPlan {
   // Payments never outrun the interest accruing on at least one debt, so
   // the simulation was cut off rather than run forever.
   unreachable: boolean;
-  // Debts in the order the plan attacks them (smallest balance first for
-  // snowball, highest APR first for avalanche) — the chart stacks in this
-  // order so the current target is always the top band.
+  // Debts in the order the plan attacks them (smallest balance first) — the
+  // chart stacks in this order so the current target is always the top band.
   order: Debt[];
   schedule: PayoffMonth[];
 }
@@ -151,10 +148,8 @@ function addMonths(monthStr: string, n: number): string {
   return toMonthStr(new Date(y, m - 1 + n, 1));
 }
 
-function orderFor(debts: Debt[], strategy: PayoffStrategy): Debt[] {
-  return debts
-    .filter((d) => d.balance > 0)
-    .sort((a, b) => (strategy === 'snowball' ? a.balance - b.balance : b.apr - a.apr));
+function orderFor(debts: Debt[]): Debt[] {
+  return debts.filter((d) => d.balance > 0).sort((a, b) => a.balance - b.balance);
 }
 
 // Standard month-by-month amortization: every month, interest accrues on
@@ -162,7 +157,7 @@ function orderFor(debts: Debt[], strategy: PayoffStrategy): Debt[] {
 // `rollover` (the real plan), the rest of a fixed monthly budget — the sum
 // of *all* minimums (a paid-off debt's minimum keeps rolling into the next
 // target, which is the whole "snowball" idea) plus the extra — goes to the
-// strategy's current target. Without it (the "minimums only" baseline the
+// current target. Without it (the "minimums only" baseline the
 // chart draws for comparison) each debt only ever pays its own minimum and
 // nothing rolls anywhere, which is what actually happens to someone paying
 // statement minimums. Payments are assumed at the end of each month
@@ -247,7 +242,7 @@ function run(order: Debt[], monthlyBudget: number, rollover: boolean, startMonth
 }
 
 export function simulatePayoff(debts: Debt[], settings: DebtPlanSettings, today: Date = new Date()): PayoffPlan {
-  const order = orderFor(debts, settings.strategy);
+  const order = orderFor(debts);
   const monthlyBudget = debts.reduce((sum, d) => sum + d.minPayment, 0) + settings.extraMonthly;
   return run(order, monthlyBudget, true, toMonthStr(today));
 }
@@ -255,8 +250,8 @@ export function simulatePayoff(debts: Debt[], settings: DebtPlanSettings, today:
 // The comparison baseline: every debt pays only its own minimum, forever,
 // with no extra and no rollover. The chart draws its total as a dashed line
 // over the real plan so the gap between the two is the plan's payoff.
-export function simulateMinimumsOnly(debts: Debt[], strategy: PayoffStrategy, today: Date = new Date()): PayoffPlan {
-  const order = orderFor(debts, strategy);
+export function simulateMinimumsOnly(debts: Debt[], today: Date = new Date()): PayoffPlan {
+  const order = orderFor(debts);
   const monthlyBudget = debts.reduce((sum, d) => sum + d.minPayment, 0);
   return run(order, monthlyBudget, false, toMonthStr(today));
 }

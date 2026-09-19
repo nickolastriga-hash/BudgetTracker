@@ -72,7 +72,8 @@ system to show a profile for; opens `app/settings.tsx`, see its own bullet below
   summary card (goals-reached pill) above every `SavingsGoal` row — icon badge, saved/target, a
   "by <month> · $X/mo" pacing line when a deadline is set, a progress bar that goes success-green at
   100% (`ProgressBar type="income"` semantics). Tap a row → `goal-editor.tsx`. **Debts**: a "Total owed"
-  card carrying the payoff planner — a Snowball/Avalanche toggle and an "Extra per month" field (both
+  card carrying the payoff planner — an "Extra per month" field (a Snowball/Avalanche strategy toggle
+  sat beside it until 2026-09-19, removed as an unwanted choice; the planner is snowball-only now, and
   persisted via `lib/debts.ts#savePlanSettings`), with the simulated result ("Debt-free Oct 2027 · 14
   months · $444 in interest", or a red "payments don't outrun the interest" warning), a "Minimums
   only: N months, $X in interest" caption whenever paying minimums would be slower, and a
@@ -507,8 +508,9 @@ src/
                           of a fixed budget (sum of *all* minimums + the
                           extra — a paid-off debt's minimum rolls into the
                           next target, the snowball idea) goes to the
-                          strategy's target (snowball: smallest balance
-                          first; avalanche: highest APR). Returns months,
+                          current target (smallest balance first — the
+                          avalanche/highest-APR alternative was removed
+                          2026-09-19, see wealth.tsx). Returns months,
                           total interest, debt-free month, per-debt payoff
                           months, and `unreachable` when a month ends with
                           more owed than it started (payments < interest) —
@@ -849,8 +851,8 @@ src/
                           Fund", "Vacation", "New Laptop" — one already at
                           100%+, for a "Goal reached" example), debts
                           ("Credit Card"/"Car Loan"/"Student Loan", spanning
-                          a range of APRs so the payoff planner has
-                          something to snowball/avalanche between), and
+                          a range of balances so the payoff planner has
+                          something to snowball through), and
                           net-worth accounts (three assets + a "Mortgage"
                           liability, so the Net Worth screen's liabilities
                           group shows both a manual entry and the
