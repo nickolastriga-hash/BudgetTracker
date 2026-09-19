@@ -92,6 +92,7 @@ transactions, all local-only. Deliberately deferred:
 - ~~**Settings screen / demo data**~~ — done (2026-08-26, extended 2026-08-31 to also cover last
   year and income goals): `app/settings.tsx`, reached via a `SettingsButton` on every tab, with a
   "Generate demo data" feature. See CLAUDE.md's "Settings + demo data" convention.
-- **No "clear demo data" companion** — `generateDemoData()` is purely additive; there's no
-  button to remove what it added, or to wipe all transactions/budgets generally. Running it more
-  than once just piles up more data rather than replacing the previous batch.
+- ~~**No "clear demo data" companion**~~ — done (2026-09-18): Settings → DATA → "Delete all data"
+  (two-tap, `lib/backup.ts#clearAllData`) wipes every backed-up key (same set as a backup, so device
+  settings like app lock/theme/currency survive) and categories re-seed from defaults. It wipes
+  everything, not just demo rows; there's still no demo-only removal.

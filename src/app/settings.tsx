@@ -12,7 +12,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useCurrency } from '@/hooks/use-currency';
 import { useTheme } from '@/hooks/use-theme';
 import { useThemePreference } from '@/hooks/use-theme-preference';
-import { exportBackup, importBackup } from '@/lib/backup';
+import { clearAllData, exportBackup, importBackup } from '@/lib/backup';
 import { CURRENCIES, currencyOption, formatMoney, LOCALES } from '@/lib/currency';
 import { exportTransactionsCsv } from '@/lib/csv-export';
 import { generateDemoData } from '@/lib/demo-data';
@@ -74,6 +74,7 @@ export default function SettingsScreen() {
   const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [confirmingRestore, setConfirmingRestore] = useState(false);
+  const [confirmingClear, setConfirmingClear] = useState(false);
   const [busy, setBusy] = useState(false);
   const [dataResult, setDataResult] = useState<{ text: string; ok: boolean } | null>(null);
 
@@ -139,6 +140,24 @@ export default function SettingsScreen() {
       if (restored !== null) setDataResult({ text: `Restored ${restored} data sets from the backup.`, ok: true });
     } catch (e) {
       setDataResult({ text: e instanceof Error ? e.message : 'Restore failed.', ok: false });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleClear() {
+    if (!confirmingClear) {
+      setConfirmingClear(true);
+      return;
+    }
+    setConfirmingClear(false);
+    setBusy(true);
+    setDataResult(null);
+    try {
+      await clearAllData();
+      setDataResult({ text: 'All data deleted.', ok: true });
+    } catch (e) {
+      setDataResult({ text: e instanceof Error ? e.message : 'Delete failed.', ok: false });
     } finally {
       setBusy(false);
     }
@@ -276,6 +295,14 @@ export default function SettingsScreen() {
             subtitle="Replaces all current data with a backup file’s contents. This can’t be undone, so back up first if unsure."
             disabled={busy}
             onPress={handleRestore}
+          />
+          <View style={[styles.divider, { backgroundColor: theme.border }]} />
+          <SettingsRow
+            icon="delete-forever"
+            label={confirmingClear ? 'Tap again to delete everything' : 'Delete all data'}
+            subtitle="Removes every transaction, budget, recurring series, goal, debt, and account, and resets categories to the defaults. Also clears demo data. This can’t be undone."
+            disabled={busy}
+            onPress={handleClear}
           />
         </View>
         {dataResult && (

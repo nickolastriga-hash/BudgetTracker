@@ -75,6 +75,14 @@ export async function restoreBackup(backup: BackupFile): Promise<number> {
   return entries.length;
 }
 
+// Same key set as a backup, so anything backed up is exactly what gets wiped;
+// categories re-seed from defaults on next read.
+export async function clearAllData(): Promise<number> {
+  const existing = await dataKeys();
+  if (existing.length > 0) await AsyncStorage.multiRemove(existing);
+  return existing.length;
+}
+
 export type ExportOutcome = 'shared' | 'downloaded' | 'unavailable';
 
 export async function exportBackup(): Promise<ExportOutcome> {
