@@ -178,7 +178,7 @@ export function DebtPayoffChart({
     // Fill: the smoothed top curve forward, a straight drop to the bottom
     // curve's own level, then the smoothed bottom curve backward, closed.
     const fillPath = `${curvePath(top)} L${bottom[0].x},${bottom[0].y}${curveCommands(bottom)} Z`;
-    return { debt, fillPath };
+    return { debt, fillPath, edgePath: curvePath(top) };
   });
 
   // X ticks: the smallest "nice" calendar interval whose resulting tick
@@ -210,8 +210,8 @@ export function DebtPayoffChart({
         <Defs>
           {bands.map((b) => (
             <LinearGradient key={b.debt.id} id={`${idBase}-${b.debt.id}`} x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0" stopColor={b.debt.color} stopOpacity={1} />
-              <Stop offset="1" stopColor={b.debt.color} stopOpacity={0.72} />
+              <Stop offset="0" stopColor={b.debt.color} stopOpacity={0.38} />
+              <Stop offset="1" stopColor={b.debt.color} stopOpacity={0.04} />
             </LinearGradient>
           ))}
           <ClipPath id={`${idBase}-clip`}>
@@ -235,19 +235,38 @@ export function DebtPayoffChart({
         ))}
 
         <G clipPath={`url(#${idBase}-clip)`}>
-          {/* Each band is outlined in the card color, drawn bottom-up, so a
-              band's outline overpaints the one below it and reads as a soft
-              white gap between rounded shapes (same "cut-out" idea as
-              CategoryRingChart's segments). */}
+          {/* Translucent fill that fades toward the baseline, with the debt's
+              own colored line along each band's top edge. Bands are
+              disjoint (stacked, not overlapping), so the low opacity never
+              blends two debts together. */}
+          {bands.map((b) => (
+            <Path key={b.debt.id} d={b.fillPath} fill={`url(#${idBase}-${b.debt.id})`} />
+          ))}
+          {/* Card-colored halo under each colored edge: the white line
+              between neighboring regions. */}
           {bands.map((b) => (
             <Path
-              key={b.debt.id}
-              d={b.fillPath}
-              fill={`url(#${idBase}-${b.debt.id})`}
+              key={`halo-${b.debt.id}`}
+              d={b.edgePath}
+              fill="none"
               stroke={theme.card}
-              strokeWidth={2}
-              strokeLinejoin="round"
+              strokeWidth={6}
               strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          ))}
+          {/* Reversed so the bottom band's line is painted last: once the
+              smaller debts above it are paid off their edges coincide, and
+              the line that remains should be the debt still being paid. */}
+          {bands.slice().reverse().map((b) => (
+            <Path
+              key={`edge-${b.debt.id}`}
+              d={b.edgePath}
+              fill="none"
+              stroke={b.debt.color}
+              strokeWidth={2.5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
             />
           ))}
         </G>
