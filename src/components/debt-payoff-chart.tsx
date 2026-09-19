@@ -1,7 +1,7 @@
 import { useId, useRef, useState } from 'react';
 import type { GestureResponderEvent, View as ViewType } from 'react-native';
 import { StyleSheet, View } from 'react-native';
-import Svg, { Circle, Defs, Line, LinearGradient, Path, Stop } from 'react-native-svg';
+import Svg, { Circle, ClipPath, Defs, G, Line, LinearGradient, Path, Stop } from 'react-native-svg';
 
 import { ThemedText } from '@/components/themed-text';
 import { useCurrency } from '@/hooks/use-currency';
@@ -29,10 +29,15 @@ const MIN_TICK_PX = 64;
 const TICK_LABEL_WIDTH = 48;
 const EDGE_LABEL_WIDTH = 52;
 const EDGE_GAP_PX = TICK_LABEL_WIDTH / 2 + EDGE_LABEL_WIDTH + 6;
-// Each debt's region is drawn as its own rounded shape, inset from its
-// neighbors by GAP px on every side so a white channel separates them.
-const REGION_RADIUS = 8;
-const GAP = 3;
+// Each debt's region is a rounded shape, and regions sit exactly against
+// each other. The white separation and the colored outline are both drawn
+// *inside* each region (clipped to it): a RING_GAP-wide white border, then a
+// RING_LINE-wide colored line just inside that. Doing it as an inner border
+// keeps the channel between neighbors an even 2 * RING_GAP wherever they
+// meet, however thin either band gets, and rounds the inner edge for free.
+const REGION_RADIUS = 10;
+const RING_GAP = 2.5;
+const RING_LINE = 1.25;
 // "Nice" calendar intervals, in months, from quarterly up to every 50 years —
 // the smallest one that still fits within the available tick budget wins.
 const TICK_INTERVALS_MONTHS = [3, 6, 12, 24, 36, 60, 120, 180, 300, 600];
@@ -216,25 +221,7 @@ export function DebtPayoffChart({
     cumulative.push(schedule.map((entry, i) => (below ? below[i] : 0) + (entry.balances[stack[k].id] ?? 0)));
   }
   // Each region only spans the months its debt still has a balance (a band
-  // whose thickness reaches zero has been paid off). The white channel between
-  // two neighbors is cut entirely from the lower one's top edge (2 * GAP), so
-  // its width doesn't depend on how thin the upper band has become; it only
-  // eases to nothing over the last RAMP samples before the upper band's own
-  // payoff, so the lower edge doesn't step up when that band disappears.
-  // (Insetting both sides by a fraction of their own thickness, or capping the
-  // inset by the upper band's thickness, made the channel taper along with
-  // any thinning band.) The outermost top edge stays on the data, and the
-  // bottom band lifts off the baseline by GAP.
-  const bandEnd = stack.map((_, k) => {
-    let last = -1;
-    for (let i = 0; i < n; i++) {
-      const t = yFor(cumulative[k - 1] ? cumulative[k - 1][i] : 0) - yFor(cumulative[k][i]);
-      if (t < 0.5) break;
-      last = i;
-    }
-    return last;
-  });
-  const RAMP = Math.max(6, Math.round(n * 0.08));
+  // whose thickness reaches zero has been paid off).
   const bands = stack.flatMap((debt, k) => {
     const below = cumulative[k - 1];
     const top: Point[] = [];
@@ -242,14 +229,9 @@ export function DebtPayoffChart({
     for (let i = 0; i < n; i++) {
       const topY = yFor(cumulative[k][i]);
       const botY = yFor(below ? below[i] : 0);
-      const thickness = botY - topY;
-      if (thickness < 0.5) break;
-      const upperEnd = k + 1 < stack.length ? bandEnd[k + 1] : -1;
-      const fade = Math.min(1, Math.max(0, upperEnd - i) / RAMP);
-      const topInset = Math.min(GAP * 2, thickness / 3) * fade;
-      const bottomInset = k === 0 ? Math.min(GAP, thickness / 4) : 0;
-      top.push({ x: xFor(i), y: topY + topInset });
-      bottom.push({ x: xFor(i), y: botY - bottomInset });
+      if (botY - topY < 0.5) break;
+      top.push({ x: xFor(i), y: topY });
+      bottom.push({ x: xFor(i), y: botY });
     }
     if (top.length < 2) return [];
     return [{ debt, path: roundedRegion(top, bottom, REGION_RADIUS) }];
@@ -288,6 +270,11 @@ export function DebtPayoffChart({
               <Stop offset="1" stopColor={b.debt.color} stopOpacity={0.04} />
             </LinearGradient>
           ))}
+          {bands.map((b) => (
+            <ClipPath key={b.debt.id} id={`${idBase}-clip-${b.debt.id}`}>
+              <Path d={b.path} />
+            </ClipPath>
+          ))}
         </Defs>
 
         {gridValues.map((v) => (
@@ -305,18 +292,15 @@ export function DebtPayoffChart({
           />
         ))}
 
-        {/* Translucent fill fading toward the baseline, with the debt's color
-            as a full outline around its whole region. */}
+        {/* Per region: translucent fill, a colored ring RING_GAP + RING_LINE
+            deep, then a white ring RING_GAP deep over its outer part, all
+            clipped to the region's own shape. */}
         {bands.map((b) => (
-          <Path
-            key={b.debt.id}
-            d={b.path}
-            fill={`url(#${idBase}-${b.debt.id})`}
-            stroke={b.debt.color}
-            strokeWidth={1.25}
-            strokeLinejoin="round"
-            strokeLinecap="round"
-          />
+          <G key={b.debt.id} clipPath={`url(#${idBase}-clip-${b.debt.id})`}>
+            <Path d={b.path} fill={`url(#${idBase}-${b.debt.id})`} />
+            <Path d={b.path} fill="none" stroke={b.debt.color} strokeWidth={(RING_GAP + RING_LINE) * 2} strokeLinejoin="round" />
+            <Path d={b.path} fill="none" stroke={theme.card} strokeWidth={RING_GAP * 2} strokeLinejoin="round" />
+          </G>
         ))}
 
         {baselineInDomain && (
