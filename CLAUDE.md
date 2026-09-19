@@ -496,14 +496,19 @@ src/
                           no transaction logged).
     tutorial.tsx           Onboarding tour (2026-09-19) — 7 swipeable
                           slides (welcome, one per tab, recurring, settings),
-                          each a glyph + title + body + a checklist card,
+                          each a glyph + title + body + a `MockPreview` of
+                          the screen (dummy groceries/rent/credit-card rows
+                          through the app's own ProgressBar and
+                          CategoryRingChart) + a checklist card,
                           over the same pagingEnabled-ScrollView + page-dots
                           shape as every other pager here. Skip (hidden on
                           the last slide) and Next / "Get started" both call
                           lib/onboarding.ts#markTutorialSeen then
-                          router.back(). Deliberately text and icons, not
-                          screenshots: screenshots would go stale with every
-                          restyle and need light and dark copies.
+                          router.back(). The previews are built from live
+                          components rather than bundled screenshots: a
+                          screenshot would go stale with every restyle and
+                          need separate light and dark copies, where these
+                          re-theme themselves.
                           Opened automatically on first launch from
                           _layout.tsx (after the splash hides, so it doesn't
                           delay startup) and on demand from Settings' HELP

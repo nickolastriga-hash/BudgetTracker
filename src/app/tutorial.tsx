@@ -12,22 +12,51 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { CategoryRingChart } from '@/components/category-ring-chart';
+import { ProgressBar } from '@/components/progress-bar';
 import { ThemedText } from '@/components/themed-text';
 import { CardRadius, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { markTutorialSeen } from '@/lib/onboarding';
+
+// One row of a slide's mock preview: the same icon-badge + label + amount
+// shape the real screens use, with made-up data.
+type MockRow = {
+  icon: React.ComponentProps<typeof MaterialIcons>['name'];
+  color: string;
+  label: string;
+  sub?: string;
+  amount?: string;
+  amountTone?: 'expense' | 'income' | 'plain';
+  percent?: number;
+  barType?: 'expense' | 'income';
+};
 
 type Slide = {
   icon: React.ComponentProps<typeof MaterialIcons>['name'];
   title: string;
   body: string;
   points?: string[];
+  // A miniature, non-interactive imitation of the tab being described.
+  mock?: { caption?: string; ring?: boolean; rows: MockRow[] };
 };
 
-// One slide per tab, plus a welcome and a wrap-up. Kept to plain text and a
-// glyph rather than screenshots: screenshots would go stale every time a
-// screen is restyled (and this app restyles often), and they'd need light
-// and dark copies.
+// Sampled from CATEGORY_COLORS so the mocks match the palette a real
+// category would land on.
+const C = {
+  red: '#FF3B30',
+  orange: '#FF9500',
+  yellow: '#FFCC00',
+  green: '#34C759',
+  blue: '#007AFF',
+  purple: '#AF52DE',
+};
+
+// One slide per tab, plus a welcome and a wrap-up. Each carries a small
+// mock-up of the screen it describes, built from this app's own components
+// with dummy data (groceries, a credit card, a rent bill) rather than
+// bundled screenshots: a real screenshot would go stale every time a screen
+// is restyled, and would need a separate light and dark copy.
 const SLIDES: Slide[] = [
   {
     icon: 'waving-hand',
@@ -40,38 +69,156 @@ const SLIDES: Slide[] = [
     title: 'Home',
     body: 'Your month at a glance. The ring breaks your spending down by category, and the cards below it cover trends, upcoming bills, budgets and wealth.',
     points: ['Tap a ring segment to focus a category', 'Use the arrows to look at another month', 'Tap + to log a transaction'],
+    mock: {
+      caption: 'September 2026',
+      ring: true,
+      rows: [
+        { icon: 'restaurant', color: C.orange, label: 'Food', amount: '$482.10', amountTone: 'expense' },
+        { icon: 'home', color: C.blue, label: 'Housing', amount: '$1,200.00', amountTone: 'expense' },
+        { icon: 'directions-car', color: C.purple, label: 'Transport', amount: '$210.45', amountTone: 'expense' },
+      ],
+    },
   },
   {
     icon: 'receipt-long',
     title: 'Transactions',
     body: 'Every transaction, grouped by date. Switch between a week, month, year or a custom range.',
     points: ['Search by note or category', 'Filter by type or category', 'Swipe to the Recurring page for repeating items'],
+    mock: {
+      caption: 'Fri, Sep 18',
+      rows: [
+        { icon: 'local-grocery-store', color: C.orange, label: 'Groceries', sub: 'Weekly shop', amount: '-$82.40', amountTone: 'expense' },
+        { icon: 'local-cafe', color: C.yellow, label: 'Coffee', amount: '-$4.75', amountTone: 'expense' },
+        { icon: 'payments', color: C.green, label: 'Salary', sub: 'Payday', amount: '+$3,000.00', amountTone: 'income' },
+      ],
+    },
   },
   {
     icon: 'event-repeat',
     title: 'Recurring',
     body: 'Rent, subscriptions and anything else that repeats. Set it once and each occurrence is added for you the next time you open the app.',
     points: ['Weekly through yearly, or a custom interval', 'Edit or stop a series any time', 'Home shows what is due in the next 7 days'],
+    mock: {
+      caption: 'Due this week',
+      rows: [
+        { icon: 'home', color: C.blue, label: 'Rent', sub: 'Monthly · next Oct 1', amount: '-$1,200.00', amountTone: 'expense' },
+        { icon: 'subscriptions', color: C.red, label: 'Netflix', sub: 'Monthly · next Sep 25', amount: '-$15.99', amountTone: 'expense' },
+        { icon: 'fitness-center', color: C.purple, label: 'Gym', sub: 'Monthly · next Sep 28', amount: '-$39.00', amountTone: 'expense' },
+      ],
+    },
   },
   {
     icon: 'pie-chart',
     title: 'Budgets',
     body: 'Give a category a monthly limit and watch the bar fill. Income categories work the same way as goals to reach.',
     points: ['Amber at 80%, red once over', 'Change a limit for one month or from now on', 'Swipe between expenses and income'],
+    mock: {
+      caption: 'Expense budgets',
+      rows: [
+        { icon: 'restaurant', color: C.orange, label: 'Food', sub: '$340 of $400', percent: 0.85, barType: 'expense' },
+        { icon: 'directions-car', color: C.purple, label: 'Transport', sub: '$210 of $200', percent: 1.05, barType: 'expense' },
+        { icon: 'movie', color: C.blue, label: 'Fun', sub: '$45 of $150', percent: 0.3, barType: 'expense' },
+      ],
+    },
   },
   {
     icon: 'savings',
     title: 'Wealth',
     body: 'Savings goals, a debt payoff plan and your net worth. These are entered by hand, since there is no bank connection.',
     points: ['Goals track what you have set aside', 'Debts get a snowball payoff plan and chart', 'Net worth adds up accounts minus debts'],
+    mock: {
+      caption: 'Goals and debts',
+      rows: [
+        { icon: 'savings', color: C.green, label: 'Emergency Fund', sub: '$2,400 of $5,000', percent: 0.48, barType: 'income' },
+        { icon: 'credit-card', color: C.red, label: 'Credit Card', sub: '36% paid · 22.99% APR', percent: 0.36, barType: 'income' },
+        { icon: 'account-balance', color: C.blue, label: 'Net worth', amount: '$18,240.00', amountTone: 'plain' },
+      ],
+    },
   },
   {
     icon: 'settings',
     title: 'Make it yours',
     body: 'Settings has the rest: currency, light or dark, a PIN lock, backups, and demo data if you want to try things out first.',
     points: ['Back up to a file or the cloud', 'Export transactions as CSV', 'Open this tutorial again any time'],
+    mock: {
+      caption: 'Settings',
+      rows: [
+        { icon: 'attach-money', color: C.green, label: 'Currency', sub: 'US Dollar ($)' },
+        { icon: 'dark-mode', color: C.purple, label: 'Appearance', sub: 'Light, Dark or Auto' },
+        { icon: 'lock-outline', color: C.blue, label: 'App lock', sub: 'PIN or Face ID' },
+      ],
+    },
   },
 ];
+
+// A miniature, non-interactive imitation of the screen a slide describes.
+// Uses the app's real ProgressBar and ring chart so it keeps matching the
+// app's look (and its light/dark theming) without any bundled image.
+function MockPreview({ mock }: { mock: NonNullable<Slide['mock']> }) {
+  const theme = useTheme();
+  const ringSegments = mock.rows
+    .filter((r) => r.amount)
+    .map((r, i) => ({ key: String(i), amount: [482, 1200, 210][i] ?? 100, color: r.color }));
+
+  return (
+    <View style={[styles.mockCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+      {mock.caption && (
+        <ThemedText type="small" themeColor="textTertiary" style={styles.mockCaption}>
+          {mock.caption}
+        </ThemedText>
+      )}
+      {mock.ring && ringSegments.length > 0 && (
+        <View style={styles.mockRing}>
+          <CategoryRingChart
+            segments={ringSegments}
+            size={92}
+            strokeWidth={11}
+            trackColor={theme.backgroundElement}
+            outlineColor={theme.card}>
+            <View style={styles.mockRingCenter}>
+              <ThemedText type="smallBold">$1,892</ThemedText>
+              <ThemedText type="small" themeColor="textTertiary" style={styles.mockRingLabel}>
+                spent
+              </ThemedText>
+            </View>
+          </CategoryRingChart>
+        </View>
+      )}
+      {mock.rows.map((row) => (
+        <View key={row.label} style={styles.mockRow}>
+          <View style={styles.mockRowTop}>
+            <View style={[styles.mockBadge, { backgroundColor: row.color + '26' }]}>
+              <MaterialIcons name={row.icon} size={14} color={row.color} />
+            </View>
+            <View style={styles.mockRowText}>
+              <ThemedText type="small" numberOfLines={1} style={styles.mockLabel}>
+                {row.label}
+              </ThemedText>
+              {row.sub && (
+                <ThemedText type="small" themeColor="textTertiary" numberOfLines={1} style={styles.mockSub}>
+                  {row.sub}
+                </ThemedText>
+              )}
+            </View>
+            {row.amount && (
+              <ThemedText
+                type="smallBold"
+                themeColor={row.amountTone === 'expense' ? 'destructive' : row.amountTone === 'income' ? 'success' : undefined}
+                style={styles.mockAmount}>
+                {row.amount}
+              </ThemedText>
+            )}
+          </View>
+          {row.percent !== undefined && (
+            <View style={styles.mockBar}>
+              <ProgressBar percent={row.percent} color={row.color} height={5} type={row.barType ?? 'expense'} />
+            </View>
+          )}
+        </View>
+      ))}
+    </View>
+  );
+}
 
 export default function TutorialScreen() {
   const theme = useTheme();
@@ -125,6 +272,7 @@ export default function TutorialScreen() {
               <ThemedText type="small" themeColor="textSecondary" style={styles.slideBody}>
                 {slide.body}
               </ThemedText>
+              {slide.mock && <MockPreview mock={slide.mock} />}
               {slide.points && (
                 <View style={[styles.pointsCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
                   {slide.points.map((point) => (
@@ -200,6 +348,59 @@ const styles = StyleSheet.create({
   slideBody: {
     textAlign: 'center',
     lineHeight: 21,
+  },
+  mockCard: {
+    alignSelf: 'stretch',
+    borderRadius: CardRadius,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: Spacing.three,
+    gap: Spacing.two,
+  },
+  mockCaption: {
+    fontSize: 11,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  mockRing: {
+    alignItems: 'center',
+    paddingVertical: Spacing.one,
+  },
+  mockRingCenter: {
+    alignItems: 'center',
+  },
+  mockRingLabel: {
+    fontSize: 10,
+  },
+  mockRow: {
+    gap: 4,
+  },
+  mockRowTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  mockBadge: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mockRowText: {
+    flex: 1,
+  },
+  mockLabel: {
+    fontSize: 13,
+  },
+  mockSub: {
+    fontSize: 11,
+  },
+  mockAmount: {
+    fontSize: 13,
+    fontVariant: ['tabular-nums'],
+  },
+  mockBar: {
+    paddingLeft: 26 + Spacing.two,
   },
   pointsCard: {
     alignSelf: 'stretch',
