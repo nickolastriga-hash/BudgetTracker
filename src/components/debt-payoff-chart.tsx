@@ -38,6 +38,10 @@ const EDGE_GAP_PX = TICK_LABEL_WIDTH / 2 + EDGE_LABEL_WIDTH + 6;
 const REGION_RADIUS = 10;
 const RING_GAP = 2.5;
 const RING_LINE = 1.25;
+// A region thinner than its own border + outline would render as a bare
+// colored strip (the white border eats the sides), so it ends, with a rounded
+// cap, once it gets thinner than this.
+const MIN_REGION_PX = 2 * (RING_GAP + RING_LINE) + 1.5;
 // "Nice" calendar intervals, in months, from quarterly up to every 50 years —
 // the smallest one that still fits within the available tick budget wins.
 const TICK_INTERVALS_MONTHS = [3, 6, 12, 24, 36, 60, 120, 180, 300, 600];
@@ -220,8 +224,8 @@ export function DebtPayoffChart({
     const below = cumulative[k - 1];
     cumulative.push(schedule.map((entry, i) => (below ? below[i] : 0) + (entry.balances[stack[k].id] ?? 0)));
   }
-  // Each region only spans the months its debt still has a balance (a band
-  // whose thickness reaches zero has been paid off).
+  // Each region only spans the months its debt still has enough balance to
+  // draw (see MIN_REGION_PX).
   const bands = stack.flatMap((debt, k) => {
     const below = cumulative[k - 1];
     const top: Point[] = [];
@@ -229,7 +233,7 @@ export function DebtPayoffChart({
     for (let i = 0; i < n; i++) {
       const topY = yFor(cumulative[k][i]);
       const botY = yFor(below ? below[i] : 0);
-      if (botY - topY < 0.5) break;
+      if (botY - topY < MIN_REGION_PX) break;
       top.push({ x: xFor(i), y: topY });
       bottom.push({ x: xFor(i), y: botY });
     }
