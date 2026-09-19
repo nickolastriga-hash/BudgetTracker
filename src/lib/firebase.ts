@@ -16,6 +16,7 @@ import { getAuth, initializeAuth, type Auth } from '@firebase/auth';
 // ordering quirk, not a genuinely missing export.
 // @ts-expect-error
 import { getReactNativePersistence } from '@firebase/auth';
+import { getFirestore, initializeFirestore, type Firestore } from 'firebase/firestore';
 import { Platform } from 'react-native';
 
 // Public client config, safe to commit — these identify the Firebase project,
@@ -32,6 +33,17 @@ const firebaseConfig = {
 };
 
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+
+// Long-polling auto-detect: React Native's WebChannel transport is flaky on
+// some networks. initializeFirestore throws if it already ran (fast refresh),
+// so fall back to the existing instance.
+export const db: Firestore = (() => {
+  try {
+    return initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
+  } catch {
+    return getFirestore(app);
+  }
+})();
 
 export const auth: Auth =
   Platform.OS === 'web' ? getAuth(app) : initializeAuth(app, { persistence: getReactNativePersistence(AsyncStorage) });

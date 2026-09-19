@@ -10,6 +10,7 @@ import {
   signOut as firebaseSignOut,
   type User,
 } from 'firebase/auth';
+import { deleteCloudBackup } from './cloud-backup';
 import { auth } from './firebase';
 
 export type { User };
@@ -61,6 +62,10 @@ export async function sendPasswordReset(email: string): Promise<void> {
 // caller surfaces via getAuthErrorMessage and asks the user to sign in again.
 export async function deleteCurrentUser(): Promise<void> {
   if (!auth.currentUser) return;
+  // Best-effort and first: once the user is deleted there's no auth left to
+  // authorize removing the backup. A failure here (offline, rules) shouldn't
+  // block deleting the account itself.
+  await deleteCloudBackup().catch(() => {});
   await deleteUser(auth.currentUser);
 }
 

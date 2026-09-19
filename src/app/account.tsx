@@ -10,6 +10,7 @@ import { CardRadius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
 import { useThemePreference } from '@/hooks/use-theme-preference';
+import { getCloudBackupDate, restoreCloudBackup, uploadCloudBackup } from '@/lib/cloud-backup';
 import {
   deleteCurrentUser,
   getAuthErrorMessage,
@@ -49,6 +50,22 @@ export default function AccountScreen() {
   const [appleAvailable, setAppleAvailable] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [cloudDate, setCloudDate] = useState<string | null>(null);
+  const [cloudBusy, setCloudBusy] = useState(false);
+  const [confirmingCloudRestore, setConfirmingCloudRestore] = useState(false);
+  const [cloudResult, setCloudResult] = useState<{ text: string; ok: boolean } | null>(null);
+
+  const uid = user?.uid;
+  useEffect(() => {
+    if (!uid) return;
+    let cancelled = false;
+    getCloudBackupDate()
+      .then((d) => !cancelled && setCloudDate(d))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [uid]);
 
   useEffect(() => {
     if (Platform.OS === 'ios') {
@@ -190,6 +207,40 @@ export default function AccountScreen() {
     }
   };
 
+  const runCloud = async (action: () => Promise<{ text: string; ok: boolean } | void>) => {
+    setCloudBusy(true);
+    setCloudResult(null);
+    try {
+      const outcome = await action();
+      if (outcome) setCloudResult(outcome);
+    } catch (e) {
+      setCloudResult({ text: e instanceof Error ? e.message : 'Something went wrong.', ok: false });
+    } finally {
+      setCloudBusy(false);
+    }
+  };
+
+  const handleCloudUpload = () =>
+    runCloud(async () => {
+      const at = await uploadCloudBackup();
+      setCloudDate(at);
+      return { text: 'Backed up to the cloud.', ok: true };
+    });
+
+  const handleCloudRestore = () => {
+    if (!confirmingCloudRestore) {
+      setConfirmingCloudRestore(true);
+      return;
+    }
+    setConfirmingCloudRestore(false);
+    return runCloud(async () => {
+      const restored = await restoreCloudBackup();
+      return restored === null
+        ? { text: 'No cloud backup found for this account.', ok: false }
+        : { text: `Restored ${restored} data sets from the cloud.`, ok: true };
+    });
+  };
+
   if (loading) {
     return (
       <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -206,6 +257,39 @@ export default function AccountScreen() {
       <EditorHeader title="Account" />
       <ScrollView contentContainerStyle={styles.content}>
         {user ? (
+          <>
+          <View style={[styles.card, styles.cloudCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <ThemedText type="smallBold">Cloud backup</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              {cloudDate ? `Last backed up ${new Date(cloudDate).toLocaleString()}.` : 'No cloud backup yet.'} Backing up
+              replaces the copy in the cloud. Restoring replaces everything on this device.
+            </ThemedText>
+            <Pressable
+              style={[styles.primaryButton, styles.cloudButton, { backgroundColor: theme.accent }]}
+              onPress={handleCloudUpload}
+              disabled={cloudBusy}>
+              {cloudBusy ? (
+                <ActivityIndicator color="#ffffff" />
+              ) : (
+                <ThemedText type="smallBold" style={styles.primaryButtonText}>
+                  Back up now
+                </ThemedText>
+              )}
+            </Pressable>
+            <Pressable
+              style={[styles.signOutButton, { borderColor: theme.border }]}
+              onPress={handleCloudRestore}
+              disabled={cloudBusy}>
+              <ThemedText type="smallBold" themeColor={confirmingCloudRestore ? 'destructive' : 'text'}>
+                {confirmingCloudRestore ? 'Tap again to replace local data' : 'Restore from cloud'}
+              </ThemedText>
+            </Pressable>
+            {cloudResult && (
+              <ThemedText type="small" themeColor={cloudResult.ok ? 'success' : 'destructive'}>
+                {cloudResult.text}
+              </ThemedText>
+            )}
+          </View>
           <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
             <ThemedText type="small" themeColor="textSecondary">
               Signed in as
@@ -240,11 +324,12 @@ export default function AccountScreen() {
               )}
             </Pressable>
           </View>
+          </>
         ) : (
           <>
             <ThemedText type="small" themeColor="textSecondary" style={styles.caption}>
-              Signing in doesn’t change anything about your data yet, it just gives this device an identity.
-              Everything still lives on-device.
+              Sign in to back your data up to the cloud and restore it on another device. Nothing leaves this
+              device unless you tap Back up now.
             </ThemedText>
 
             {error && (
@@ -390,6 +475,8 @@ const styles = StyleSheet.create({
     padding: Spacing.four,
     gap: Spacing.two,
   },
+  cloudCard: { marginBottom: Spacing.three },
+  cloudButton: { marginTop: Spacing.two },
   email: { fontWeight: '600', marginBottom: Spacing.two },
   signOutButton: {
     borderRadius: CardRadius / 2,
