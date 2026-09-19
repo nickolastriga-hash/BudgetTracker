@@ -1,7 +1,7 @@
 import { useId, useRef, useState } from 'react';
 import type { GestureResponderEvent, View as ViewType } from 'react-native';
 import { StyleSheet, View } from 'react-native';
-import Svg, { ClipPath, Circle, Defs, G, Line, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
+import Svg, { Circle, Defs, Line, LinearGradient, Path, Stop } from 'react-native-svg';
 
 import { ThemedText } from '@/components/themed-text';
 import { useCurrency } from '@/hooks/use-currency';
@@ -29,9 +29,10 @@ const MIN_TICK_PX = 64;
 const TICK_LABEL_WIDTH = 48;
 const EDGE_LABEL_WIDTH = 52;
 const EDGE_GAP_PX = TICK_LABEL_WIDTH / 2 + EDGE_LABEL_WIDTH + 6;
-// Rounded corners on the plot body, so the bands read as one soft shape
-// instead of a hard-edged wedge.
-const PLOT_RADIUS = 14;
+// Each debt's region is drawn as its own rounded shape, inset from its
+// neighbors by GAP px on every side so a white channel separates them.
+const REGION_RADIUS = 8;
+const GAP = 2;
 // "Nice" calendar intervals, in months, from quarterly up to every 50 years —
 // the smallest one that still fits within the available tick budget wins.
 const TICK_INTERVALS_MONTHS = [3, 6, 12, 24, 36, 60, 120, 180, 300, 600];
@@ -71,6 +72,49 @@ function curveCommands(points: Point[]): string {
 
 function curvePath(points: Point[]): string {
   return `M${points[0].x},${points[0].y}${curveCommands(points)}`;
+}
+
+// A closed region between a top and a bottom curve (both left to right, same
+// length) with the four corners rounded. The straight vertical sides are cut
+// short by the radius and joined to the curves with quadratic corners; the
+// curves are trimmed to the sample nearest the cut. A side shorter than
+// 1px (a region tapering to a point) stays sharp.
+function roundedRegion(top: Point[], bottom: Point[], radius: number): string {
+  const m = top.length;
+  const x0 = top[0].x;
+  const xN = top[m - 1].x;
+  let rl = Math.min(radius, (bottom[0].y - top[0].y) / 2);
+  let rr = Math.min(radius, (bottom[m - 1].y - top[m - 1].y) / 2);
+  if (rl < 1) rl = 0;
+  if (rr < 1) rr = 0;
+  const firstFrom = (pts: Point[], r: number) => (r ? Math.max(0, pts.findIndex((p) => p.x - x0 >= r)) : 0);
+  const lastFrom = (pts: Point[], r: number) => {
+    if (!r) return m - 1;
+    for (let i = m - 1; i >= 0; i--) if (xN - pts[i].x >= r) return i;
+    return 0;
+  };
+  let tl = firstFrom(top, rl);
+  let bl = firstFrom(bottom, rl);
+  let tr = lastFrom(top, rr);
+  let br = lastFrom(bottom, rr);
+  if (tl >= tr || bl >= br) {
+    rl = 0;
+    rr = 0;
+    tl = 0;
+    bl = 0;
+    tr = m - 1;
+    br = m - 1;
+  }
+  let d = rl ? `M${x0},${top[0].y + rl} Q${x0},${top[0].y} ${top[tl].x},${top[tl].y}` : `M${top[0].x},${top[0].y}`;
+  d += curveCommands(top.slice(tl, tr + 1));
+  if (rr) {
+    d += ` Q${xN},${top[m - 1].y} ${xN},${top[m - 1].y + rr} L${xN},${bottom[m - 1].y - rr} Q${xN},${bottom[m - 1].y} ${bottom[br].x},${bottom[br].y}`;
+  } else {
+    d += ` L${bottom[br].x},${bottom[br].y}`;
+  }
+  d += curveCommands(bottom.slice(bl, br + 1).reverse());
+  d += rl ? ` Q${x0},${bottom[0].y} ${x0},${bottom[0].y - rl} Z` : ' Z';
+  return d;
 }
 
 // Balance-over-time for a payoff plan: one stacked, smoothly-curved band per
@@ -171,14 +215,24 @@ export function DebtPayoffChart({
     const below = cumulative[k - 1];
     cumulative.push(schedule.map((entry, i) => (below ? below[i] : 0) + (entry.balances[stack[k].id] ?? 0)));
   }
-  const bands = stack.map((debt, k) => {
-    const top: Point[] = schedule.map((_, i) => ({ x: xFor(i), y: yFor(cumulative[k][i]) }));
+  // Each region only spans the months its debt still has a balance (a band
+  // whose thickness reaches zero has been paid off), and is inset by GAP from
+  // both boundaries, so neighbors never touch.
+  const bands = stack.flatMap((debt, k) => {
     const below = cumulative[k - 1];
-    const bottom: Point[] = schedule.map((_, i) => ({ x: xFor(n - 1 - i), y: yFor(below ? below[n - 1 - i] : 0) }));
-    // Fill: the smoothed top curve forward, a straight drop to the bottom
-    // curve's own level, then the smoothed bottom curve backward, closed.
-    const fillPath = `${curvePath(top)} L${bottom[0].x},${bottom[0].y}${curveCommands(bottom)} Z`;
-    return { debt, fillPath, edgePath: curvePath(top) };
+    const top: Point[] = [];
+    const bottom: Point[] = [];
+    for (let i = 0; i < n; i++) {
+      const topY = yFor(cumulative[k][i]);
+      const botY = yFor(below ? below[i] : 0);
+      const thickness = botY - topY;
+      if (thickness < 0.5) break;
+      const inset = Math.min(GAP, thickness / 4);
+      top.push({ x: xFor(i), y: topY + inset });
+      bottom.push({ x: xFor(i), y: botY - inset });
+    }
+    if (top.length < 2) return [];
+    return [{ debt, path: roundedRegion(top, bottom, REGION_RADIUS) }];
   });
 
   // X ticks: the smallest "nice" calendar interval whose resulting tick
@@ -214,9 +268,6 @@ export function DebtPayoffChart({
               <Stop offset="1" stopColor={b.debt.color} stopOpacity={0.04} />
             </LinearGradient>
           ))}
-          <ClipPath id={`${idBase}-clip`}>
-            <Rect x={PADDING_X} y={0} width={plotWidth} height={plotBottom} rx={PLOT_RADIUS} ry={PLOT_RADIUS} />
-          </ClipPath>
         </Defs>
 
         {gridValues.map((v) => (
@@ -234,42 +285,19 @@ export function DebtPayoffChart({
           />
         ))}
 
-        <G clipPath={`url(#${idBase}-clip)`}>
-          {/* Translucent fill that fades toward the baseline, with the debt's
-              own colored line along each band's top edge. Bands are
-              disjoint (stacked, not overlapping), so the low opacity never
-              blends two debts together. */}
-          {bands.map((b) => (
-            <Path key={b.debt.id} d={b.fillPath} fill={`url(#${idBase}-${b.debt.id})`} />
-          ))}
-          {/* Card-colored halo under each colored edge: the white line
-              between neighboring regions. */}
-          {bands.map((b) => (
-            <Path
-              key={`halo-${b.debt.id}`}
-              d={b.edgePath}
-              fill="none"
-              stroke={theme.card}
-              strokeWidth={6}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          ))}
-          {/* Reversed so the bottom band's line is painted last: once the
-              smaller debts above it are paid off their edges coincide, and
-              the line that remains should be the debt still being paid. */}
-          {bands.slice().reverse().map((b) => (
-            <Path
-              key={`edge-${b.debt.id}`}
-              d={b.edgePath}
-              fill="none"
-              stroke={b.debt.color}
-              strokeWidth={2.5}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          ))}
-        </G>
+        {/* Translucent fill fading toward the baseline, with the debt's color
+            as a full outline around its whole region. */}
+        {bands.map((b) => (
+          <Path
+            key={b.debt.id}
+            d={b.path}
+            fill={`url(#${idBase}-${b.debt.id})`}
+            stroke={b.debt.color}
+            strokeWidth={2}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+        ))}
 
         {baselineInDomain && (
           <Path
