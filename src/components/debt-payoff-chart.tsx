@@ -178,9 +178,7 @@ export function DebtPayoffChart({
     // Fill: the smoothed top curve forward, a straight drop to the bottom
     // curve's own level, then the smoothed bottom curve backward, closed.
     const fillPath = `${curvePath(top)} L${bottom[0].x},${bottom[0].y}${curveCommands(bottom)} Z`;
-    // The band's own top edge, stroked separately so adjacent bands
-    // separate cleanly even where two debts share a color.
-    return { debt, fillPath, edgePath: curvePath(top) };
+    return { debt, fillPath };
   });
 
   // X ticks: the smallest "nice" calendar interval whose resulting tick
@@ -212,8 +210,8 @@ export function DebtPayoffChart({
         <Defs>
           {bands.map((b) => (
             <LinearGradient key={b.debt.id} id={`${idBase}-${b.debt.id}`} x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0" stopColor={b.debt.color} stopOpacity={0.9} />
-              <Stop offset="1" stopColor={b.debt.color} stopOpacity={0.25} />
+              <Stop offset="0" stopColor={b.debt.color} stopOpacity={1} />
+              <Stop offset="1" stopColor={b.debt.color} stopOpacity={0.72} />
             </LinearGradient>
           ))}
           <ClipPath id={`${idBase}-clip`}>
@@ -237,18 +235,20 @@ export function DebtPayoffChart({
         ))}
 
         <G clipPath={`url(#${idBase}-clip)`}>
+          {/* Each band is outlined in the card color, drawn bottom-up, so a
+              band's outline overpaints the one below it and reads as a soft
+              white gap between rounded shapes (same "cut-out" idea as
+              CategoryRingChart's segments). */}
           {bands.map((b) => (
-            <Path key={b.debt.id} d={b.fillPath} fill={`url(#${idBase}-${b.debt.id})`} />
-          ))}
-          {/* Each edge is a card-colored "cut-out" outline under the debt's
-              own colored line, the same trick CategoryRingChart uses, so
-              neighboring bands separate cleanly and same-colored ones still
-              read as two. */}
-          {bands.map((b) => (
-            <Path key={`edge-bg-${b.debt.id}`} d={b.edgePath} fill="none" stroke={theme.card} strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" />
-          ))}
-          {bands.map((b) => (
-            <Path key={`edge-${b.debt.id}`} d={b.edgePath} fill="none" stroke={b.debt.color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+            <Path
+              key={b.debt.id}
+              d={b.fillPath}
+              fill={`url(#${idBase}-${b.debt.id})`}
+              stroke={theme.card}
+              strokeWidth={2}
+              strokeLinejoin="round"
+              strokeLinecap="round"
+            />
           ))}
         </G>
 
