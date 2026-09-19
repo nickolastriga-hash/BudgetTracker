@@ -69,16 +69,22 @@ system to show a profile for; opens `app/settings.tsx`, see its own bullet below
   convention bullet below) — "Wealth" header, a Goals/Debts/Net Worth segmented toggle plus a page-dot
   row and one section label + `+` button that swaps per page (same pinned-header-over-a-pager shape as
   Budgets), then three pages of one horizontal `pagingEnabled` ScrollView. **Goals**: a "Total saved"
-  summary card (goals-reached pill) above every `SavingsGoal` row — icon badge, saved/target, a
-  "by <month> · $X/mo" pacing line when a deadline is set, a progress bar that goes success-green at
-  100% (`ProgressBar type="income"` semantics). Tap a row → `goal-editor.tsx`. **Debts**: a "Total owed"
+  summary card (goals-reached pill) above every `SavingsGoal` row, a progress bar that goes
+  success-green at 100% (`ProgressBar type="income"` semantics). Tap a row → `goal-editor.tsx`. **Debts**: a "Total owed"
   card carrying the payoff planner — an "Extra per month" field (a Snowball/Avalanche strategy toggle
   sat beside it until 2026-09-19, removed as an unwanted choice; the planner is snowball-only now, and
   persisted via `lib/debts.ts#savePlanSettings`), with the simulated result ("Debt-free Oct 2027 · 14
   months · $444 in interest", or a red "payments don't outrun the interest" warning), a "Minimums
   only: N months, $X in interest" caption whenever paying minimums would be slower, and a
-  `DebtPayoffChart` (stacked per-debt balance bands melting to zero, press-and-drag readout — see its own Folder Structure entry) — above every `Debt` row (balance,
-  APR, minimum, projected payoff month, a paid-down progress bar). Tap a row → `debt-editor.tsx`.
+  `DebtPayoffChart` (stacked per-debt balance bands melting to zero, press-and-drag readout — see its own Folder Structure entry) — above every `Debt` row. Tap a row → `debt-editor.tsx`.
+  **Goal and debt rows share one two-line shape (2026-09-19, per feedback that they were too busy):**
+  badge + name on the left and the row's one number right-aligned bold (a goal's `saved / target`, a
+  debt's balance) on line 1, then the progress bar, then a single muted caption merging what used to
+  be two or three separate stacked lines — a goal's `48% · by Mar 2027 · $371.43/mo` (or "Goal
+  reached" in success, "deadline passed" in destructive), a debt's `36% paid · 22.99% APR · Apr 2031`
+  (or "Paid off"). Dropped in the process: the trailing `chevron-right` (the amount now sits flush
+  right, rows are still pressable) and a debt's per-row minimum payment, which the summary card
+  already totals and the editor still shows — a fourth caption part didn't fit at phone width.
   New goals/debts/accounts default to the next unused `CATEGORY_COLORS` slot rather than always the
   same swatch (offset per kind: red for debts, green for goals, blue for accounts), since the payoff
   chart stacks by color and two debts left on one default were indistinguishable there. **Net Worth**: a hero card (assets − liabilities, signed, a date-positioned

@@ -294,6 +294,21 @@ export default function WealthScreen() {
                 {goals.map((goal, i) => {
                   const p = goalProgressById.get(goal.id)!;
                   const reached = p.percent >= 1;
+                  const overdue = !reached && !!goal.targetMonth && p.monthsLeft === 0;
+                  // One muted caption instead of the two stacked detail lines
+                  // this row used to carry — percent first, then only the
+                  // pacing facts that actually apply.
+                  const meta = reached
+                    ? 'Goal reached'
+                    : overdue
+                      ? `${Math.round(p.percent * 100)}% · deadline passed (${monthStrLabel(goal.targetMonth!)})`
+                      : [
+                          `${Math.round(p.percent * 100)}%`,
+                          goal.targetMonth ? `by ${monthStrLabel(goal.targetMonth)}` : null,
+                          p.neededPerMonth !== null ? `${format(p.neededPerMonth)}/mo` : null,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ');
                   return (
                     <View key={goal.id}>
                       <Pressable
@@ -301,27 +316,22 @@ export default function WealthScreen() {
                         onPress={() => router.push(`/goal-editor?id=${goal.id}` as never)}>
                         <View style={styles.rowHeader}>
                           <CategoryBadge category={goal} size={32} />
-                          <View style={styles.rowTextGroup}>
-                            <ThemedText type="small">{goal.name}</ThemedText>
-                            <ThemedText type="small" themeColor="textSecondary">
-                              {format(p.saved)} / {format(goal.targetAmount)}
-                            </ThemedText>
-                            {reached ? (
-                              <ThemedText type="small" themeColor="success">
-                                Goal reached
-                              </ThemedText>
-                            ) : goal.targetMonth && p.neededPerMonth !== null ? (
-                              <ThemedText type="small" themeColor={p.monthsLeft === 0 ? 'destructive' : 'accent'}>
-                                {p.monthsLeft === 0
-                                  ? `Deadline passed (${monthStrLabel(goal.targetMonth)})`
-                                  : `by ${monthStrLabel(goal.targetMonth)} · ${format(p.neededPerMonth)}/mo`}
-                              </ThemedText>
-                            ) : null}
-                          </View>
-                          <MaterialIcons name="chevron-right" size={22} color={theme.textTertiary} />
+                          <ThemedText type="small" numberOfLines={1} style={styles.rowName}>
+                            {goal.name}
+                          </ThemedText>
+                          <ThemedText type="smallBold" numberOfLines={1} style={styles.rowAmount}>
+                            {format(p.saved)} / {format(goal.targetAmount)}
+                          </ThemedText>
                         </View>
                         <View style={styles.progressWrap}>
                           <ProgressBar percent={p.percent} color={goal.color} type="income" />
+                          <ThemedText
+                            type="small"
+                            themeColor={reached ? 'success' : overdue ? 'destructive' : 'textSecondary'}
+                            numberOfLines={1}
+                            style={styles.rowMeta}>
+                            {meta}
+                          </ThemedText>
                         </View>
                       </Pressable>
                       {i < goals.length - 1 && <View style={[styles.divider, { backgroundColor: theme.border }]} />}
@@ -459,6 +469,19 @@ export default function WealthScreen() {
                 {debts.map((debt, i) => {
                   const paidDown = debt.originalBalance > 0 ? 1 - debt.balance / debt.originalBalance : 0;
                   const payoffMonth = payoff.perDebt[debt.id]?.payoffMonth ?? null;
+                  const paidOff = debt.balance <= 0;
+                  // Same one-caption treatment as the goal rows above. The
+                  // per-debt minimum moved to the editor: the summary card
+                  // already totals them, and a fourth part didn't fit here.
+                  const meta = paidOff
+                    ? 'Paid off'
+                    : [
+                        `${Math.round(paidDown * 100)}% paid`,
+                        `${debt.apr}% APR`,
+                        payoffMonth ? monthStrLabel(payoffMonth) : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ');
                   return (
                     <View key={debt.id}>
                       <Pressable
@@ -466,28 +489,26 @@ export default function WealthScreen() {
                         onPress={() => router.push(`/debt-editor?id=${debt.id}` as never)}>
                         <View style={styles.rowHeader}>
                           <CategoryBadge category={debt} size={32} />
-                          <View style={styles.rowTextGroup}>
-                            <ThemedText type="small">{debt.name}</ThemedText>
-                            <ThemedText type="small" themeColor="textSecondary">
-                              {debt.apr}% APR · {format(debt.minPayment)}/mo min
-                            </ThemedText>
-                            {debt.balance <= 0 ? (
-                              <ThemedText type="small" themeColor="success">
-                                Paid off
-                              </ThemedText>
-                            ) : payoffMonth ? (
-                              <ThemedText type="small" themeColor="accent">
-                                Paid off {monthStrLabel(payoffMonth)}
-                              </ThemedText>
-                            ) : null}
-                          </View>
-                          <ThemedText type="smallBold" themeColor={debt.balance > 0 ? 'destructive' : 'success'} style={styles.rowAmount}>
+                          <ThemedText type="small" numberOfLines={1} style={styles.rowName}>
+                            {debt.name}
+                          </ThemedText>
+                          <ThemedText
+                            type="smallBold"
+                            themeColor={paidOff ? 'success' : 'destructive'}
+                            numberOfLines={1}
+                            style={styles.rowAmount}>
                             {format(debt.balance)}
                           </ThemedText>
-                          <MaterialIcons name="chevron-right" size={22} color={theme.textTertiary} />
                         </View>
                         <View style={styles.progressWrap}>
                           <ProgressBar percent={paidDown} color={debt.color} type="income" />
+                          <ThemedText
+                            type="small"
+                            themeColor={paidOff ? 'success' : 'textSecondary'}
+                            numberOfLines={1}
+                            style={styles.rowMeta}>
+                            {meta}
+                          </ThemedText>
                         </View>
                       </Pressable>
                       {i < debts.length - 1 && <View style={[styles.divider, { backgroundColor: theme.border }]} />}
@@ -873,11 +894,18 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
   },
+  rowName: {
+    flex: 1,
+  },
+  rowMeta: {
+    marginTop: 2,
+  },
   rowAmount: {
     fontVariant: ['tabular-nums'],
   },
   progressWrap: {
     paddingLeft: 32 + Spacing.three,
+    gap: 2,
   },
   divider: {
     height: StyleSheet.hairlineWidth,
