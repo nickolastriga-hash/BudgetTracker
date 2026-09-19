@@ -38,7 +38,9 @@ type Slide = {
   body: string;
   points?: string[];
   // A miniature, non-interactive imitation of the tab being described.
-  mock?: { caption?: string; ring?: boolean; rows: MockRow[] };
+  // `legend` swaps the icon-badge rows for Home's own colour-dot + share
+  // legend, so the Home slide reads as that screen rather than a list.
+  mock?: { caption?: string; ring?: boolean; legend?: boolean; rows: MockRow[] };
 };
 
 // Sampled from CATEGORY_COLORS so the mocks match the palette a real
@@ -72,10 +74,12 @@ const SLIDES: Slide[] = [
     mock: {
       caption: 'September 2026',
       ring: true,
+      legend: true,
+      // Largest share first, the order Home's own legend uses.
       rows: [
-        { icon: 'restaurant', color: C.orange, label: 'Food', amount: '$482.10', amountTone: 'expense' },
-        { icon: 'home', color: C.blue, label: 'Housing', amount: '$1,200.00', amountTone: 'expense' },
-        { icon: 'directions-car', color: C.purple, label: 'Transport', amount: '$210.45', amountTone: 'expense' },
+        { icon: 'home', color: C.purple, label: 'Housing', amount: '63%', percent: 0.63 },
+        { icon: 'restaurant', color: C.orange, label: 'Food & Dining', amount: '25%', percent: 0.25 },
+        { icon: 'directions-car', color: C.blue, label: 'Transport', amount: '11%', percent: 0.11 },
       ],
     },
   },
@@ -156,9 +160,8 @@ const SLIDES: Slide[] = [
 // app's look (and its light/dark theming) without any bundled image.
 function MockPreview({ mock }: { mock: NonNullable<Slide['mock']> }) {
   const theme = useTheme();
-  const ringSegments = mock.rows
-    .filter((r) => r.amount)
-    .map((r, i) => ({ key: String(i), amount: [482, 1200, 210][i] ?? 100, color: r.color }));
+  // Sized off each row's own share, so a wedge always matches its legend row.
+  const ringSegments = mock.rows.map((r, i) => ({ key: String(i), amount: r.percent ?? 1, color: r.color }));
 
   return (
     <View style={[styles.mockCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
@@ -169,22 +172,53 @@ function MockPreview({ mock }: { mock: NonNullable<Slide['mock']> }) {
       )}
       {mock.ring && ringSegments.length > 0 && (
         <View style={styles.mockRing}>
+          {/* Same center stack as Home's own default (unselected) ring:
+              a tinted receipt badge, the period total, then the label. */}
           <CategoryRingChart
             segments={ringSegments}
-            size={92}
-            strokeWidth={11}
+            size={150}
+            strokeWidth={15}
             trackColor={theme.backgroundElement}
             outlineColor={theme.card}>
-            <View style={styles.mockRingCenter}>
-              <ThemedText type="smallBold">$1,892</ThemedText>
-              <ThemedText type="small" themeColor="textTertiary" style={styles.mockRingLabel}>
-                spent
-              </ThemedText>
+            <View style={[styles.mockRingBadge, { backgroundColor: theme.destructive + '26' }]}>
+              <MaterialIcons name="receipt-long" size={18} color={theme.destructive} />
             </View>
+            <ThemedText numberOfLines={1} style={styles.mockRingAmount}>
+              $1,892.55
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.mockRingLabel}>
+              TOTAL EXPENSES
+            </ThemedText>
           </CategoryRingChart>
         </View>
       )}
-      {mock.rows.map((row) => (
+      {mock.legend
+        ? mock.rows.map((row) => (
+            <View key={row.label} style={styles.mockLegendRow}>
+              <View style={[styles.mockLegendDot, { backgroundColor: row.color }]} />
+              <ThemedText type="small" numberOfLines={1} style={styles.mockLegendName}>
+                {row.label}
+              </ThemedText>
+              {/* A plain track + fill, like Home's own legend — not
+                  ProgressBar, whose expense semantics would repaint the
+                  largest share amber at 100% of the top category. */}
+              <View style={[styles.mockLegendBar, { backgroundColor: theme.backgroundElement }]}>
+                <View
+                  style={[
+                    styles.mockLegendBarFill,
+                    {
+                      width: `${Math.max(((row.percent ?? 0) / (mock.rows[0].percent ?? 1)) * 100, 4)}%`,
+                      backgroundColor: row.color,
+                    },
+                  ]}
+                />
+              </View>
+              <ThemedText type="smallBold" style={styles.mockLegendShare}>
+                {row.amount}
+              </ThemedText>
+            </View>
+          ))
+        : mock.rows.map((row) => (
         <View key={row.label} style={styles.mockRow}>
           <View style={styles.mockRowTop}>
             <View style={[styles.mockBadge, { backgroundColor: row.color + '26' }]}>
@@ -369,11 +403,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: Spacing.one,
   },
-  mockRingCenter: {
+  mockRingBadge: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mockRingAmount: {
+    fontSize: 19,
+    lineHeight: 23,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+    marginTop: 5,
+    maxWidth: 104,
   },
   mockRingLabel: {
-    fontSize: 10,
+    letterSpacing: 0.6,
+    fontSize: 9,
+    maxWidth: 104,
+    textAlign: 'center',
   },
   mockRow: {
     gap: 4,
@@ -405,6 +454,36 @@ const styles = StyleSheet.create({
   },
   mockBar: {
     paddingLeft: 26 + Spacing.two,
+  },
+  mockLegendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  mockLegendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  mockLegendName: {
+    flex: 1,
+    fontSize: 13,
+  },
+  mockLegendBar: {
+    width: 56,
+    height: 4,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  mockLegendBarFill: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  mockLegendShare: {
+    fontSize: 13,
+    minWidth: 34,
+    textAlign: 'right',
+    fontVariant: ['tabular-nums'],
   },
   pointsCard: {
     alignSelf: 'stretch',
