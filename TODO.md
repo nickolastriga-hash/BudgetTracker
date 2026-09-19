@@ -47,8 +47,9 @@ transactions, all local-only. Deliberately deferred:
   download split as `lib/backup.ts`'s own export, but unrelated to it otherwise — this is a one-way,
   human-readable spreadsheet export, not a backup format `importBackup` can read back.
 - **Wealth follow-ups (2026-09-13)** — savings goals, debt payoff planner, and net worth are all
-  hand-entered (see CLAUDE.md's "Wealth tab data is hand-entered" bullet). Still open: net worth
-  history sampled on a schedule rather than only when the page opens. ~~A goal contribution
+  hand-entered (see CLAUDE.md's "Wealth tab data is hand-entered" bullet). ~~Net worth
+  history sampled only when the page opens~~ — now also sampled once per app launch from the root
+  layout (2026-09-19; still no background scheduler, so a day the app never opens has no point). ~~A goal contribution
   optionally logging a matching transaction; a debt payment doing the same~~ — done 2026-09-14, an
   "Also log as a transaction" Switch per goal/debt in their editors (see CLAUDE.md's "Payments can
   log transactions" bullet). ~~A Home card summarizing Wealth~~ — done 2026-09-14

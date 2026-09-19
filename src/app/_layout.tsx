@@ -16,6 +16,9 @@ import { AppLockProvider } from '@/hooks/use-app-lock';
 import { AuthProvider } from '@/hooks/use-auth';
 import { CurrencyProvider } from '@/hooks/use-currency';
 import { ThemePreferenceProvider, useThemePreference } from '@/hooks/use-theme-preference';
+import { toDateStr } from '@/lib/date-range';
+import { getDebts } from '@/lib/debts';
+import { getAccounts, netWorthTotals, recordNetWorthSnapshot } from '@/lib/net-worth';
 import { generateDueTransactions } from '@/lib/recurring';
 
 SplashScreen.preventAutoHideAsync();
@@ -34,6 +37,14 @@ function RootLayoutInner() {
     generateDueTransactions().finally(() => {
       SplashScreen.hideAsync().catch(() => {});
     });
+    // Not awaited: history is a nicety and must never delay the splash.
+    Promise.all([getAccounts(), getDebts()])
+      .then(([accounts, debts]) => {
+        if (accounts.length + debts.length === 0) return;
+        const totals = netWorthTotals(accounts, debts.reduce((s, d) => s + d.balance, 0));
+        return recordNetWorthSnapshot({ date: toDateStr(new Date()), ...totals });
+      })
+      .catch(() => {});
   }, []);
 
   return (

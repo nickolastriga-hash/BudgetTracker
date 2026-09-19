@@ -82,9 +82,18 @@ export async function getNetWorthHistory(): Promise<NetWorthSnapshot[]> {
   return JSON.parse(raw) as NetWorthSnapshot[];
 }
 
+// Debts count as liabilities but live in lib/debts.ts, so callers pass their
+// summed balance in rather than this module importing it (see top comment).
+export function netWorthTotals(accounts: Account[], debtBalance: number): { assets: number; liabilities: number } {
+  return {
+    assets: accounts.filter((a) => a.kind === 'asset').reduce((s, a) => s + a.balance, 0),
+    liabilities: accounts.filter((a) => a.kind === 'liability').reduce((s, a) => s + a.balance, 0) + debtBalance,
+  };
+}
+
 // History is a series of "what the totals were on the day something
 // changed" points, recorded lazily by the Net Worth page whenever it loads
-// (no scheduler — same on-read spirit as generateDueTransactions) rather
+// and once per app launch from the root layout (no scheduler — same on-read spirit as generateDueTransactions) rather
 // than by every balance write. A same-day snapshot is replaced in place;
 // one identical to the previous point is skipped so an untouched week
 // doesn't pile up redundant points.

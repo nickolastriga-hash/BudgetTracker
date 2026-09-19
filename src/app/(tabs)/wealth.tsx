@@ -40,6 +40,7 @@ import { getGoals, goalProgress, type SavingsGoal } from '@/lib/goals';
 import {
   getAccounts,
   getNetWorthHistory,
+  netWorthTotals,
   recordNetWorthSnapshot,
   type Account,
   type NetWorthSnapshot,
@@ -132,10 +133,8 @@ export default function WealthScreen() {
         // history (see lib/net-worth.ts). Nothing to record until at least
         // one line item exists.
         if (a.length + d.length > 0) {
-          const assets = a.filter((x) => x.kind === 'asset').reduce((s, x) => s + x.balance, 0);
-          const liabilities =
-            a.filter((x) => x.kind === 'liability').reduce((s, x) => s + x.balance, 0) + d.reduce((s, x) => s + x.balance, 0);
-          setHistory(await recordNetWorthSnapshot({ date: toDateStr(new Date()), assets, liabilities }));
+          const totals = netWorthTotals(a, d.reduce((s, x) => s + x.balance, 0));
+          setHistory(await recordNetWorthSnapshot({ date: toDateStr(new Date()), ...totals }));
         } else {
           setHistory(h);
         }
