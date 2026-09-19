@@ -460,7 +460,13 @@ src/
                           Asset/Liability SegmentedControl (preset by
                           `?kind=` from the Net Worth page's per-section Add
                           links; the pinned + opens it as asset), name,
-                          balance, color, icon, two-tap Delete.
+                          balance, color, icon, two-tap Delete. Edit mode
+                          adds an "ADD OR DEDUCT" row (2026-09-19: amount +
+                          green add / red deduct, persisted immediately,
+                          clamped at 0); the balance field itself still
+                          sets a whole new value. debt-editor's payment row
+                          gained a matching red "Add" (new charge/interest,
+                          no transaction logged).
     set-pin.tsx            Two-step PIN entry (choose, confirm) over the
                           shared PinPad (2026-09-13). Reached from Settings'
                           App lock Switch (turning on) and Change PIN row

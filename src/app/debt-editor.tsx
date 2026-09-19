@@ -127,6 +127,16 @@ export default function DebtEditorScreen() {
     await reloadDebt(id);
   }
 
+  // A new charge or added interest: raises the balance (and the starting
+  // point with it, so progress never reads negative). Never logs a transaction.
+  async function handleCharge() {
+    if (!id || !debt || !canPay) return;
+    const next = debt.balance + parsedPayment;
+    await updateDebt(id, { balance: next, originalBalance: Math.max(debt.originalBalance, next) });
+    setPaymentAmount('');
+    await reloadDebt(id);
+  }
+
   // The logging choice is saved as soon as it's changed, not on Save — a
   // payment can be recorded without ever tapping Save, and recordPayment
   // reads the choice off the stored record.
@@ -190,7 +200,7 @@ export default function DebtEditorScreen() {
         {isEditing && (
           <View style={styles.field}>
             <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
-              RECORD A PAYMENT
+              ADJUST BALANCE
             </ThemedText>
             <View style={styles.payRow}>
               <View style={[styles.amountInputWrap, { borderColor: theme.border, backgroundColor: theme.card }]}>
@@ -212,6 +222,14 @@ export default function DebtEditorScreen() {
                 style={[styles.payButton, { backgroundColor: canPay ? theme.success : theme.backgroundElement }]}>
                 <ThemedText type="smallBold" themeColor={canPay ? undefined : 'textTertiary'} style={canPay && styles.payButtonText}>
                   Pay
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={handleCharge}
+                disabled={!canPay}
+                style={[styles.payButton, { backgroundColor: canPay ? theme.destructive : theme.backgroundElement }]}>
+                <ThemedText type="smallBold" themeColor={canPay ? undefined : 'textTertiary'} style={canPay && styles.payButtonText}>
+                  Add
                 </ThemedText>
               </Pressable>
             </View>
@@ -422,7 +440,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   payButton: {
-    paddingHorizontal: Spacing.four,
+    paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two + 4,
     borderRadius: Spacing.two,
   },

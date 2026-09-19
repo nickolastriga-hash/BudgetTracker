@@ -10,6 +10,7 @@ import { ColorPicker, IconPicker, resolveIcon } from '@/components/icon-color-pi
 import { SegmentedControl } from '@/components/segmented-control';
 import { ThemedText } from '@/components/themed-text';
 import { CardRadius, MaxContentWidth, Spacing } from '@/constants/theme';
+import { useCurrency } from '@/hooks/use-currency';
 import { useTheme } from '@/hooks/use-theme';
 import { CATEGORY_COLORS, type CategoryIcon } from '@/lib/categories';
 import { addAccount, deleteAccount, getAccounts, updateAccount, type AccountKind } from '@/lib/net-worth';
@@ -20,6 +21,7 @@ import { addAccount, deleteAccount, getAccounts, updateAccount, type AccountKind
 // the toggle when adding.
 export default function AccountEditorScreen() {
   const theme = useTheme();
+  const { symbol } = useCurrency();
   const insets = useSafeAreaInsets();
   const { id, kind: kindParam } = useLocalSearchParams<{ id?: string; kind?: string }>();
   const isEditing = !!id;
@@ -30,6 +32,7 @@ export default function AccountEditorScreen() {
   const [balance, setBalance] = useState('');
   const [color, setColor] = useState<string>(CATEGORY_COLORS[6]);
   const [icon, setIcon] = useState<CategoryIcon | null>(null);
+  const [adjustAmount, setAdjustAmount] = useState('');
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   useEffect(() => {
@@ -62,6 +65,20 @@ export default function AccountEditorScreen() {
     if (isEditing && id) await updateAccount(id, fields);
     else await addAccount(fields);
     router.back();
+  }
+
+  // Add to or deduct from whatever the balance field currently shows, and
+  // persist right away (like debt-editor's payment row) so it works without
+  // tapping Save. Only the balance is written; other unsaved edits stay put.
+  const parsedAdjust = parseFloat(adjustAmount);
+  const canAdjust = isEditing && !Number.isNaN(parsedAdjust) && parsedAdjust > 0;
+  async function handleAdjust(direction: 1 | -1) {
+    if (!id || !canAdjust) return;
+    const base = Number.isNaN(parsedBalance) ? 0 : parsedBalance;
+    const next = Math.max(0, base + direction * parsedAdjust);
+    await updateAccount(id, { balance: next });
+    setBalance(String(Math.round(next * 100) / 100));
+    setAdjustAmount('');
   }
 
   async function handleDelete() {
@@ -124,6 +141,46 @@ export default function AccountEditorScreen() {
           </ThemedText>
         </View>
 
+        {isEditing && (
+          <View style={styles.field}>
+            <ThemedText type="small" themeColor="textSecondary">
+              ADD OR DEDUCT
+            </ThemedText>
+            <View style={styles.adjustRow}>
+              <View style={[styles.amountInputWrap, { borderColor: theme.border, backgroundColor: theme.card }]}>
+                <ThemedText type="default" themeColor="textSecondary">
+                  {symbol}
+                </ThemedText>
+                <TextInput
+                  value={adjustAmount}
+                  onChangeText={setAdjustAmount}
+                  placeholder="0.00"
+                  placeholderTextColor={theme.textTertiary}
+                  keyboardType="decimal-pad"
+                  style={[styles.amountInput, { color: theme.text }]}
+                />
+              </View>
+              <Pressable
+                onPress={() => handleAdjust(1)}
+                disabled={!canAdjust}
+                accessibilityLabel="Add to balance"
+                style={[styles.adjustButton, { backgroundColor: canAdjust ? theme.success : theme.backgroundElement }]}>
+                <MaterialIcons name="add" size={22} color={canAdjust ? '#ffffff' : theme.textTertiary} />
+              </Pressable>
+              <Pressable
+                onPress={() => handleAdjust(-1)}
+                disabled={!canAdjust}
+                accessibilityLabel="Deduct from balance"
+                style={[styles.adjustButton, { backgroundColor: canAdjust ? theme.destructive : theme.backgroundElement }]}>
+                <MaterialIcons name="remove" size={22} color={canAdjust ? '#ffffff' : theme.textTertiary} />
+              </Pressable>
+            </View>
+            <ThemedText type="small" themeColor="textTertiary">
+              Changes the amount above right away. Or edit the amount directly to set a whole new value.
+            </ThemedText>
+          </View>
+        )}
+
         <View style={styles.field}>
           <ThemedText type="small" themeColor="textSecondary">
             Color
@@ -178,6 +235,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two + 2,
     fontSize: 16,
+  },
+  adjustRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  amountInputWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: Spacing.two,
+    paddingHorizontal: Spacing.three,
+  },
+  amountInput: {
+    flex: 1,
+    paddingVertical: Spacing.two + 2,
+    fontSize: 16,
+  },
+  adjustButton: {
+    width: 44,
+    height: 44,
+    borderRadius: Spacing.two,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   saveButton: {
     paddingVertical: Spacing.three,
