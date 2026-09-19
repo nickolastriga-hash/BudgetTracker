@@ -218,17 +218,21 @@ export function DebtPayoffChart({
     cumulative.push(schedule.map((entry, i) => (below ? below[i] : 0) + (entry.balances[stack[k].id] ?? 0)));
   }
   // Each region spans every month its debt still has a balance, right down to
-  // the tip where it tapers to nothing at its payoff month.
+  // the tip where it tapers to nothing at its payoff month (see the loop).
   const bands = stack.flatMap((debt, k) => {
     const below = cumulative[k - 1];
     const top: Point[] = [];
     const bottom: Point[] = [];
     for (let i = 0; i < n; i++) {
-      const topY = yFor(cumulative[k][i]);
-      const botY = yFor(below ? below[i] : 0);
-      if (botY - topY < 0.5) break;
-      top.push({ x: xFor(i), y: topY });
-      bottom.push({ x: xFor(i), y: botY });
+      top.push({ x: xFor(i), y: yFor(cumulative[k][i]) });
+      bottom.push({ x: xFor(i), y: yFor(below ? below[i] : 0) });
+      // Ends on the balance itself, not on how many pixels tall the band has
+      // become: the scrub callout lists a debt for exactly as long as its
+      // balance is above zero, and the two have to agree or a nearly-paid-off
+      // debt reads as already gone while the callout still shows a number.
+      // The zero month is included, so the shape closes to a point right
+      // where the payoff lands.
+      if ((schedule[i].balances[debt.id] ?? 0) <= 0) break;
     }
     if (top.length < 2) return [];
     return [{ debt, path: roundedRegion(top, bottom, REGION_RADIUS) }];
