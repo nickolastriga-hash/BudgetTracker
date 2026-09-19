@@ -264,7 +264,10 @@ export default function TutorialScreen() {
         style={{ flex: 1 }}>
         {SLIDES.map((slide) => (
           <View key={slide.title} style={{ width: pageWidth, flex: 1 }}>
-            <View style={styles.slide}>
+            {/* Each slide scrolls on its own: the tallest ones (a mock card
+                plus a three-point checklist) overflow a short screen, and
+                flexGrow keeps them vertically centred when they don't. */}
+            <ScrollView contentContainerStyle={styles.slide} showsVerticalScrollIndicator={false}>
               <View style={[styles.iconCircle, { backgroundColor: theme.accent + '1A' }]}>
                 <MaterialIcons name={slide.icon} size={44} color={theme.accent} />
               </View>
@@ -285,7 +288,7 @@ export default function TutorialScreen() {
                   ))}
                 </View>
               )}
-            </View>
+            </ScrollView>
           </View>
         ))}
       </ScrollView>
@@ -323,10 +326,11 @@ const styles = StyleSheet.create({
     minHeight: 40,
   },
   slide: {
-    flex: 1,
+    flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: Spacing.four,
+    paddingVertical: Spacing.three,
     gap: Spacing.three,
     alignSelf: 'center',
     width: '100%',
