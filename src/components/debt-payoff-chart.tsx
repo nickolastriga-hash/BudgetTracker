@@ -36,12 +36,15 @@ const EDGE_GAP_PX = TICK_LABEL_WIDTH / 2 + EDGE_LABEL_WIDTH + 6;
 // keeps the channel between neighbors an even 2 * RING_GAP wherever they
 // meet, however thin either band gets, and rounds the inner edge for free.
 const REGION_RADIUS = 10;
-const RING_GAP = 2.5;
+const RING_GAP = 1.5;
 const RING_LINE = 1.25;
 // A region thinner than its own border + outline would render as a bare
-// colored strip (the white border eats the sides), so it ends, with a rounded
-// cap, once it gets thinner than this.
-const MIN_REGION_PX = 2 * (RING_GAP + RING_LINE) + 1.5;
+// colored strip (the white border eats the sides). So each region keeps its
+// true shape all the way to its payoff, but its border and outline fade out
+// over RING_FADE_PX, ending where the band gets thinner than this; past that
+// point only the translucent fill remains, tapering to the payoff month.
+const MIN_RING_THICKNESS_PX = 2 * (RING_GAP + RING_LINE) + 1.5;
+const RING_FADE_PX = 28;
 // "Nice" calendar intervals, in months, from quarterly up to every 50 years —
 // the smallest one that still fits within the available tick budget wins.
 const TICK_INTERVALS_MONTHS = [3, 6, 12, 24, 36, 60, 120, 180, 300, 600];
@@ -224,21 +227,24 @@ export function DebtPayoffChart({
     const below = cumulative[k - 1];
     cumulative.push(schedule.map((entry, i) => (below ? below[i] : 0) + (entry.balances[stack[k].id] ?? 0)));
   }
-  // Each region only spans the months its debt still has enough balance to
-  // draw (see MIN_REGION_PX).
+  // Each region spans every month its debt still has a balance. `ringEnd` is
+  // the x where the band becomes too thin for a border and outline.
   const bands = stack.flatMap((debt, k) => {
     const below = cumulative[k - 1];
     const top: Point[] = [];
     const bottom: Point[] = [];
+    let ringEnd = PADDING_X;
     for (let i = 0; i < n; i++) {
       const topY = yFor(cumulative[k][i]);
       const botY = yFor(below ? below[i] : 0);
-      if (botY - topY < MIN_REGION_PX) break;
+      const thickness = botY - topY;
+      if (thickness < 0.5) break;
+      if (thickness >= MIN_RING_THICKNESS_PX) ringEnd = xFor(i);
       top.push({ x: xFor(i), y: topY });
       bottom.push({ x: xFor(i), y: botY });
     }
     if (top.length < 2) return [];
-    return [{ debt, path: roundedRegion(top, bottom, REGION_RADIUS) }];
+    return [{ debt, ringEnd, path: roundedRegion(top, bottom, REGION_RADIUS) }];
   });
 
   // X ticks: the smallest "nice" calendar interval whose resulting tick
@@ -275,6 +281,32 @@ export function DebtPayoffChart({
             </LinearGradient>
           ))}
           {bands.map((b) => (
+            <LinearGradient
+              key={`ring-${b.debt.id}`}
+              id={`${idBase}-ring-${b.debt.id}`}
+              gradientUnits="userSpaceOnUse"
+              x1={Math.max(PADDING_X, b.ringEnd - RING_FADE_PX)}
+              x2={b.ringEnd}
+              y1={0}
+              y2={0}>
+              <Stop offset="0" stopColor={b.debt.color} stopOpacity={1} />
+              <Stop offset="1" stopColor={b.debt.color} stopOpacity={0} />
+            </LinearGradient>
+          ))}
+          {bands.map((b) => (
+            <LinearGradient
+              key={`ringw-${b.debt.id}`}
+              id={`${idBase}-ringw-${b.debt.id}`}
+              gradientUnits="userSpaceOnUse"
+              x1={Math.max(PADDING_X, b.ringEnd - RING_FADE_PX)}
+              x2={b.ringEnd}
+              y1={0}
+              y2={0}>
+              <Stop offset="0" stopColor={theme.card} stopOpacity={1} />
+              <Stop offset="1" stopColor={theme.card} stopOpacity={0} />
+            </LinearGradient>
+          ))}
+          {bands.map((b) => (
             <ClipPath key={b.debt.id} id={`${idBase}-clip-${b.debt.id}`}>
               <Path d={b.path} />
             </ClipPath>
@@ -302,8 +334,8 @@ export function DebtPayoffChart({
         {bands.map((b) => (
           <G key={b.debt.id} clipPath={`url(#${idBase}-clip-${b.debt.id})`}>
             <Path d={b.path} fill={`url(#${idBase}-${b.debt.id})`} />
-            <Path d={b.path} fill="none" stroke={b.debt.color} strokeWidth={(RING_GAP + RING_LINE) * 2} strokeLinejoin="round" />
-            <Path d={b.path} fill="none" stroke={theme.card} strokeWidth={RING_GAP * 2} strokeLinejoin="round" />
+            <Path d={b.path} fill="none" stroke={`url(#${idBase}-ring-${b.debt.id})`} strokeWidth={(RING_GAP + RING_LINE) * 2} strokeLinejoin="round" />
+            <Path d={b.path} fill="none" stroke={`url(#${idBase}-ringw-${b.debt.id})`} strokeWidth={RING_GAP * 2} strokeLinejoin="round" />
           </G>
         ))}
 
