@@ -462,12 +462,17 @@ src/
                           between the goal's expense category and the income
                           catch-all). A contribution logged while logging was
                           off has no transaction and doesn't grow one here.
-                          The date isn't editable — it'd need a calendar
-                          panel, and a wrong amount is the likelier mistake. Contributions reload
+                          The date is editable too (same day): the row's
+                          "Change date" link reveals the shared
+                          components/calendar-picker.tsx, capped at today,
+                          and updateContribution moves the linked
+                          transaction's date with it. Contributions reload
                           just the goal record (`reloadGoal`), not the form
                           fields, so unsaved edits survive.
     debt-editor.tsx        Add/edit a Debt (2026-09-13), from Wealth's Debts
-                          page or a "From Debts" liability row. Name,
+                          page or a "From Debts" liability row. The name
+                          lives in the header behind a pencil (2026-09-19,
+                          same as goal-editor),
                           current balance, starting balance (optional —
                           blank means "same as current"; saving clamps it to
                           at least the current balance so paydown never
@@ -480,7 +485,9 @@ src/
     account-editor.tsx     Add/edit a net-worth Account (2026-09-13). An
                           Asset/Liability SegmentedControl (preset by
                           `?kind=` from the Net Worth page's per-section Add
-                          links; the pinned + opens it as asset), name,
+                          links; the pinned + opens it as asset); the name
+                          lives in the header behind a pencil (2026-09-19,
+                          same as goal-editor and debt-editor),
                           balance, color, icon, two-tap Delete. Edit mode
                           adds an "ADD OR DEDUCT" row (2026-09-19: amount +
                           green add / red deduct, persisted immediately,
@@ -1053,6 +1060,19 @@ src/
                           `onScrubbingChange` callback Home wires to its
                           outer ScrollView's `scrollEnabled`. See the
                           "Trends tab" convention bullet.
+    calendar-picker.tsx      CalendarPicker({selected, onSelect,
+                          maxDateStr?}) (2026-09-19) — a month-pager + day
+                          grid for picking one YYYY-MM-DD date, with an
+                          optional ceiling (both callers pass today). Lived
+                          inline in add-transaction.tsx until goal-editor's
+                          contribution rows needed the same thing; extracted
+                          at the 2nd caller rather than the 3rd the
+                          no-premature-abstraction rule asks for, since
+                          that rule is about small per-file helpers and this
+                          is a stateful ~70-line component whose copy would
+                          have drifted. Distinct from
+                          range-picker-modal.tsx's own day grid, which picks
+                          a two-tap range, not a single date.
     editor-header.tsx        EditorHeader({title, badge?, onChangeTitle?,
                           titlePlaceholder?}) (2026-09-13) — the
                           own-header-with-X shape every `headerShown: false`
@@ -1061,8 +1081,9 @@ src/
                           budget-editor's inline version (budget-editor and
                           edit-recurring migrated onto it the same day). The
                           X carries accessibilityLabel="Close". Passing
-                          `onChangeTitle` (2026-09-19, goal-editor its only
-                          caller so far) makes the title the name field: a
+                          `onChangeTitle` (2026-09-19, used by goal-editor,
+                          debt-editor and account-editor) makes the title
+                          the name field: a
                           pencil beside it swaps the text for an autofocused
                           TextInput that commits on blur/submit, so the form
                           below doesn't need its own "Name" row. Callers that

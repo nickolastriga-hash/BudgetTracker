@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { CalendarPicker } from '@/components/calendar-picker';
 import { CategoryBadge } from '@/components/category-badge';
 import { EditorHeader } from '@/components/editor-header';
 import { ColorPicker, IconPicker, resolveIcon } from '@/components/icon-color-picker';
@@ -74,6 +75,8 @@ export default function GoalEditorScreen() {
   const [editingContributionId, setEditingContributionId] = useState<string | null>(null);
   const [editingAmount, setEditingAmount] = useState('');
   const [editingSign, setEditingSign] = useState<1 | -1>(1);
+  const [editingDate, setEditingDate] = useState('');
+  const [showEditCalendar, setShowEditCalendar] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   // Re-reads just the goal record after a contribution change — the form
@@ -165,12 +168,15 @@ export default function GoalEditorScreen() {
     setEditingContributionId(c.id);
     setEditingSign(c.amount < 0 ? -1 : 1);
     setEditingAmount(String(Math.abs(c.amount)));
+    setEditingDate(c.date);
+    setShowEditCalendar(false);
   }
 
   async function handleSaveContribution() {
     if (!id || !editingContributionId || !canSaveContribution) return;
-    await updateContribution(id, editingContributionId, editingSign * parsedEditingAmount);
+    await updateContribution(id, editingContributionId, editingSign * parsedEditingAmount, editingDate);
     setEditingContributionId(null);
+    setShowEditCalendar(false);
     await reloadGoal(id);
   }
 
@@ -308,6 +314,7 @@ export default function GoalEditorScreen() {
                       // Editing swaps the row for an amount field plus a
                       // +/- toggle, so a deposit logged as a withdrawal (or
                       // the reverse) can be corrected without deleting it.
+                      <View>
                       <View style={styles.contributionRow}>
                         <Pressable
                           onPress={() => setEditingSign((s) => (s === 1 ? -1 : 1))}
@@ -342,6 +349,28 @@ export default function GoalEditorScreen() {
                         <Pressable hitSlop={8} onPress={() => setEditingContributionId(null)} accessibilityLabel="Cancel">
                           <MaterialIcons name="close" size={18} color={theme.textTertiary} />
                         </Pressable>
+                      </View>
+                      <Pressable
+                        onPress={() => setShowEditCalendar((v) => !v)}
+                        style={styles.editDateRow}
+                        accessibilityLabel="Change date">
+                        <MaterialIcons name="event" size={16} color={theme.accent} />
+                        <ThemedText type="small" themeColor="accent">
+                          {shortDate(editingDate)}
+                        </ThemedText>
+                      </Pressable>
+                      {showEditCalendar && (
+                        <View style={styles.editCalendarWrap}>
+                          <CalendarPicker
+                            selected={editingDate}
+                            maxDateStr={toDateStr(new Date())}
+                            onSelect={(d) => {
+                              setEditingDate(d);
+                              setShowEditCalendar(false);
+                            }}
+                          />
+                        </View>
+                      )}
                       </View>
                     ) : (
                       <Pressable
@@ -590,6 +619,17 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: Spacing.one,
     fontSize: 15,
+  },
+  editDateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one,
+    paddingHorizontal: Spacing.three,
+    paddingBottom: Spacing.two,
+  },
+  editCalendarWrap: {
+    paddingHorizontal: Spacing.three,
+    paddingBottom: Spacing.three,
   },
   divider: {
     height: StyleSheet.hairlineWidth,

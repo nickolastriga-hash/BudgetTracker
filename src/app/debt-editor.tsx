@@ -173,7 +173,9 @@ export default function DebtEditorScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       <EditorHeader
-        title={isEditing ? name || 'Edit Debt' : 'New Debt'}
+        title={name}
+        onChangeTitle={setName}
+        titlePlaceholder={isEditing ? 'Debt name' : 'New debt'}
         badge={<CategoryBadge category={{ icon: displayIcon, color }} size={30} />}
       />
 
@@ -271,19 +273,6 @@ export default function DebtEditorScreen() {
             )}
           </View>
         )}
-
-        <View style={styles.field}>
-          <ThemedText type="small" themeColor="textSecondary">
-            Name
-          </ThemedText>
-          <TextInput
-            value={name}
-            onChangeText={setName}
-            placeholder="Credit card, Car loan, Student loan…"
-            placeholderTextColor={theme.textTertiary}
-            style={inputStyle}
-          />
-        </View>
 
         <View style={styles.fieldRow}>
           <View style={[styles.field, styles.fieldHalf]}>

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Keyboard, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { CalendarPicker } from '@/components/calendar-picker';
 import { CategoryBadge } from '@/components/category-badge';
 import { SegmentedControl } from '@/components/segmented-control';
 import { ThemedText } from '@/components/themed-text';
@@ -26,10 +27,6 @@ import { addTransaction, deleteTransaction, getTransactions, updateTransaction }
 
 function toDateStr(date: Date) {
   return date.toISOString().split('T')[0];
-}
-
-function daysInMonth(year: number, month: number) {
-  return new Date(year, month + 1, 0).getDate();
 }
 
 function localDate(dateStr: string) {
@@ -98,79 +95,6 @@ function frequencySpec(frequency: RecurringFrequency, dayOfMonth: number, month:
     case 'semimonthly':
       return { frequency: 'semimonthly', dayOfMonth1: dayOfMonth, dayOfMonth2 };
   }
-}
-
-function CalendarPicker({
-  selected,
-  onSelect,
-  maxDateStr,
-}: {
-  selected: string;
-  onSelect: (dateStr: string) => void;
-  maxDateStr: string;
-}) {
-  const theme = useTheme();
-  const selectedDate = new Date(`${selected}T00:00:00`);
-  const [viewYear, setViewYear] = useState(selectedDate.getFullYear());
-  const [viewMonth, setViewMonth] = useState(selectedDate.getMonth());
-
-  const firstWeekday = new Date(viewYear, viewMonth, 1).getDay();
-  const total = daysInMonth(viewYear, viewMonth);
-  const cells: (number | null)[] = [...Array(firstWeekday).fill(null), ...Array.from({ length: total }, (_, i) => i + 1)];
-
-  return (
-    <View style={[styles.calendar, CardShadow, { borderColor: theme.border, backgroundColor: theme.card }]}>
-      <View style={styles.calendarHeader}>
-        <Pressable
-          hitSlop={8}
-          onPress={() => {
-            const d = new Date(viewYear, viewMonth - 1, 1);
-            setViewYear(d.getFullYear());
-            setViewMonth(d.getMonth());
-          }}>
-          <MaterialIcons name="chevron-left" size={22} color={theme.accent} />
-        </Pressable>
-        <ThemedText type="small">
-          {new Date(viewYear, viewMonth, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
-        </ThemedText>
-        <Pressable
-          hitSlop={8}
-          onPress={() => {
-            const d = new Date(viewYear, viewMonth + 1, 1);
-            setViewYear(d.getFullYear());
-            setViewMonth(d.getMonth());
-          }}>
-          <MaterialIcons name="chevron-right" size={22} color={theme.accent} />
-        </Pressable>
-      </View>
-      <View style={styles.calendarGrid}>
-        {cells.map((day, i) => {
-          if (day === null) return <View key={`empty-${i}`} style={styles.calendarCell} />;
-          const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-          const isSelected = dateStr === selected;
-          const isDisabled = dateStr > maxDateStr;
-          return (
-            <Pressable
-              key={dateStr}
-              disabled={isDisabled}
-              onPress={() => onSelect(dateStr)}
-              style={[
-                styles.calendarCell,
-                styles.calendarDay,
-                isSelected && { backgroundColor: theme.accent },
-              ]}>
-              <ThemedText
-                type="small"
-                themeColor={isSelected ? 'text' : isDisabled ? 'textTertiary' : 'text'}
-                style={isSelected && { color: '#ffffff' }}>
-                {day}
-              </ThemedText>
-            </Pressable>
-          );
-        })}
-      </View>
-    </View>
-  );
 }
 
 export default function AddTransactionScreen() {

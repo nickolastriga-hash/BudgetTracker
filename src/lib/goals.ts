@@ -116,7 +116,12 @@ export function addContribution(goalId: string, amount: number, date: string): P
 // income catch-all. A contribution logged while logging was off has no
 // transaction and doesn't grow one here; turning logging on is forward-only,
 // same as it is for adding.
-export function updateContribution(goalId: string, contributionId: string, amount: number): Promise<void> {
+export function updateContribution(
+  goalId: string,
+  contributionId: string,
+  amount: number,
+  date: string
+): Promise<void> {
   return enqueue(async () => {
     const goals = await getGoals();
     const goal = goals.find((g) => g.id === goalId);
@@ -125,7 +130,7 @@ export function updateContribution(goalId: string, contributionId: string, amoun
     await saveGoals(
       goals.map((g) =>
         g.id === goalId
-          ? { ...g, contributions: g.contributions.map((c) => (c.id === contributionId ? { ...c, amount } : c)) }
+          ? { ...g, contributions: g.contributions.map((c) => (c.id === contributionId ? { ...c, amount, date } : c)) }
           : g
       )
     );
@@ -134,6 +139,7 @@ export function updateContribution(goalId: string, contributionId: string, amoun
       await updateTransaction(existing.transactionId, {
         type: isWithdrawal ? 'income' : 'expense',
         amount: Math.abs(amount),
+        date,
         categoryId: isWithdrawal ? WITHDRAWAL_CATEGORY_ID : (goal.contributionCategoryId ?? WITHDRAWAL_CATEGORY_ID),
         note: `${isWithdrawal ? 'Withdrawal' : 'Savings'}: ${goal.name}`,
       });
