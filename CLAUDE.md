@@ -440,15 +440,30 @@ src/
                           first (best-effort, in lib/auth.ts).
     goal-editor.tsx        Add/edit a SavingsGoal (2026-09-13), reached from
                           Wealth's Goals page. Own EditorHeader (see
-                          components/editor-header.tsx), name, target
+                          components/editor-header.tsx) — the goal's name
+                          lives in that header behind a pencil (2026-09-19,
+                          per feedback), not as a "Name" field in the form,
+                          which this screen no longer has. Target
                           amount, an optional deadline (a Switch revealing a
                           year-nav + 12-month grid, same shape as
                           budget-editor's), then the shared ColorPicker/
                           IconPicker. Edit mode adds a progress card, an
                           "ADD MONEY" row (amount + green add / red
                           withdraw buttons — a withdrawal is a negative
-                          contribution) with a contribution list (× removes
-                          one), and a two-tap Delete. Contributions reload
+                          contribution) with a contribution list, and a
+                          two-tap Delete. A logged contribution is editable
+                          (2026-09-19): tapping its row (or its pencil)
+                          swaps it for an amount field plus a +/- toggle, so
+                          a deposit entered as a withdrawal can be corrected
+                          rather than deleted and re-added; × still removes
+                          one. Saving calls lib/goals.ts#updateContribution,
+                          which patches the linked transaction too (amount,
+                          and on a flipped sign the type/category/note move
+                          between the goal's expense category and the income
+                          catch-all). A contribution logged while logging was
+                          off has no transaction and doesn't grow one here.
+                          The date isn't editable — it'd need a calendar
+                          panel, and a wrong amount is the likelier mistake. Contributions reload
                           just the goal record (`reloadGoal`), not the form
                           fields, so unsaved edits survive.
     debt-editor.tsx        Add/edit a Debt (2026-09-13), from Wealth's Debts
@@ -1038,13 +1053,20 @@ src/
                           `onScrubbingChange` callback Home wires to its
                           outer ScrollView's `scrollEnabled`. See the
                           "Trends tab" convention bullet.
-    editor-header.tsx        EditorHeader({title, badge?}) (2026-09-13) — the
+    editor-header.tsx        EditorHeader({title, badge?, onChangeTitle?,
+                          titlePlaceholder?}) (2026-09-13) — the
                           own-header-with-X shape every `headerShown: false`
                           editor modal uses; extracted once goal/debt/
                           account editors would've been copies 3-5 of
                           budget-editor's inline version (budget-editor and
                           edit-recurring migrated onto it the same day). The
-                          X carries accessibilityLabel="Close".
+                          X carries accessibilityLabel="Close". Passing
+                          `onChangeTitle` (2026-09-19, goal-editor its only
+                          caller so far) makes the title the name field: a
+                          pencil beside it swaps the text for an autofocused
+                          TextInput that commits on blur/submit, so the form
+                          below doesn't need its own "Name" row. Callers that
+                          omit it are unchanged.
     icon-color-picker.tsx    ColorPicker + IconPicker + resolveIcon
                           (2026-09-13) — category-editor's swatch row and
                           AI-suggested/manual-grid icon picker, extracted for

@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type { CategoryIcon } from '@/lib/categories';
 import { toDateStr, toMonthStr } from '@/lib/date-range';
-import { addTransaction, deleteTransaction } from '@/lib/transactions';
+import { addTransaction, deleteTransaction, updateTransaction } from '@/lib/transactions';
 
 // A savings goal is a target amount saved toward by hand ("Add money"), not
 // derived from transactions — a goal is money set aside, which the
@@ -107,6 +107,37 @@ export function addContribution(goalId: string, amount: number, date: string): P
     await saveGoals(
       goals.map((g) => (g.id === goalId ? { ...g, contributions: [...g.contributions, contribution] } : g))
     );
+  });
+}
+
+// Edit an already-logged contribution. Its linked transaction (if the goal
+// had logging on when it was added) is patched to match — including a flipped
+// sign, which moves the entry between the goal's expense category and the
+// income catch-all. A contribution logged while logging was off has no
+// transaction and doesn't grow one here; turning logging on is forward-only,
+// same as it is for adding.
+export function updateContribution(goalId: string, contributionId: string, amount: number): Promise<void> {
+  return enqueue(async () => {
+    const goals = await getGoals();
+    const goal = goals.find((g) => g.id === goalId);
+    const existing = goal?.contributions.find((c) => c.id === contributionId);
+    if (!goal || !existing) return;
+    await saveGoals(
+      goals.map((g) =>
+        g.id === goalId
+          ? { ...g, contributions: g.contributions.map((c) => (c.id === contributionId ? { ...c, amount } : c)) }
+          : g
+      )
+    );
+    if (existing.transactionId) {
+      const isWithdrawal = amount < 0;
+      await updateTransaction(existing.transactionId, {
+        type: isWithdrawal ? 'income' : 'expense',
+        amount: Math.abs(amount),
+        categoryId: isWithdrawal ? WITHDRAWAL_CATEGORY_ID : (goal.contributionCategoryId ?? WITHDRAWAL_CATEGORY_ID),
+        note: `${isWithdrawal ? 'Withdrawal' : 'Savings'}: ${goal.name}`,
+      });
+    }
   });
 }
 

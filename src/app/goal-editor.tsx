@@ -28,7 +28,9 @@ import {
   getGoals,
   goalProgress,
   removeContribution,
+  updateContribution,
   updateGoal,
+  type GoalContribution,
   type SavingsGoal,
 } from '@/lib/goals';
 
@@ -69,6 +71,9 @@ export default function GoalEditorScreen() {
   const [logContributions, setLogContributions] = useState(false);
   const [contributionCategoryId, setContributionCategoryId] = useState<string | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [editingContributionId, setEditingContributionId] = useState<string | null>(null);
+  const [editingAmount, setEditingAmount] = useState('');
+  const [editingSign, setEditingSign] = useState<1 | -1>(1);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   // Re-reads just the goal record after a contribution change — the form
@@ -113,6 +118,8 @@ export default function GoalEditorScreen() {
   const progress = goal ? goalProgress(goal) : null;
   const parsedContribution = parseFloat(contributionAmount);
   const canContribute = !Number.isNaN(parsedContribution) && parsedContribution > 0;
+  const parsedEditingAmount = parseFloat(editingAmount);
+  const canSaveContribution = !Number.isNaN(parsedEditingAmount) && parsedEditingAmount > 0;
 
   async function handleSave() {
     if (!canSave) return;
@@ -154,6 +161,19 @@ export default function GoalEditorScreen() {
     await updateGoal(id, { contributionCategoryId: categoryId });
   }
 
+  function startEditContribution(c: GoalContribution) {
+    setEditingContributionId(c.id);
+    setEditingSign(c.amount < 0 ? -1 : 1);
+    setEditingAmount(String(Math.abs(c.amount)));
+  }
+
+  async function handleSaveContribution() {
+    if (!id || !editingContributionId || !canSaveContribution) return;
+    await updateContribution(id, editingContributionId, editingSign * parsedEditingAmount);
+    setEditingContributionId(null);
+    await reloadGoal(id);
+  }
+
   async function handleRemoveContribution(contributionId: string) {
     if (!id) return;
     await removeContribution(id, contributionId);
@@ -178,7 +198,9 @@ export default function GoalEditorScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       <EditorHeader
-        title={isEditing ? name || 'Edit Goal' : 'New Savings Goal'}
+        title={name}
+        onChangeTitle={setName}
+        titlePlaceholder={isEditing ? 'Goal name' : 'New savings goal'}
         badge={<CategoryBadge category={{ icon: displayIcon, color }} size={30} />}
       />
 
@@ -282,17 +304,64 @@ export default function GoalEditorScreen() {
               <View style={[styles.group, { backgroundColor: theme.card, borderColor: theme.border }]}>
                 {contributions.map((c, i) => (
                   <View key={c.id}>
-                    <View style={styles.contributionRow}>
-                      <ThemedText type="small" themeColor="textSecondary" style={styles.contributionDate}>
-                        {shortDate(c.date)}
-                      </ThemedText>
-                      <ThemedText type="smallBold" themeColor={c.amount >= 0 ? 'success' : 'destructive'}>
-                        {c.amount >= 0 ? '+' : '-'}{format(Math.abs(c.amount))}
-                      </ThemedText>
-                      <Pressable hitSlop={8} onPress={() => handleRemoveContribution(c.id)}>
-                        <MaterialIcons name="close" size={18} color={theme.textTertiary} />
+                    {editingContributionId === c.id ? (
+                      // Editing swaps the row for an amount field plus a
+                      // +/- toggle, so a deposit logged as a withdrawal (or
+                      // the reverse) can be corrected without deleting it.
+                      <View style={styles.contributionRow}>
+                        <Pressable
+                          onPress={() => setEditingSign((s) => (s === 1 ? -1 : 1))}
+                          accessibilityLabel={editingSign === 1 ? 'Added money' : 'Withdrew money'}
+                          style={[
+                            styles.signButton,
+                            { backgroundColor: (editingSign === 1 ? theme.success : theme.destructive) + '1A' },
+                          ]}>
+                          <MaterialIcons
+                            name={editingSign === 1 ? 'add' : 'remove'}
+                            size={18}
+                            color={editingSign === 1 ? theme.success : theme.destructive}
+                          />
+                        </Pressable>
+                        <View style={[styles.editAmountWrap, { borderColor: theme.border, backgroundColor: theme.background }]}>
+                          <ThemedText type="small" themeColor="textSecondary">
+                            {symbol}
+                          </ThemedText>
+                          <TextInput
+                            value={editingAmount}
+                            onChangeText={setEditingAmount}
+                            placeholder="0.00"
+                            placeholderTextColor={theme.textTertiary}
+                            keyboardType="decimal-pad"
+                            autoFocus
+                            style={[styles.editAmountInput, { color: theme.text }]}
+                          />
+                        </View>
+                        <Pressable hitSlop={8} onPress={handleSaveContribution} accessibilityLabel="Save">
+                          <MaterialIcons name="check" size={20} color={canSaveContribution ? theme.success : theme.textTertiary} />
+                        </Pressable>
+                        <Pressable hitSlop={8} onPress={() => setEditingContributionId(null)} accessibilityLabel="Cancel">
+                          <MaterialIcons name="close" size={18} color={theme.textTertiary} />
+                        </Pressable>
+                      </View>
+                    ) : (
+                      <Pressable
+                        onPress={() => startEditContribution(c)}
+                        style={({ pressed }) => [
+                          styles.contributionRow,
+                          { backgroundColor: pressed ? theme.backgroundElement : 'transparent' },
+                        ]}>
+                        <ThemedText type="small" themeColor="textSecondary" style={styles.contributionDate}>
+                          {shortDate(c.date)}
+                        </ThemedText>
+                        <ThemedText type="smallBold" themeColor={c.amount >= 0 ? 'success' : 'destructive'}>
+                          {c.amount >= 0 ? '+' : '-'}{format(Math.abs(c.amount))}
+                        </ThemedText>
+                        <MaterialIcons name="edit" size={16} color={theme.textTertiary} />
+                        <Pressable hitSlop={8} onPress={() => handleRemoveContribution(c.id)} accessibilityLabel="Remove">
+                          <MaterialIcons name="close" size={18} color={theme.textTertiary} />
+                        </Pressable>
                       </Pressable>
-                    </View>
+                    )}
                     {i < contributions.length - 1 && <View style={[styles.divider, { backgroundColor: theme.border }]} />}
                   </View>
                 ))}
@@ -300,19 +369,6 @@ export default function GoalEditorScreen() {
             )}
           </View>
         )}
-
-        <View style={styles.field}>
-          <ThemedText type="small" themeColor="textSecondary">
-            Name
-          </ThemedText>
-          <TextInput
-            value={name}
-            onChangeText={setName}
-            placeholder="Emergency fund, Vacation, New laptop…"
-            placeholderTextColor={theme.textTertiary}
-            style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.card }]}
-          />
-        </View>
 
         <View style={styles.field}>
           <ThemedText type="small" themeColor="textSecondary">
@@ -513,6 +569,27 @@ const styles = StyleSheet.create({
   },
   contributionDate: {
     flex: 1,
+  },
+  signButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editAmountWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: Spacing.two,
+    paddingHorizontal: Spacing.two,
+  },
+  editAmountInput: {
+    flex: 1,
+    paddingVertical: Spacing.one,
+    fontSize: 15,
   },
   divider: {
     height: StyleSheet.hairlineWidth,
