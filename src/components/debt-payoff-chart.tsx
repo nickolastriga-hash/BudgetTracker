@@ -216,8 +216,25 @@ export function DebtPayoffChart({
     cumulative.push(schedule.map((entry, i) => (below ? below[i] : 0) + (entry.balances[stack[k].id] ?? 0)));
   }
   // Each region only spans the months its debt still has a balance (a band
-  // whose thickness reaches zero has been paid off), and is inset by GAP from
-  // both boundaries, so neighbors never touch.
+  // whose thickness reaches zero has been paid off). The white channel between
+  // two neighbors is cut entirely from the lower one's top edge (2 * GAP), so
+  // its width doesn't depend on how thin the upper band has become; it only
+  // eases to nothing over the last RAMP samples before the upper band's own
+  // payoff, so the lower edge doesn't step up when that band disappears.
+  // (Insetting both sides by a fraction of their own thickness, or capping the
+  // inset by the upper band's thickness, made the channel taper along with
+  // any thinning band.) The outermost top edge stays on the data, and the
+  // bottom band lifts off the baseline by GAP.
+  const bandEnd = stack.map((_, k) => {
+    let last = -1;
+    for (let i = 0; i < n; i++) {
+      const t = yFor(cumulative[k - 1] ? cumulative[k - 1][i] : 0) - yFor(cumulative[k][i]);
+      if (t < 0.5) break;
+      last = i;
+    }
+    return last;
+  });
+  const RAMP = Math.max(6, Math.round(n * 0.08));
   const bands = stack.flatMap((debt, k) => {
     const below = cumulative[k - 1];
     const top: Point[] = [];
@@ -227,9 +244,12 @@ export function DebtPayoffChart({
       const botY = yFor(below ? below[i] : 0);
       const thickness = botY - topY;
       if (thickness < 0.5) break;
-      const inset = Math.min(GAP, thickness / 4);
-      top.push({ x: xFor(i), y: topY + inset });
-      bottom.push({ x: xFor(i), y: botY - inset });
+      const upperEnd = k + 1 < stack.length ? bandEnd[k + 1] : -1;
+      const fade = Math.min(1, Math.max(0, upperEnd - i) / RAMP);
+      const topInset = Math.min(GAP * 2, thickness / 3) * fade;
+      const bottomInset = k === 0 ? Math.min(GAP, thickness / 4) : 0;
+      top.push({ x: xFor(i), y: topY + topInset });
+      bottom.push({ x: xFor(i), y: botY - bottomInset });
     }
     if (top.length < 2) return [];
     return [{ debt, path: roundedRegion(top, bottom, REGION_RADIUS) }];
