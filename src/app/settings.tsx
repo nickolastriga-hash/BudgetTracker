@@ -1,6 +1,6 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { router } from 'expo-router';
-import { useState, type ReactNode } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useState, type ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -12,10 +12,12 @@ import { useAuth } from '@/hooks/use-auth';
 import { useCurrency } from '@/hooks/use-currency';
 import { useTheme } from '@/hooks/use-theme';
 import { useThemePreference } from '@/hooks/use-theme-preference';
-import { clearAllData, exportBackup, importBackup } from '@/lib/backup';
+import { clearAllData, exportBackup, getLastBackupDate, importBackup } from '@/lib/backup';
 import { CURRENCIES, currencyOption, formatMoney, LOCALES } from '@/lib/currency';
 import { exportTransactionsCsv } from '@/lib/csv-export';
 import { generateDemoData } from '@/lib/demo-data';
+
+const BACKUP_STALE_MS = 30 * 24 * 60 * 60 * 1000;
 
 function SettingsRow({
   icon,
@@ -74,6 +76,8 @@ export default function SettingsScreen() {
   const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [confirmingRestore, setConfirmingRestore] = useState(false);
+  const [lastBackup, setLastBackup] = useState<string | null>(null);
+  const [backupStale, setBackupStale] = useState(false);
   const [confirmingClear, setConfirmingClear] = useState(false);
   const [busy, setBusy] = useState(false);
   const [dataResult, setDataResult] = useState<{ text: string; ok: boolean } | null>(null);
@@ -93,11 +97,28 @@ export default function SettingsScreen() {
     );
   }
 
+  async function refreshLastBackup() {
+    const iso = await getLastBackupDate();
+    setLastBackup(iso);
+    setBackupStale(iso !== null && Date.now() - new Date(iso).getTime() > BACKUP_STALE_MS);
+  }
+
+  // Also covers returning from Account after a cloud backup.
+  useFocusEffect(
+    useCallback(() => {
+      getLastBackupDate().then((iso) => {
+        setLastBackup(iso);
+        setBackupStale(iso !== null && Date.now() - new Date(iso).getTime() > BACKUP_STALE_MS);
+      });
+    }, [])
+  );
+
   async function handleBackup() {
     setBusy(true);
     setDataResult(null);
     try {
       const outcome = await exportBackup();
+      await refreshLastBackup();
       setDataResult(
         outcome === 'unavailable'
           ? { text: 'Sharing isn’t available on this device.', ok: false }
@@ -305,6 +326,14 @@ export default function SettingsScreen() {
             onPress={handleClear}
           />
         </View>
+        <ThemedText
+          type="small"
+          themeColor={backupStale ? 'warning' : 'textSecondary'}
+          style={styles.resultText}>
+          {lastBackup
+            ? `Last backed up ${new Date(lastBackup).toLocaleDateString()}${backupStale ? '. It has been over a month, so consider backing up again.' : '.'}`
+            : 'No backup made from this device yet.'}
+        </ThemedText>
         {dataResult && (
           <ThemedText type="small" themeColor={dataResult.ok ? 'success' : 'destructive'} style={styles.resultText}>
             {dataResult.text}

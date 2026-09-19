@@ -1,6 +1,6 @@
 import { deleteDoc, doc, getDoc, setDoc } from 'firebase/firestore';
 
-import { buildBackup, parseBackup, restoreBackup } from '@/lib/backup';
+import { buildBackup, markBackedUp, parseBackup, restoreBackup } from '@/lib/backup';
 import { auth, db } from '@/lib/firebase';
 
 // One document per user holding the same JSON string a file backup contains
@@ -24,6 +24,7 @@ export async function uploadCloudBackup(): Promise<string> {
   }
   const updatedAt = new Date().toISOString();
   await setDoc(ref, { payload: json, updatedAt });
+  await markBackedUp();
   return updatedAt;
 }
 

@@ -17,7 +17,19 @@ import { toDateStr } from '@/lib/date-range';
 // display setting ("how this phone shows things" choices, not data).
 const APP_PREFIX = '@budgettracker/';
 const THEME_PREFERENCE_KEY = '@budgettracker/theme-preference';
-const EXCLUDED_KEYS = new Set([APP_LOCK_STORAGE_KEY, THEME_PREFERENCE_KEY, CURRENCY_STORAGE_KEY]);
+const LAST_BACKUP_KEY = '@budgettracker/last-backup';
+const EXCLUDED_KEYS = new Set([APP_LOCK_STORAGE_KEY, THEME_PREFERENCE_KEY, CURRENCY_STORAGE_KEY, LAST_BACKUP_KEY]);
+
+// ISO timestamp of the last file or cloud backup on this device. Excluded from
+// backups like the other device-level keys: restoring an old backup shouldn't
+// make the reminder think a fresh one just happened.
+export async function getLastBackupDate(): Promise<string | null> {
+  return AsyncStorage.getItem(LAST_BACKUP_KEY);
+}
+
+export async function markBackedUp(): Promise<void> {
+  await AsyncStorage.setItem(LAST_BACKUP_KEY, new Date().toISOString());
+}
 
 export interface BackupFile {
   app: 'BudgetTracker';
@@ -98,6 +110,7 @@ export async function exportBackup(): Promise<ExportOutcome> {
     anchor.download = fileName;
     anchor.click();
     URL.revokeObjectURL(url);
+    await markBackedUp();
     return 'downloaded';
   }
 
@@ -105,6 +118,8 @@ export async function exportBackup(): Promise<ExportOutcome> {
   const file = new File(Paths.cache, fileName);
   file.write(json);
   await Sharing.shareAsync(file.uri, { mimeType: 'application/json', UTI: 'public.json', dialogTitle: 'Save backup' });
+  // shareAsync resolves even if the sheet was dismissed, so this is "offered", the best signal available.
+  await markBackedUp();
   return 'shared';
 }
 

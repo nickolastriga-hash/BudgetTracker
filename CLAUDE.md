@@ -545,6 +545,12 @@ src/
                           device-level ones — the app-lock config and the
                           theme preference — so a new lib module's key is
                           included the moment it exists, no hand-kept list.
+                          `getLastBackupDate`/`markBackedUp` (2026-09-19) track
+                          the last file or cloud backup on this device under
+                          a device-level excluded key; Settings → DATA shows
+                          it and turns warning-colored after 30 days.
+                          `clearAllData` (same day) wipes the same key set,
+                          behind Settings' two-tap "Delete all data".
                           `parseBackup` validates shape/version/per-entry
                           JSON with user-readable errors; `restoreBackup`
                           replaces (removes every current data key first,
