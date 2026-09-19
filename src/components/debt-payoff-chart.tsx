@@ -32,7 +32,7 @@ const EDGE_GAP_PX = TICK_LABEL_WIDTH / 2 + EDGE_LABEL_WIDTH + 6;
 // Each debt's region is drawn as its own rounded shape, inset from its
 // neighbors by GAP px on every side so a white channel separates them.
 const REGION_RADIUS = 8;
-const GAP = 2;
+const GAP = 3;
 // "Nice" calendar intervals, in months, from quarterly up to every 50 years —
 // the smallest one that still fits within the available tick budget wins.
 const TICK_INTERVALS_MONTHS = [3, 6, 12, 24, 36, 60, 120, 180, 300, 600];
@@ -293,7 +293,7 @@ export function DebtPayoffChart({
             d={b.path}
             fill={`url(#${idBase}-${b.debt.id})`}
             stroke={b.debt.color}
-            strokeWidth={2}
+            strokeWidth={1.25}
             strokeLinejoin="round"
             strokeLinecap="round"
           />
