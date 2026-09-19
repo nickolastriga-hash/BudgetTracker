@@ -5,7 +5,7 @@
 // 57" — resolved by the 2026-09-04 SDK 57 upgrade). expo-router re-exports
 // the same theme objects/component from its own vendored fork, so this is a
 // straight import-source swap, no behavior change.
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import { DarkTheme, DefaultTheme, router, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
@@ -19,6 +19,7 @@ import { ThemePreferenceProvider, useThemePreference } from '@/hooks/use-theme-p
 import { toDateStr } from '@/lib/date-range';
 import { getDebts } from '@/lib/debts';
 import { getAccounts, netWorthTotals, recordNetWorthSnapshot } from '@/lib/net-worth';
+import { hasSeenTutorial } from '@/lib/onboarding';
 import { generateDueTransactions } from '@/lib/recurring';
 
 SplashScreen.preventAutoHideAsync();
@@ -36,6 +37,13 @@ function RootLayoutInner() {
     // there's nothing to recover from and it isn't worth surfacing as an error.
     generateDueTransactions().finally(() => {
       SplashScreen.hideAsync().catch(() => {});
+      // First launch only: open the tutorial over the tabs once the splash
+      // is gone. It marks itself seen when dismissed, so this fires once.
+      hasSeenTutorial()
+        .then((seen) => {
+          if (!seen) router.push('/tutorial');
+        })
+        .catch(() => {});
     });
     // Not awaited: history is a nicety and must never delay the splash.
     Promise.all([getAccounts(), getDebts()])
@@ -71,6 +79,7 @@ function RootLayoutInner() {
         <Stack.Screen name="debt-editor" options={{ headerShown: false, presentation: 'modal' }} />
         <Stack.Screen name="account-editor" options={{ headerShown: false, presentation: 'modal' }} />
         <Stack.Screen name="set-pin" options={{ headerShown: false, presentation: 'modal' }} />
+        <Stack.Screen name="tutorial" options={{ headerShown: false, presentation: 'modal' }} />
       </Stack>
       {/* A sibling above the Stack (not a route) so it covers whatever
           screen or modal is open when the app locks, and unlocking doesn't

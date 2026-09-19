@@ -7,6 +7,7 @@ import { Platform } from 'react-native';
 import { APP_LOCK_STORAGE_KEY } from '@/lib/app-lock';
 import { CURRENCY_STORAGE_KEY } from '@/lib/currency';
 import { toDateStr } from '@/lib/date-range';
+import { ONBOARDING_STORAGE_KEY } from '@/lib/onboarding';
 
 // A backup is every '@budgettracker/*' AsyncStorage key, value kept as its
 // raw JSON string — enumerated by prefix rather than a hand-kept list, so a
@@ -18,7 +19,13 @@ import { toDateStr } from '@/lib/date-range';
 const APP_PREFIX = '@budgettracker/';
 const THEME_PREFERENCE_KEY = '@budgettracker/theme-preference';
 const LAST_BACKUP_KEY = '@budgettracker/last-backup';
-const EXCLUDED_KEYS = new Set([APP_LOCK_STORAGE_KEY, THEME_PREFERENCE_KEY, CURRENCY_STORAGE_KEY, LAST_BACKUP_KEY]);
+const EXCLUDED_KEYS = new Set([
+  APP_LOCK_STORAGE_KEY,
+  THEME_PREFERENCE_KEY,
+  CURRENCY_STORAGE_KEY,
+  LAST_BACKUP_KEY,
+  ONBOARDING_STORAGE_KEY,
+]);
 
 // ISO timestamp of the last file or cloud backup on this device. Excluded from
 // backups like the other device-level keys: restoring an old backup shouldn't

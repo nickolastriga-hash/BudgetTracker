@@ -360,7 +360,10 @@ src/
                           seeded from the series record itself; Save calls
                           `updateRecurring`, a two-tap Stop at the bottom calls
                           `deleteRecurring`, both then `router.back()`.
-    settings.tsx           Settings modal (added 2026-08-26), reached from any
+    settings.tsx           Settings modal (added 2026-08-26; a "HELP"
+                          section with a single "How BudgetTracker works"
+                          row into tutorial.tsx sits between ACCOUNT and
+                          APPEARANCE since 2026-09-19), reached from any
                           tab's SettingsButton. `headerShown: true` in
                           _layout.tsx (native title "Settings", auto back
                           button) — no in-content title of its own, unlike
@@ -491,6 +494,20 @@ src/
                           sets a whole new value. debt-editor's payment row
                           gained a matching red "Add" (new charge/interest,
                           no transaction logged).
+    tutorial.tsx           Onboarding tour (2026-09-19) — 7 swipeable
+                          slides (welcome, one per tab, recurring, settings),
+                          each a glyph + title + body + a checklist card,
+                          over the same pagingEnabled-ScrollView + page-dots
+                          shape as every other pager here. Skip (hidden on
+                          the last slide) and Next / "Get started" both call
+                          lib/onboarding.ts#markTutorialSeen then
+                          router.back(). Deliberately text and icons, not
+                          screenshots: screenshots would go stale with every
+                          restyle and need light and dark copies.
+                          Opened automatically on first launch from
+                          _layout.tsx (after the splash hides, so it doesn't
+                          delay startup) and on demand from Settings' HELP
+                          row.
     set-pin.tsx            Two-step PIN entry (choose, confirm) over the
                           shared PinPad (2026-09-13). Reached from Settings'
                           App lock Switch (turning on) and Change PIN row
@@ -562,6 +579,12 @@ src/
                           debts.ts — the screen merges debts into
                           liabilities itself — so the two write-queues stay
                           independent.
+    onboarding.ts           hasSeenTutorial/markTutorialSeen (2026-09-19)
+                          over one device-level flag
+                          ('@budgettracker/onboarding-seen'), excluded from
+                          backup.ts like the other device keys — restoring
+                          someone else's backup shouldn't decide whether
+                          you've seen the tutorial.
     app-lock.ts             App-lock config (2026-09-13): `enabled`, a
                           random-UUID `salt`, `pinHash` (SHA-256 of
                           `${salt}:${pin}` via expo-crypto), `useBiometrics`.

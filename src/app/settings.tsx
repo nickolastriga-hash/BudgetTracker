@@ -207,6 +207,18 @@ export default function SettingsScreen() {
         </View>
 
         <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+          HELP
+        </ThemedText>
+        <View style={sectionStyle}>
+          <SettingsRow
+            icon="school"
+            label="How BudgetTracker works"
+            subtitle="A quick tour of each tab. Shown once on the first launch, and here whenever you want it again."
+            onPress={() => router.push('/tutorial')}
+          />
+        </View>
+
+        <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
           APPEARANCE
         </ThemedText>
         <View style={[...sectionStyle, styles.appearanceSection]}>
