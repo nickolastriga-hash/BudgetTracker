@@ -72,10 +72,6 @@ function curveCommands(points: Point[]): string {
   return d;
 }
 
-function curvePath(points: Point[]): string {
-  return `M${points[0].x},${points[0].y}${curveCommands(points)}`;
-}
-
 // A closed region between a top and a bottom curve (both left to right, same
 // length) with the four corners rounded. The straight vertical sides are cut
 // short by the radius and joined to the curves with quadratic corners; the
@@ -122,8 +118,11 @@ function roundedRegion(top: Point[], bottom: Point[], radius: number): string {
 // Balance-over-time for a payoff plan: one stacked, smoothly-curved band per
 // debt (in the plan's attack order, current target on top, so the top edge
 // is the total owed and each band visibly melts to nothing at its payoff
-// month) plus a dashed "minimums only" line over the same months for
-// comparison. Press and drag to read any month. Same touch-layer /
+// month). Press and drag to read any month. A dashed "minimums only"
+// comparison line ran over the same months until 2026-09-19, removed as
+// confusing: read against the filled regions it invited comparing two
+// different timelines (a debt's payoff under the plan vs under the
+// baseline). The same comparison survives as plain text in the summary. Same touch-layer /
 // measureInWindow / pager-disabling approach as CumulativeTrendChart — see
 // that file for the full reasoning behind each of those choices; none of it
 // is repeated here.
@@ -134,7 +133,6 @@ function roundedRegion(top: Point[], bottom: Point[], radius: number): string {
 // or a date to.
 export function DebtPayoffChart({
   schedule,
-  baseline,
   order,
   width,
   height,
@@ -144,7 +142,6 @@ export function DebtPayoffChart({
   onScrubEnd,
 }: {
   schedule: PayoffMonth[];
-  baseline: PayoffMonth[] | null;
   order: Debt[];
   width: number;
   height: number;
@@ -165,8 +162,7 @@ export function DebtPayoffChart({
   if (!width || schedule.length < 2) return <View style={{ width, height }} />;
 
   const n = schedule.length;
-  const baselineInDomain = baseline ? schedule.map((_, i) => baseline[Math.min(i, baseline.length - 1)]?.total ?? 0) : null;
-  const rawMax = Math.max(schedule[0].total, ...(baselineInDomain ?? []), 1);
+  const rawMax = Math.max(schedule[0].total, 1);
   // Round the top of the axis up to a tidy gridline step so the labels read
   // as "$5k, $10k, $15k" rather than "$4.3k, $8.6k".
   const gridStep = niceStep(rawMax / 3);
@@ -257,7 +253,6 @@ export function DebtPayoffChart({
   }
 
   const active = activeIndex !== null ? schedule[activeIndex] : null;
-  const activeBaseline = activeIndex !== null && baselineInDomain ? baselineInDomain[activeIndex] : null;
   const calloutLeft =
     activeIndex !== null ? Math.min(Math.max(xFor(activeIndex) - CALLOUT_WIDTH / 2, 0), width - CALLOUT_WIDTH) : 0;
 
@@ -301,17 +296,6 @@ export function DebtPayoffChart({
             <Path d={b.path} fill="none" stroke={b.debt.color} strokeWidth={RING_LINE * 2} strokeLinejoin="round" />
           </G>
         ))}
-
-        {baselineInDomain && (
-          <Path
-            d={curvePath(baselineInDomain.map((v, i) => ({ x: xFor(i), y: yFor(v) })))}
-            fill="none"
-            stroke={theme.textSecondary}
-            strokeWidth={1.5}
-            strokeDasharray="1,7"
-            strokeLinecap="round"
-          />
-        )}
 
         {/* No hard baseline or tick strokes: small round dots mark each
             label's position instead, which reads softer than a ruled axis. */}
@@ -407,11 +391,6 @@ export function DebtPayoffChart({
               </View>
             );
           })}
-          {activeBaseline !== null && activeBaseline > active.total && (
-            <ThemedText type="small" themeColor="textTertiary" style={styles.calloutSmall}>
-              Minimums only: {formatValue(activeBaseline)}
-            </ThemedText>
-          )}
         </View>
       )}
     </View>

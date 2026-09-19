@@ -77,8 +77,7 @@ system to show a profile for; opens `app/settings.tsx`, see its own bullet below
   persisted via `lib/debts.ts#savePlanSettings`), with the simulated result ("Debt-free Oct 2027 · 14
   months · $444 in interest", or a red "payments don't outrun the interest" warning), a "Minimums
   only: N months, $X in interest" caption whenever paying minimums would be slower, and a
-  `DebtPayoffChart` (stacked per-debt balance bands melting to zero, a dashed minimums-only line,
-  press-and-drag readout — see its own Folder Structure entry) — above every `Debt` row (balance,
+  `DebtPayoffChart` (stacked per-debt balance bands melting to zero, press-and-drag readout — see its own Folder Structure entry) — above every `Debt` row (balance,
   APR, minimum, projected payoff month, a paid-down progress bar). Tap a row → `debt-editor.tsx`.
   New goals/debts/accounts default to the next unused `CATEGORY_COLORS` slot rather than always the
   same swatch (offset per kind: red for debts, green for goals, blue for accounts), since the payoff
@@ -878,13 +877,24 @@ src/
                           band and the top edge is the total owed (each
                           band melts to nothing at its payoff month rather
                           than layers above it dropping when one below
-                          vanishes), a dashed "minimums only" Polyline over
-                          the same months (drawn only across the plan's
-                          own domain — the baseline still owing at the
-                          right edge is exactly the comparison it exists
-                          to make), and a press-and-drag callout (month,
-                          total left, per-debt balances, minimums-only
-                          figure). Touch layer / measureInWindow / pager-
+                          vanishes) and a press-and-drag callout (month,
+                          total left, per-debt balances). A dashed
+                          "minimums only" comparison Polyline ran over the
+                          same months until 2026-09-19, removed per
+                          feedback as confusing: side by side with the
+                          filled regions it invited reading a debt's
+                          payoff under the plan against the same debt's
+                          payoff under the baseline — two different
+                          timelines that legitimately differ (rollover
+                          alone, with no extra, moves them apart). The
+                          comparison survives as the summary card's plain
+                          "Minimums only: N months, $X in interest"
+                          caption, where it can't be misread as one
+                          timeline. Also dropped with it: the callout's own
+                          minimums-only figure, the legend's dash swatch,
+                          and `curvePath` (the baseline was its only
+                          caller; regions use `roundedRegion`).
+                          Touch layer / measureInWindow / pager-
                           disabling via onScrubStart/onScrubEnd are copied
                           from CumulativeTrendChart, not shared — see that
                           file for the reasoning; wealth.tsx wires the

@@ -182,7 +182,7 @@ export default function WealthScreen() {
   const totalDebt = debts.reduce((s, d) => s + d.balance, 0);
   const totalMin = debts.reduce((s, d) => s + d.minPayment, 0);
   const activeDebts = debts.filter((d) => d.balance > 0);
-  // "Minimums only" comparison for the chart's dashed line and the caption
+  // "Minimums only" comparison, shown as a caption under the payoff summary
   // under the plan result. Only worth showing when it's actually slower
   // than the plan — with one debt and no extra, the two are identical.
   const minimumsOnly = simulateMinimumsOnly(debts);
@@ -421,7 +421,6 @@ export default function WealthScreen() {
                   <View style={styles.payoffChartWrap} onLayout={(e) => setPayoffChartWidth(e.nativeEvent.layout.width)}>
                     <DebtPayoffChart
                       schedule={payoff.schedule}
-                      baseline={showBaseline ? minimumsOnly.schedule : null}
                       order={payoff.order}
                       width={payoffChartWidth}
                       height={200}
@@ -439,14 +438,6 @@ export default function WealthScreen() {
                           </ThemedText>
                         </View>
                       ))}
-                      {showBaseline && (
-                        <View style={styles.legendItem}>
-                          <View style={[styles.legendDash, { borderColor: theme.textTertiary }]} />
-                          <ThemedText type="small" themeColor="textSecondary" style={styles.legendText}>
-                            Minimums only
-                          </ThemedText>
-                        </View>
-                      )}
                     </View>
                     <ThemedText type="small" themeColor="textTertiary" style={styles.chartHint}>
                       Press and drag to read any month
@@ -823,11 +814,6 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 3,
-  },
-  legendDash: {
-    width: 14,
-    borderTopWidth: 2,
-    borderStyle: 'dashed',
   },
   legendText: {
     fontSize: 12,
