@@ -29,14 +29,11 @@ const MIN_TICK_PX = 64;
 const TICK_LABEL_WIDTH = 48;
 const EDGE_LABEL_WIDTH = 52;
 const EDGE_GAP_PX = TICK_LABEL_WIDTH / 2 + EDGE_LABEL_WIDTH + 6;
-// Each debt's region is a rounded shape, and regions sit exactly against
-// each other. The white separation and the colored outline are both drawn
-// *inside* each region (clipped to it): a RING_GAP-wide white border, then a
-// RING_LINE-wide colored line just inside that. Doing it as an inner border
-// keeps the channel between neighbors an even 2 * RING_GAP wherever they
-// meet, however thin either band gets, and rounds the inner edge for free.
+// Regions sit directly against each other, with no gap between them. Each
+// one's colored outline is drawn *inside* its own shape (clipped to it), so
+// the line hugs the region rather than straddling the boundary and bleeding
+// into its neighbor.
 const REGION_RADIUS = 0;
-const RING_GAP = 1;
 const RING_LINE = 1.25;
 // "Nice" calendar intervals, in months, from quarterly up to every 50 years —
 // the smallest one that still fits within the available tick budget wins.
@@ -292,14 +289,12 @@ export function DebtPayoffChart({
           />
         ))}
 
-        {/* Per region: translucent fill, a colored ring RING_GAP + RING_LINE
-            deep, then a white ring RING_GAP deep over its outer part, all
-            clipped to the region's own shape. */}
+        {/* Per region: translucent fill plus a colored outline RING_LINE deep,
+            both clipped to the region's own shape. */}
         {bands.map((b) => (
           <G key={b.debt.id} clipPath={`url(#${idBase}-clip-${b.debt.id})`}>
             <Path d={b.path} fill={`url(#${idBase}-${b.debt.id})`} />
-            <Path d={b.path} fill="none" stroke={b.debt.color} strokeWidth={(RING_GAP + RING_LINE) * 2} strokeLinejoin="round" />
-            <Path d={b.path} fill="none" stroke={theme.card} strokeWidth={RING_GAP * 2} strokeLinejoin="round" />
+            <Path d={b.path} fill="none" stroke={b.debt.color} strokeWidth={RING_LINE * 2} strokeLinejoin="round" />
           </G>
         ))}
 
