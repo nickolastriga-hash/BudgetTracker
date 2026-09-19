@@ -35,7 +35,7 @@ const EDGE_GAP_PX = TICK_LABEL_WIDTH / 2 + EDGE_LABEL_WIDTH + 6;
 // RING_LINE-wide colored line just inside that. Doing it as an inner border
 // keeps the channel between neighbors an even 2 * RING_GAP wherever they
 // meet, however thin either band gets, and rounds the inner edge for free.
-const REGION_RADIUS = 4;
+const REGION_RADIUS = 7;
 const RING_GAP = 1.5;
 const RING_LINE = 1.25;
 // "Nice" calendar intervals, in months, from quarterly up to every 50 years —
