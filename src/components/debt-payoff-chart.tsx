@@ -1,7 +1,7 @@
 import { useId, useRef, useState } from 'react';
 import type { GestureResponderEvent, View as ViewType } from 'react-native';
 import { StyleSheet, View } from 'react-native';
-import Svg, { Circle, Defs, Line, LinearGradient, Path, Stop } from 'react-native-svg';
+import Svg, { ClipPath, Circle, Defs, G, Line, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 
 import { ThemedText } from '@/components/themed-text';
 import { useCurrency } from '@/hooks/use-currency';
@@ -11,7 +11,7 @@ import type { Debt, PayoffMonth } from '@/lib/debts';
 const PADDING_TOP = 20;
 const PADDING_BOTTOM = 4;
 const PADDING_X = 2;
-const AXIS_HEIGHT = 18;
+const AXIS_HEIGHT = 24;
 const CALLOUT_WIDTH = 176;
 // Minimum horizontal space a single x-axis tick label needs (text plus
 // breathing room) — used to size how many ticks actually fit, rather than
@@ -19,10 +19,19 @@ const CALLOUT_WIDTH = 176;
 // generalizes to any chart width and any plan length, where the old
 // point-count brackets didn't: a 25-year plan on a narrow phone screen could
 // still end up with more ticks than the width could legibly hold.
-const MIN_TICK_PX = 50;
-// Keeps a tick from crowding the fixed "Today"/end-date labels at the axis's
-// own edges.
-const EDGE_GAP_PX = 28;
+const MIN_TICK_PX = 64;
+// A tick label is TICK_LABEL_WIDTH wide, centered on its tick, and the fixed
+// "Today"/end-date labels at the axis's edges are up to ~52px wide ("Oct
+// 2027" at 10px) — so a tick's *center* has to sit at least half a tick label
+// plus a whole edge label plus a small gap from either end, or the two
+// overlap. (This used to be 28, which let a tick's label land right on top
+// of "Today" or the end date.)
+const TICK_LABEL_WIDTH = 48;
+const EDGE_LABEL_WIDTH = 52;
+const EDGE_GAP_PX = TICK_LABEL_WIDTH / 2 + EDGE_LABEL_WIDTH + 6;
+// Rounded corners on the plot body, so the bands read as one soft shape
+// instead of a hard-edged wedge.
+const PLOT_RADIUS = 14;
 // "Nice" calendar intervals, in months, from quarterly up to every 50 years —
 // the smallest one that still fits within the available tick budget wins.
 const TICK_INTERVALS_MONTHS = [3, 6, 12, 24, 36, 60, 120, 180, 300, 600];
@@ -179,7 +188,7 @@ export function DebtPayoffChart({
   // narrow phone screen thins itself out instead of packing labels past the
   // point of legibility (a fixed point-count bracket, what this used to be,
   // doesn't account for how wide the chart actually rendered).
-  const maxTicks = Math.max(1, Math.floor(plotWidth / MIN_TICK_PX));
+  const maxTicks = Math.max(1, Math.floor((plotWidth - EDGE_GAP_PX * 2) / MIN_TICK_PX));
   const tickEvery =
     TICK_INTERVALS_MONTHS.find((interval) => Math.floor((n - 1) / interval) <= maxTicks) ??
     TICK_INTERVALS_MONTHS[TICK_INTERVALS_MONTHS.length - 1];
@@ -203,10 +212,13 @@ export function DebtPayoffChart({
         <Defs>
           {bands.map((b) => (
             <LinearGradient key={b.debt.id} id={`${idBase}-${b.debt.id}`} x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0" stopColor={b.debt.color} stopOpacity={1} />
-              <Stop offset="1" stopColor={b.debt.color} stopOpacity={0.4} />
+              <Stop offset="0" stopColor={b.debt.color} stopOpacity={0.9} />
+              <Stop offset="1" stopColor={b.debt.color} stopOpacity={0.25} />
             </LinearGradient>
           ))}
+          <ClipPath id={`${idBase}-clip`}>
+            <Rect x={PADDING_X} y={0} width={plotWidth} height={plotBottom} rx={PLOT_RADIUS} ry={PLOT_RADIUS} />
+          </ClipPath>
         </Defs>
 
         {gridValues.map((v) => (
@@ -220,15 +232,25 @@ export function DebtPayoffChart({
             strokeWidth={1}
             strokeDasharray="1,5"
             strokeLinecap="round"
+            strokeOpacity={0.7}
           />
         ))}
 
-        {bands.map((b) => (
-          <Path key={b.debt.id} d={b.fillPath} fill={`url(#${idBase}-${b.debt.id})`} />
-        ))}
-        {bands.map((b) => (
-          <Path key={`edge-${b.debt.id}`} d={b.edgePath} fill="none" stroke={theme.card} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-        ))}
+        <G clipPath={`url(#${idBase}-clip)`}>
+          {bands.map((b) => (
+            <Path key={b.debt.id} d={b.fillPath} fill={`url(#${idBase}-${b.debt.id})`} />
+          ))}
+          {/* Each edge is a card-colored "cut-out" outline under the debt's
+              own colored line, the same trick CategoryRingChart uses, so
+              neighboring bands separate cleanly and same-colored ones still
+              read as two. */}
+          {bands.map((b) => (
+            <Path key={`edge-bg-${b.debt.id}`} d={b.edgePath} fill="none" stroke={theme.card} strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" />
+          ))}
+          {bands.map((b) => (
+            <Path key={`edge-${b.debt.id}`} d={b.edgePath} fill="none" stroke={b.debt.color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+          ))}
+        </G>
 
         {baselineInDomain && (
           <Path
@@ -241,26 +263,10 @@ export function DebtPayoffChart({
           />
         )}
 
-        <Line
-          x1={PADDING_X}
-          x2={width - PADDING_X}
-          y1={plotBottom}
-          y2={plotBottom}
-          stroke={theme.border}
-          strokeWidth={1.5}
-          strokeLinecap="round"
-        />
+        {/* No hard baseline or tick strokes: small round dots mark each
+            label's position instead, which reads softer than a ruled axis. */}
         {ticks.map((t) => (
-          <Line
-            key={t.i}
-            x1={xFor(t.i)}
-            x2={xFor(t.i)}
-            y1={plotBottom}
-            y2={plotBottom + 4}
-            stroke={theme.border}
-            strokeWidth={1.5}
-            strokeLinecap="round"
-          />
+          <Circle key={t.i} cx={xFor(t.i)} cy={plotBottom + 5} r={1.75} fill={theme.textTertiary} />
         ))}
 
         {activeIndex !== null && active && (
@@ -312,19 +318,19 @@ export function DebtPayoffChart({
           </View>
         </View>
       ))}
-      <View pointerEvents="none" style={[styles.axisLabel, { left: 0, top: plotBottom + 3 }]}>
+      <View pointerEvents="none" style={[styles.axisLabel, { left: 0, top: plotBottom + 8 }]}>
         <ThemedText type="small" themeColor="textTertiary" style={styles.miniLabel}>
           Today
         </ThemedText>
       </View>
       {ticks.map((t) => (
-        <View key={t.i} pointerEvents="none" style={[styles.tickLabel, { left: xFor(t.i) - 24, top: plotBottom + 3 }]}>
+        <View key={t.i} pointerEvents="none" style={[styles.tickLabel, { left: xFor(t.i) - TICK_LABEL_WIDTH / 2, top: plotBottom + 8 }]}>
           <ThemedText type="small" themeColor="textTertiary" style={[styles.miniLabel, styles.centered]}>
             {t.label}
           </ThemedText>
         </View>
       ))}
-      <View pointerEvents="none" style={[styles.axisLabel, { right: 0, top: plotBottom + 3 }]}>
+      <View pointerEvents="none" style={[styles.axisLabel, { right: 0, top: plotBottom + 8 }]}>
         <ThemedText type="small" themeColor="textTertiary" style={styles.miniLabel}>
           {formatMonth(schedule[n - 1].month)}
         </ThemedText>
@@ -387,8 +393,8 @@ const styles = StyleSheet.create({
     left: PADDING_X,
   },
   gridLabelPill: {
-    borderRadius: 5,
-    paddingHorizontal: 4,
+    borderRadius: 8,
+    paddingHorizontal: 6,
     paddingVertical: 1,
     alignSelf: 'flex-start',
   },
@@ -397,16 +403,16 @@ const styles = StyleSheet.create({
   },
   tickLabel: {
     position: 'absolute',
-    width: 48,
+    width: TICK_LABEL_WIDTH,
   },
   callout: {
     position: 'absolute',
     top: 4,
     width: CALLOUT_WIDTH,
-    borderRadius: 14,
+    borderRadius: 18,
     borderWidth: StyleSheet.hairlineWidth,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     gap: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
