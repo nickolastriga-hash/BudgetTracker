@@ -14,9 +14,10 @@ transactions, all local-only. Deliberately deferred:
   CLAUDE.md's `categories.ts` bullet). Left as a deliberate neutral-catch-all choice, not an oversight
   — revisit if that still reads as "there's a grey category" in practice.
 - **Accounts / cloud backup** — Phase 1 done (2026-09-17): an optional account (Settings → Account,
-  Firebase Auth: email/password + Google + Apple), matching HabitTracker's own staged rollout. Signing
-  in doesn't touch data yet — everything still lives in AsyncStorage on-device only. Data sync/backup
-  (the actual point of having an account) is a separate future phase, not built.
+  Firebase Auth: email/password + Google + Apple), matching HabitTracker's own staged rollout. Phase 2
+  done (2026-09-19): manual cloud backup/restore to Firestore (`lib/cloud-backup.ts`, Account screen's
+  "Cloud backup" card, `firestore.rules`). Still open: automatic sync with per-record merging
+  (needs timestamps + tombstones), and a Firestore database must exist in the Firebase project.
 - ~~**Category delete/reassignment**~~ — done (2026-09-14): `lib/categories.ts#deleteCategory`
   moves the category's transactions and recurring series to that type's "Other", drops its budget,
   and removes the row; reached from the category editor's two-tap Delete. The two "Other" rows can't

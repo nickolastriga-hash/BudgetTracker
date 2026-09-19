@@ -91,10 +91,11 @@ system to show a profile for; opens `app/settings.tsx`, see its own bullet below
 All data is local — `AsyncStorage` only, no sync. That was a deliberate v1 scope decision; as of
 2026-09-17 there's an optional account (Settings → Account, Firebase Auth: email/password + Google +
 Apple, matching HabitTracker's own Account screen) — this is Phase 1 of the same staged rollout
-HabitTracker used (see TODO.md's "Accounts / cloud backup"): signing in establishes an identity but
-doesn't touch your data yet. Data sync/backup is a deliberately separate future phase, not built yet
-— the existing JSON backup/restore (`lib/backup.ts`) is unrelated and still the only way to move data
-between devices. See [TODO.md](TODO.md) for what else is intentionally deferred.
+HabitTracker used (see TODO.md's "Accounts / cloud backup"). As of 2026-09-19 (Phase 2) a signed-in
+user also gets a manual cloud backup: Settings → Account's "Cloud backup" card uploads/restores the
+same JSON payload `lib/backup.ts` builds to one Firestore document (`backups/{uid}`, rules in
+`firestore.rules`) via `lib/cloud-backup.ts`. Restore replaces local data, same as file restore. No
+automatic or per-record sync, deliberately: that would need timestamps/tombstones on every record. See [TODO.md](TODO.md) for what else is intentionally deferred.
 
 ## Tech Stack
 
@@ -425,10 +426,12 @@ src/
                           eagerly requires every file under app/ at startup,
                           so a top-level call would run on every launch
                           whether this screen was ever opened or not, with
-                          no try/catch around it. Signing in doesn't touch
-                          any app data yet — see the Project Overview's own
-                          note on this being Phase 1 of a staged rollout,
-                          same as HabitTracker's.
+                          no try/catch around it. Signed in also shows a
+                          "Cloud backup" card (Back up now, two-tap Restore
+                          from cloud, last-backed-up time) backed by
+                          lib/cloud-backup.ts, uploaded only on tap.
+                          Deleting the account removes the cloud backup
+                          first (best-effort, in lib/auth.ts).
     goal-editor.tsx        Add/edit a SavingsGoal (2026-09-13), reached from
                           Wealth's Goals page. Own EditorHeader (see
                           components/editor-header.tsx), name, target
